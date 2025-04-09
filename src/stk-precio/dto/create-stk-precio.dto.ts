@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsBoolean, IsNumber } from 'class-validator';
+import { IsString, IsOptional, IsBoolean, IsNumber } from "class-validator";
 
 export class CreateStkPrecioDto {
   @IsString()
@@ -8,7 +8,7 @@ export class CreateStkPrecioDto {
   item: string;
 
   @IsOptional()
-  @IsString() // Debe ser string porque en la entidad está como "string | null"
+  @IsString() // Se mantiene string porque en la entidad es string | null
   precio?: string;
 
   @IsOptional()
@@ -29,7 +29,7 @@ export class CreateStkPrecioDto {
 
   @IsOptional()
   @IsString()
-  moneda?: string;
+  monedaId?: string; // Ahora es el ID de la moneda en lugar de un simple string
 
   @IsOptional()
   @IsBoolean()
