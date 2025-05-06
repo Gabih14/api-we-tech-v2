@@ -36,4 +36,9 @@ export class CreateStkItemDto {
   @ValidateNested({ each: true })
   @Type(() => StkPrecio)
   stkPrecios?: StkPrecio[];
+
+  @IsOptional()
+  @IsString()
+  familiaId?: string;
+
 }

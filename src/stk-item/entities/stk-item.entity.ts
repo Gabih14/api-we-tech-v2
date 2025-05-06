@@ -3,14 +3,16 @@ import {
     Entity,
     Index,
     OneToMany,
+    ManyToOne,
+    JoinColumn,
 } from "typeorm";
 
 import { StkExistencia } from "../../stk-existencia/entities/stk-existencia.entity";
 import { StkPrecio } from "../../stk-precio/entities/stk-precio.entity";
+import { StkFamilia } from "../../stk_familia/entities/stk_familia.entity"; // 👈 IMPORTANTE: importás StkFamilia
 
 @Index("grupo", ["grupo"], {})
 @Index("subgrupo", ["subgrupo"], {})
-/* @Index("familia", ["familia"], {}) */
 @Entity("stk_item", { schema: "wetech" })
 export class StkItem {
     @Column("varchar", { primary: true, name: "id", length: 20 })
@@ -35,11 +37,17 @@ export class StkItem {
     @Column("varchar", { name: "subgrupo", nullable: true, length: 50 })
     subgrupo: string | null;
 
+    /** 🔥 Agregamos la Foreign Key para familia */
+    @Column("varchar", { name: "familia_id", nullable: true, length: 20 })
+    familiaId: string | null;
+
+    @ManyToOne(() => StkFamilia, (familia) => familia.stkItems)
+    @JoinColumn({ name: "familia_id" }) // 👈 Match exacto al campo de la tabla
+    familia2: StkFamilia;
+
     @OneToMany(() => StkExistencia, (stkExistencia) => stkExistencia.item2)
     stkExistencias: StkExistencia[];
 
     @OneToMany(() => StkPrecio, (stkPrecio) => stkPrecio.item2)
     stkPrecios: StkPrecio[];
-  
 }
-

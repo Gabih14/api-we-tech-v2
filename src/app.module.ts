@@ -6,6 +6,7 @@ import { StkDepositoModule } from './stk-deposito/stk-deposito.module';
 import { StkPrecioModule } from './stk-precio/stk-precio.module';
 import { BasMonedaModule } from './bas-moneda/bas-moneda.module';
 import { SysImageModule } from './sys_image/sys_image.module';
+import { StkFamiliaModule } from './stk_familia/stk_familia.module';
 
 @Module({
   imports: [TypeOrmModule.forRoot({
@@ -17,7 +18,7 @@ import { SysImageModule } from './sys_image/sys_image.module';
     database: 'wetech',
     autoLoadEntities: true,
     synchronize: true,
-  }),StkItemModule, StkExistenciaModule, StkDepositoModule, StkPrecioModule, BasMonedaModule, SysImageModule],
+  }),StkItemModule, StkExistenciaModule, StkDepositoModule, StkPrecioModule, BasMonedaModule, SysImageModule, StkFamiliaModule],
 
 })
 export class AppModule {}
