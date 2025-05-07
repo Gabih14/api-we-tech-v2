@@ -5,6 +5,7 @@ import { StkItem } from './entities/stk-item.entity';
 import { CreateStkItemDto } from './dto/create-stk-item.dto';
 import { UpdateStkItemDto } from './dto/update-stk-item.dto';
 import { StkFamilia } from 'src/stk_familia/entities/stk_familia.entity';
+import { StkPrecioService } from 'src/stk-precio/stk-precio.service';
 
 @Injectable()
 export class StkItemService {
@@ -13,6 +14,8 @@ export class StkItemService {
     private readonly stkItemRepository: Repository<StkItem>,
     @InjectRepository(StkFamilia)
     private readonly stkFamiliaRepository: Repository<StkFamilia>,
+    
+    private readonly stkPrecioService: StkPrecioService,
   ) {}
 
   async create(createStkItemDto: CreateStkItemDto): Promise<StkItem> {
@@ -20,16 +23,43 @@ export class StkItemService {
     return this.stkItemRepository.save(item);
   }
 
-  async findAll(): Promise<StkItem[]> {
-    return this.stkItemRepository.find();
+  async findAll(): Promise<any[]> {
+    const items = await this.stkItemRepository.find({
+      relations: ['stkPrecios', 'stkExistencias', 'familia2'], // agregás relaciones necesarias
+    });
+
+    // Traés todos los precios
+    const precios = await this.stkPrecioService.findAll();
+
+    // Combinás cada item con su precioVtaCotizado
+    return items.map((item) => {
+      const precioItem = precios.find((p) => p.item2?.id === item.id);
+
+      return {
+        ...item,
+        precioVtaCotizado: precioItem?.precioVtaCotizado || null,
+      };
+    });
   }
 
-  async findOne(id: string): Promise<StkItem> {
-    const item = await this.stkItemRepository.findOne({ where: { id } });
+  async findOne(id: string): Promise<any> {
+    const item = await this.stkItemRepository.findOne({
+      where: { id },
+      relations: ['stkPrecios', 'stkExistencias', 'familia2'],
+    });
+
     if (!item) {
-      throw new NotFoundException(`Item with ID ${id} not found`);
+      throw new NotFoundException(`Item con id ${id} no encontrado`);
     }
-    return item;
+
+    // Traés el precio específico
+    const precioItem = await this.stkPrecioService.findOne('LISTA_ID', id); 
+    // 👆🏻 Acá debes reemplazar 'LISTA_ID' con la lista que uses, o parametrizarlo
+
+    return {
+      ...item,
+      precioVtaCotizado: precioItem?.precioVtaCotizado || null,
+    };
   }
 
   async update(id: string, updateStkItemDto: UpdateStkItemDto): Promise<StkItem> {

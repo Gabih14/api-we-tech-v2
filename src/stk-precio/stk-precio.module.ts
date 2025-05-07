@@ -8,5 +8,6 @@ import { StkPrecioController } from './stk-precio.controller';
   imports: [TypeOrmModule.forFeature([StkPrecio])],
   controllers: [StkPrecioController],
   providers: [StkPrecioService],
+  exports: [StkPrecioService]
 })
 export class StkPrecioModule {}
