@@ -66,4 +66,12 @@ export class StkPrecioService {
           : null,
     };
   }
+
+  async getCotizacionDolar(): Promise<number> {
+    const dolar = await this.stkPrecioRepository.query(
+      `SELECT cotizacion FROM bas_moneda WHERE id = 'DOL'`
+    );
+    return parseFloat(dolar[0]?.cotizacion || '1');
+  }
+  
 }
