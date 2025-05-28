@@ -97,3 +97,105 @@ Nest is an MIT-licensed open source project. It can grow thanks to the sponsors 
 ## License
 
 Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+
+```
+api-we-tech-v2
+├─ .prettierrc
+├─ docker-compose.yml
+├─ eslint.config.mjs
+├─ nest-cli.json
+├─ package-lock.json
+├─ package.json
+├─ README.md
+├─ src
+│  ├─ app.controller.ts
+│  ├─ app.module.ts
+│  ├─ app.service.ts
+│  ├─ bas-moneda
+│  │  ├─ bas-moneda.controller.ts
+│  │  ├─ bas-moneda.module.ts
+│  │  ├─ bas-moneda.service.ts
+│  │  ├─ dto
+│  │  │  ├─ create-bas-moneda.dto.ts
+│  │  │  └─ update-bas-moneda.dto.ts
+│  │  └─ entities
+│  │     └─ bas-moneda.entity.ts
+│  ├─ main.ts
+│  ├─ maps
+│  │  ├─ dto
+│  │  │  └─ get-distance.dto.ts
+│  │  ├─ maps.controller.ts
+│  │  ├─ maps.module.ts
+│  │  └─ maps.service.ts
+│  ├─ notifications
+│  ├─ pedido
+│  │  ├─ dto
+│  │  │  ├─ create-pedido.dto.ts
+│  │  │  └─ update-pedido.dto.ts
+│  │  ├─ entities
+│  │  │  ├─ pedido-item.entity.ts
+│  │  │  └─ pedido.entity.ts
+│  │  ├─ pedido.controller.ts
+│  │  ├─ pedido.module.ts
+│  │  └─ pedido.service.ts
+│  ├─ stk-deposito
+│  │  ├─ dto
+│  │  │  ├─ create-stk-deposito.dto.ts
+│  │  │  └─ update-stk-deposito.dto.ts
+│  │  ├─ entities
+│  │  │  └─ stk-deposito.entity.ts
+│  │  ├─ stk-deposito.controller.ts
+│  │  ├─ stk-deposito.module.ts
+│  │  └─ stk-deposito.service.ts
+│  ├─ stk-existencia
+│  │  ├─ dto
+│  │  │  ├─ create-stk-existencia.dto.ts
+│  │  │  └─ update-stk-existencia.dto.ts
+│  │  ├─ entities
+│  │  │  └─ stk-existencia.entity.ts
+│  │  ├─ stk-existencia.controller.ts
+│  │  ├─ stk-existencia.module.ts
+│  │  └─ stk-existencia.service.ts
+│  ├─ stk-item
+│  │  ├─ dto
+│  │  │  ├─ create-stk-item.dto.ts
+│  │  │  └─ update-stk-item.dto.ts
+│  │  ├─ entities
+│  │  │  └─ stk-item.entity.ts
+│  │  ├─ stk-item.controller.ts
+│  │  ├─ stk-item.module.ts
+│  │  └─ stk-item.service.ts
+│  ├─ stk-precio
+│  │  ├─ dto
+│  │  │  ├─ create-stk-precio.dto.ts
+│  │  │  └─ update-stk-precio.dto.ts
+│  │  ├─ entities
+│  │  │  └─ stk-precio.entity.ts
+│  │  ├─ stk-precio.controller.ts
+│  │  ├─ stk-precio.module.ts
+│  │  └─ stk-precio.service.ts
+│  ├─ stk_familia
+│  │  ├─ dto
+│  │  │  ├─ create-stk_familia.dto.ts
+│  │  │  └─ update-stk_familia.dto.ts
+│  │  ├─ entities
+│  │  │  └─ stk_familia.entity.ts
+│  │  ├─ stk_familia.controller.ts
+│  │  ├─ stk_familia.module.ts
+│  │  └─ stk_familia.service.ts
+│  └─ sys_image
+│     ├─ dto
+│     │  ├─ create-sys_image.dto.ts
+│     │  └─ update-sys_image.dto.ts
+│     ├─ entities
+│     │  └─ sys_image.entity.ts
+│     ├─ sys_image.controller.ts
+│     ├─ sys_image.module.ts
+│     └─ sys_image.service.ts
+├─ test
+│  ├─ app.e2e-spec.ts
+│  └─ jest-e2e.json
+├─ tsconfig.build.json
+└─ tsconfig.json
+
+```
