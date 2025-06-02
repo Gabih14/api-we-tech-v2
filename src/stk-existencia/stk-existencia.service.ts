@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { StkExistencia } from './entities/stk-existencia.entity';
@@ -10,7 +10,7 @@ export class StkExistenciaService {
   constructor(
     @InjectRepository(StkExistencia)
     private readonly stkExistenciaRepository: Repository<StkExistencia>,
-  ) {}
+  ) { }
 
   async create(createStkExistenciaDto: CreateStkExistenciaDto): Promise<StkExistencia> {
     const existencia = this.stkExistenciaRepository.create(createStkExistenciaDto);
@@ -43,4 +43,47 @@ export class StkExistenciaService {
     const existencia = await this.findOne(item, deposito);
     await this.stkExistenciaRepository.remove(existencia);
   }
+
+  async reservarStock(item: string, cantidad: number, deposito: string) {
+    const existencia = await this.stkExistenciaRepository.findOne({
+      where: { item, deposito },
+    });
+    if (!existencia) throw new NotFoundException('Stock no encontrado');
+
+    const comprometido = Number(existencia.comprometido || 0);
+    existencia.comprometido = (comprometido + cantidad).toString();
+
+    await this.stkExistenciaRepository.save(existencia);
+  }
+
+  async confirmarStock(item: string, cantidad: number, deposito: string) {
+    const existencia = await this.stkExistenciaRepository.findOne({
+      where: { item, deposito },
+    });
+    if (!existencia) throw new NotFoundException('Stock no encontrado');
+
+    const comprometido = Number(existencia.comprometido || 0);
+    const cantidadActual = Number(existencia.cantidad || 0);
+
+    if (comprometido < cantidad || cantidadActual < cantidad)
+      throw new ConflictException('Stock insuficiente');
+
+    existencia.comprometido = (comprometido - cantidad).toString();
+    existencia.cantidad = (cantidadActual - cantidad).toString();
+
+    await this.stkExistenciaRepository.save(existencia);
+  }
+
+  async liberarStock(item: string, cantidad: number, deposito: string) {
+    const existencia = await this.stkExistenciaRepository.findOne({
+      where: { item, deposito },
+    });
+    if (!existencia) throw new NotFoundException('Stock no encontrado');
+
+    const comprometido = Number(existencia.comprometido || 0);
+    existencia.comprometido = Math.max(0, comprometido - cantidad).toString();
+
+    await this.stkExistenciaRepository.save(existencia);
+  }
+
 }
