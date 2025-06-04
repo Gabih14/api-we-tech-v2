@@ -8,6 +8,7 @@ import { BasMonedaModule } from './bas-moneda/bas-moneda.module';
 import { SysImageModule } from './sys_image/sys_image.module';
 import { StkFamiliaModule } from './stk_familia/stk_familia.module';
 import { PedidoModule } from './pedido/pedido.module';
+import { VtaComprobanteModule } from './vta-comprobante/vta-comprobante.module';
 
 @Module({
   imports: [TypeOrmModule.forRoot({
@@ -19,7 +20,7 @@ import { PedidoModule } from './pedido/pedido.module';
     database: 'wetech',
     autoLoadEntities: true,
     synchronize: true,
-  }),StkItemModule, StkExistenciaModule, StkDepositoModule, StkPrecioModule, BasMonedaModule, SysImageModule, StkFamiliaModule, PedidoModule],
+  }),StkItemModule, StkExistenciaModule, StkDepositoModule, StkPrecioModule, BasMonedaModule, SysImageModule, StkFamiliaModule, PedidoModule, VtaComprobanteModule],
 
 })
 export class AppModule {}
