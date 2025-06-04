@@ -30,4 +30,6 @@ export class Pedido {
 
   @Column({ type: 'timestamp', nullable: true })
   aprobado: Date;
+
+  
 }
