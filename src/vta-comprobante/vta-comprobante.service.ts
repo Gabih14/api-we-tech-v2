@@ -12,7 +12,7 @@ export class VtaComprobanteService {
   constructor(
     @InjectRepository(VtaComprobante)
     private readonly comprobanteRepository: Repository<VtaComprobante>,
-  ) {}
+  ) { }
 
   async create(createDto: CreateVtaComprobanteDto): Promise<VtaComprobante> {
     const comprobante = this.comprobanteRepository.create(createDto);
@@ -42,12 +42,13 @@ export class VtaComprobanteService {
 
   // 🚀 NUEVO: Crear comprobante desde un Pedido
   async crearDesdePedido(pedido: Pedido): Promise<VtaComprobante> {
+    const numero = await this.generarNumeroComprobante();
     if (!pedido) {
       throw new NotFoundException('Pedido no encontrado');
     }
     const nuevoComprobante = this.comprobanteRepository.create({
       tipo: 'FX', // Por ejemplo: factura A 01
-      comprobante: this.generarNumeroComprobante(), // Lógica dummy, se puede mejorar
+      comprobante: numero,
       cliente: pedido.cliente_cuit,
       razon_social: pedido.cliente_nombre,
       fecha: new Date(),
@@ -66,11 +67,31 @@ export class VtaComprobanteService {
     return this.comprobanteRepository.save(nuevoComprobante);
   }
 
-  private generarNumeroComprobante(): string {
-    // Podés reemplazar esto con un contador real desde la BD
-    const random = Math.floor(100000 + Math.random() * 900000);
-    return `CBTE-${random}`;
+  private async generarNumeroComprobante(): Promise<string> {
+    const tipo = 'X';
+    const puntoDeVenta = '00001';
+
+    // Buscar el último comprobante emitido con este tipo y punto de venta
+    const ultimo = await this.comprobanteRepository
+      .createQueryBuilder('c')
+      .where("c.comprobante LIKE :prefix", { prefix: `${tipo}-${puntoDeVenta}-%` })
+      .orderBy('c.comprobante', 'DESC')
+      .getOne();
+
+    let nuevoNumero = 1;
+
+    if (ultimo) {
+      // Extraer número actual del string
+      const partes = ultimo.comprobante.split('-'); // [tipo, puntoDeVenta, numero]
+      const numeroActual = parseInt(partes[2], 10);
+      nuevoNumero = numeroActual + 1;
+    }
+
+    const numeroFormateado = nuevoNumero.toString().padStart(8, '0'); // 00000025
+
+    return `${tipo}-${puntoDeVenta}-${numeroFormateado}`;
   }
+
 
   private obtenerPeriodoActual(): string {
     const now = new Date();

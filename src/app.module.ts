@@ -16,7 +16,7 @@ import { VtaComprobanteModule } from './vta-comprobante/vta-comprobante.module';
     host: 'localhost',
     port: 3306,
     username: 'root',
-    password: 'Mysqlmysql1',
+    password: 'mysql',
     database: 'wetech',
     autoLoadEntities: true,
     synchronize: true,
