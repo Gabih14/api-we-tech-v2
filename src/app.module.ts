@@ -9,6 +9,7 @@ import { SysImageModule } from './sys_image/sys_image.module';
 import { StkFamiliaModule } from './stk_familia/stk_familia.module';
 import { PedidoModule } from './pedido/pedido.module';
 import { VtaComprobanteModule } from './vta-comprobante/vta-comprobante.module';
+import { VtaComprobanteItemModule } from './vta-comprobante-item/vta-comprobante-item.module';
 
 @Module({
   imports: [TypeOrmModule.forRoot({
@@ -19,8 +20,8 @@ import { VtaComprobanteModule } from './vta-comprobante/vta-comprobante.module';
     password: 'mysql',
     database: 'wetech',
     autoLoadEntities: true,
-    synchronize: true,
-  }),StkItemModule, StkExistenciaModule, StkDepositoModule, StkPrecioModule, BasMonedaModule, SysImageModule, StkFamiliaModule, PedidoModule, VtaComprobanteModule],
+    synchronize: false,
+  }),StkItemModule, StkExistenciaModule, StkDepositoModule, StkPrecioModule, BasMonedaModule, SysImageModule, StkFamiliaModule, PedidoModule, VtaComprobanteModule, VtaComprobanteItemModule],
 
 })
 export class AppModule {}
