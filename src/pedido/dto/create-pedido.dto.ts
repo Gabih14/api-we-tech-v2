@@ -1,5 +1,5 @@
 // src/pedido/dto/create-pedido.dto.ts
-import { IsString, IsNumber, IsArray, ValidateNested } from 'class-validator';
+import { IsString, IsNumber, IsArray, IsBoolean, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 
 class PedidoItemDto {
@@ -25,6 +25,30 @@ export class CreatePedidoDto {
 
   @IsNumber()
   total: number;
+
+  @IsBoolean()
+  mobile: boolean;
+
+  @IsString()
+  email: string;
+
+  @IsString()
+  telefono: string;
+
+  @IsString()
+  calle: string;
+
+  @IsString()
+  ciudad: string;
+
+  @IsString()
+  region: string;
+
+  @IsString()
+  pais: string;
+
+  @IsString()
+  codigo_postal: string;
 
   @IsArray()
   @ValidateNested({ each: true })

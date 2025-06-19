@@ -9,22 +9,20 @@ export class PedidoController {
 
   @Post()
   async crear(@Body() dto: CreatePedidoDto) {
-    return this.pedidoService.crear(dto);
+    return this.pedidoService.crear(dto); // retorna la URL de Nave
   }
 
   @Post('nave-webhook')
   async recibirWebhook(@Body() body: any) {
-    const { order_id, status, happened_at, amount, payment_method } = body;
+    const { order_id, status } = body;
 
     const pedido = await this.pedidoService.encontrarPorExternalId(order_id);
-
     if (!pedido) {
       throw new NotFoundException(
         `Pedido con order_id ${order_id} no encontrado.`,
       );
     }
 
-    // Si el estado es aprobado, actualizamos el pedido
     if (
       status === 'APPROVED' ||
       ['REJECTED', 'CANCELLED', 'REFUNDED'].includes(status)
@@ -32,7 +30,6 @@ export class PedidoController {
       return this.pedidoService.procesarNotificacionDeNave(body);
     }
 
-    // Podés manejar otros estados también si querés
     return {
       message: `Webhook recibido pero sin acción para estado: ${status}`,
     };
