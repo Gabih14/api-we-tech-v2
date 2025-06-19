@@ -1,4 +1,3 @@
-// src/pedido/pedido.service.ts
 import {
   forwardRef,
   Inject,
@@ -14,7 +13,8 @@ import { CreatePedidoDto } from './dto/create-pedido.dto';
 import { StkExistenciaService } from 'src/stk-existencia/stk-existencia.service';
 import { StkItem } from 'src/stk-item/entities/stk-item.entity';
 import { VtaComprobanteService } from 'src/vta-comprobante/vta-comprobante.service';
-/* import fetch from 'node-fetch'; */
+import { PedidoItem } from './entities/pedido-item.entity';
+import { v4 as uuidv4 } from 'uuid';
 
 @Injectable()
 export class PedidoService {
@@ -30,10 +30,10 @@ export class PedidoService {
 
     @Inject(forwardRef(() => VtaComprobanteService))
     private readonly vtaComprobanteService: VtaComprobanteService,
-  ) { }
+  ) {}
 
   async crear(dto: CreatePedidoDto): Promise<{ pedido: Pedido; naveUrl: string }> {
-    const productosValidados: { nombre: string; cantidad: number; precio_unitario: number }[] = [];
+    const productosValidados: PedidoItem[] = [];
 
     for (const producto of dto.productos) {
       const item = await this.stkItemRepo.findOne({ where: { id: producto.nombre } });
@@ -48,13 +48,15 @@ export class PedidoService {
         nombre: producto.nombre,
         cantidad: producto.cantidad,
         precio_unitario: producto.precio_unitario,
-      });
+      } as PedidoItem);
     }
+
+    const externalId = uuidv4().replace(/-/g, '');
 
     const pedido = this.pedidoRepo.create({
       cliente_cuit: dto.cliente_cuit,
       cliente_nombre: dto.cliente_nombre,
-      external_id: dto.external_id,
+      external_id: externalId,
       total: dto.total,
       estado: 'PENDIENTE',
       productos: productosValidados,
@@ -62,12 +64,12 @@ export class PedidoService {
 
     const pedidoGuardado = await this.pedidoRepo.save(pedido);
 
-    const naveUrl = await this.generarIntencionDePago(dto);
+    const naveUrl = await this.generarIntencionDePago({ ...dto, external_id: externalId });
 
     return { pedido: pedidoGuardado, naveUrl };
   }
 
-  async generarIntencionDePago(dto: CreatePedidoDto): Promise<string> {
+  async generarIntencionDePago(dto: CreatePedidoDto & { external_id: string }): Promise<string> {
     if (!dto.productos || dto.productos.length === 0) {
       throw new BadRequestException('Debe enviar al menos un producto en el pedido');
     }
@@ -124,17 +126,19 @@ export class PedidoService {
       },
     };
 
-    const response = await fetch('https://e3-api.ranty.io/ecommerce/payment_request/external', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
+    const response = await fetch(
+      'https://e3-api.ranty.io/ecommerce/payment_request/external',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(body),
       },
-      body: JSON.stringify(body),
-    });
+    );
 
     const result = await response.json();
-    /* console.log('Respuesta de Nave:', result); */
     if (!response.ok) {
       throw new InternalServerErrorException(`Error en Nave: ${JSON.stringify(result)}`);
     }
@@ -142,21 +146,39 @@ export class PedidoService {
     return result.data.redirect_to;
   }
 
-
   async obtenerTokenDeNave(): Promise<string> {
-    const res = await fetch('https://homoservices.apinaranja.com/security-ms/api/security/auth0/b2b/m2ms', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        client_id: 'r7lAUUZNNuQFOYLe3v9LGyfLBagDinq2',
-        client_secret: 'GFiOS-cG3p--Vo_nuKdYpXdmy8Ze-l4iTNE6wHylYdSNTBzQtqso8OQeaCMmlTJF',
-        audience: 'https://naranja.com/ranty/merchants/api',
-      }),
-    });
+    const url = 'https://homoservices.apinaranja.com/security-ms/api/security/auth0/b2b/m2ms';
 
-    const data = await res.json();
-    if (!data.access_token) {
-      throw new InternalServerErrorException('Error al obtener token de Nave');
+    const credentials = {
+      client_id: 'r7lAUUZNNuQFOYLe3v9LGyfLBagDinq2',
+      client_secret: 'GFiOS-cG3p--Vo_nuKdYpXdmy8Ze-l4iTNE6wHylYdSNTBzQtqso8OQeaCMmlTJF',
+      audience: 'https://naranja.com/ranty/merchants/api',
+    };
+
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(credentials),
+      });
+    } catch (error) {
+      throw new InternalServerErrorException(
+        `Error al conectar con el servicio de Nave: ${error.message}`,
+      );
+    }
+
+    let data: any;
+    try {
+      data = await response.json();
+    } catch (error) {
+      throw new InternalServerErrorException(`Respuesta no válida del servicio de Nave`);
+    }
+
+    if (!response.ok || !data.access_token) {
+      throw new InternalServerErrorException(
+        `Error al obtener token de Nave: ${JSON.stringify(data)}`,
+      );
     }
 
     return data.access_token;

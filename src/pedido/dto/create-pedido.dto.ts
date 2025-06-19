@@ -1,8 +1,6 @@
-// src/pedido/dto/create-pedido.dto.ts
-import { IsString, IsNumber, IsArray, IsBoolean, ValidateNested } from 'class-validator';
-import { Type } from 'class-transformer';
+import { IsArray, IsEmail, IsNotEmpty, IsNumber, IsString } from 'class-validator';
 
-class PedidoItemDto {
+export class ProductoDto {
   @IsString()
   nombre: string;
 
@@ -15,21 +13,15 @@ class PedidoItemDto {
 
 export class CreatePedidoDto {
   @IsString()
-  cliente_cuit: string;
-
-  @IsString()
   cliente_nombre: string;
 
   @IsString()
-  external_id: string;
+  cliente_cuit: string;
 
   @IsNumber()
   total: number;
 
-  @IsBoolean()
-  mobile: boolean;
-
-  @IsString()
+  @IsEmail()
   email: string;
 
   @IsString()
@@ -50,8 +42,9 @@ export class CreatePedidoDto {
   @IsString()
   codigo_postal: string;
 
+  @IsString()
+  mobile: string;
+
   @IsArray()
-  @ValidateNested({ each: true })
-  @Type(() => PedidoItemDto)
-  productos: PedidoItemDto[];
+  productos: ProductoDto[];
 }
