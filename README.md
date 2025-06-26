@@ -9,13 +9,16 @@ Integra servicios de pago externos (como **Nave**) y módulos de catálogo, stoc
 
 ## 🚀 Instalación
 
-```bash
 # Clona el repositorio
+```bash
 git clone https://github.com/tu-usuario/api-we-tech-v2.git
 cd api-we-tech-v2
+```
 
 # Instala las dependencias
+```bash
 npm install
+```
 
 ---
 
