@@ -1,5 +1,5 @@
 
-````markdown
+
 # 📦 API WeTech V2
 
 API desarrollada con **NestJS**, orientada a la gestión de stock, pedidos y operaciones de venta para una plataforma de e-commerce.  
@@ -16,7 +16,6 @@ cd api-we-tech-v2
 
 # Instala las dependencias
 npm install
-````
 
 ---
 
