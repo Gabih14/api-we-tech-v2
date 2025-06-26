@@ -1,4 +1,12 @@
-import { IsArray, IsEmail, IsNotEmpty, IsNumber, IsString } from 'class-validator';
+import {
+  IsArray,
+  IsEmail,
+  IsNotEmpty,
+  IsNumber,
+  IsString,
+  ValidateNested,
+} from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class ProductoDto {
   @IsString()
@@ -9,6 +17,26 @@ export class ProductoDto {
 
   @IsNumber()
   precio_unitario: number;
+}
+
+export class BillingAddressDto {
+  @IsString()
+  street: string;
+
+  @IsString()
+  number: string;
+
+  @IsString()
+  city: string;
+
+  @IsString()
+  region: string;
+
+  @IsString()
+  country: string;
+
+  @IsString()
+  postal_code: string;
 }
 
 export class CreatePedidoDto {
@@ -46,5 +74,11 @@ export class CreatePedidoDto {
   mobile: string;
 
   @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ProductoDto)
   productos: ProductoDto[];
+
+  @ValidateNested()
+  @Type(() => BillingAddressDto)
+  billing_address: BillingAddressDto;
 }

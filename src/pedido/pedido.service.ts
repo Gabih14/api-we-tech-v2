@@ -1,3 +1,4 @@
+// src/pedido/pedido.service.ts
 import {
   forwardRef,
   Inject,
@@ -115,12 +116,12 @@ export class PedidoService {
           name: dto.cliente_nombre,
           phone: dto.telefono,
           billing_address: {
-            street_1: dto.calle,
-            street_2: 'N/A',
-            city: dto.ciudad,
-            region: dto.region,
-            country: dto.pais,
-            zipcode: dto.codigo_postal,
+            street_1: dto.billing_address.street,
+            street_2: dto.billing_address.number,
+            city: dto.billing_address.city,
+            region: dto.billing_address.region,
+            country: dto.billing_address.country,
+            zipcode: dto.billing_address.postal_code,
           },
         },
       },
