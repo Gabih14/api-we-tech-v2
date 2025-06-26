@@ -27,7 +27,7 @@ npm install
 Crear un archivo `.env` en la raíz del proyecto con las siguientes claves mínimas:
 
 ```env
-GOOGLE_API_KEY=AIzaSyCDesHGPMQEk72w8X9sFRu1O1rzno9UopQ
+GOOGLE_API_KEY=tu_google_api_key
 ```
 
 ⚠️ Otros tokens, como el de Nave, están embebidos por ahora.
