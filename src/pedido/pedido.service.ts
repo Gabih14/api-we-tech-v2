@@ -33,17 +33,27 @@ export class PedidoService {
     private readonly vtaComprobanteService: VtaComprobanteService,
   ) {}
 
-  async crear(dto: CreatePedidoDto): Promise<{ pedido: Pedido; naveUrl: string }> {
+  async crear(
+    dto: CreatePedidoDto,
+  ): Promise<{ pedido: Pedido; naveUrl: string }> {
     const productosValidados: PedidoItem[] = [];
 
     for (const producto of dto.productos) {
-      const item = await this.stkItemRepo.findOne({ where: { id: producto.nombre } });
+      const item = await this.stkItemRepo.findOne({
+        where: { id: producto.nombre },
+      });
 
       if (!item) {
-        throw new NotFoundException(`Producto '${producto.nombre}' no existe en catálogo.`);
+        throw new NotFoundException(
+          `Producto '${producto.nombre}' no existe en catálogo.`,
+        );
       }
 
-      await this.stockService.reservarStock(item.id, producto.cantidad, 'DEPOSITO');
+      await this.stockService.reservarStock(
+        item.id,
+        producto.cantidad,
+        'DEPOSITO',
+      );
 
       productosValidados.push({
         nombre: producto.nombre,
@@ -65,14 +75,20 @@ export class PedidoService {
 
     const pedidoGuardado = await this.pedidoRepo.save(pedido);
 
-    const naveUrl = await this.generarIntencionDePago({ ...dto, external_id: externalId });
-
+    const naveUrl = await this.generarIntencionDePago({
+      ...dto,
+      external_id: externalId,
+    });
     return { pedido: pedidoGuardado, naveUrl };
   }
 
-  async generarIntencionDePago(dto: CreatePedidoDto & { external_id: string }): Promise<string> {
+  async generarIntencionDePago(
+    dto: CreatePedidoDto & { external_id: string },
+  ): Promise<string> {
     if (!dto.productos || dto.productos.length === 0) {
-      throw new BadRequestException('Debe enviar al menos un producto en el pedido');
+      throw new BadRequestException(
+        'Debe enviar al menos un producto en el pedido',
+      );
     }
 
     const token = await this.obtenerTokenDeNave();
@@ -126,7 +142,6 @@ export class PedidoService {
         },
       },
     };
-
     const response = await fetch(
       'https://e3-api.ranty.io/ecommerce/payment_request/external',
       {
@@ -141,18 +156,22 @@ export class PedidoService {
 
     const result = await response.json();
     if (!response.ok) {
-      throw new InternalServerErrorException(`Error en Nave: ${JSON.stringify(result)}`);
+      throw new InternalServerErrorException(
+        `Error en Nave: ${JSON.stringify(result)}`,
+      );
     }
 
-    return result.data.redirect_to;
+    return result.data.redirect_to || result.data.checkout_url;
   }
 
   async obtenerTokenDeNave(): Promise<string> {
-    const url = 'https://homoservices.apinaranja.com/security-ms/api/security/auth0/b2b/m2ms';
+    const url =
+      'https://homoservices.apinaranja.com/security-ms/api/security/auth0/b2b/m2ms';
 
     const credentials = {
       client_id: 'r7lAUUZNNuQFOYLe3v9LGyfLBagDinq2',
-      client_secret: 'GFiOS-cG3p--Vo_nuKdYpXdmy8Ze-l4iTNE6wHylYdSNTBzQtqso8OQeaCMmlTJF',
+      client_secret:
+        'GFiOS-cG3p--Vo_nuKdYpXdmy8Ze-l4iTNE6wHylYdSNTBzQtqso8OQeaCMmlTJF',
       audience: 'https://naranja.com/ranty/merchants/api',
     };
 
@@ -173,7 +192,9 @@ export class PedidoService {
     try {
       data = await response.json();
     } catch (error) {
-      throw new InternalServerErrorException(`Respuesta no válida del servicio de Nave`);
+      throw new InternalServerErrorException(
+        `Respuesta no válida del servicio de Nave`,
+      );
     }
 
     if (!response.ok || !data.access_token) {
@@ -195,18 +216,28 @@ export class PedidoService {
     });
 
     if (!pedido) {
-      throw new NotFoundException(`Pedido con external_id ${externalId} no encontrado`);
+      throw new NotFoundException(
+        `Pedido con external_id ${externalId} no encontrado`,
+      );
     }
 
     if (estadoPago === 'APPROVED') {
       for (const producto of pedido.productos) {
-        await this.stockService.confirmarStock(producto.nombre, producto.cantidad, 'DEPOSITO');
+        await this.stockService.confirmarStock(
+          producto.nombre,
+          producto.cantidad,
+          'DEPOSITO',
+        );
       }
       pedido.estado = 'APROBADO';
       await this.vtaComprobanteService.crearDesdePedido(pedido);
     } else if (['REJECTED', 'CANCELLED', 'REFUNDED'].includes(estadoPago)) {
       for (const producto of pedido.productos) {
-        await this.stockService.liberarStock(producto.nombre, producto.cantidad, 'DEPOSITO');
+        await this.stockService.liberarStock(
+          producto.nombre,
+          producto.cantidad,
+          'DEPOSITO',
+        );
       }
       pedido.estado = 'CANCELADO';
     }
