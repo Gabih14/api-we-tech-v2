@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { StkItemModule } from './stk-item/stk-item.module';
 import { StkExistenciaModule } from './stk-existencia/stk-existencia.module';
 import { StkDepositoModule } from './stk-deposito/stk-deposito.module';
@@ -10,18 +11,36 @@ import { StkFamiliaModule } from './stk_familia/stk_familia.module';
 import { PedidoModule } from './pedido/pedido.module';
 import { VtaComprobanteModule } from './vta-comprobante/vta-comprobante.module';
 import { VtaComprobanteItemModule } from './vta-comprobante-item/vta-comprobante-item.module';
+import { MapsModule } from './maps/maps.module';
 
 @Module({
-  imports: [TypeOrmModule.forRoot({
-    type: 'mysql',
-    host: 'localhost',
-    port: 3306,
-    username: 'root',
-    password: 'mysql',
-    database: 'wetech',
-    autoLoadEntities: true,
-    synchronize: false,
-  }),StkItemModule, StkExistenciaModule, StkDepositoModule, StkPrecioModule, BasMonedaModule, SysImageModule, StkFamiliaModule, PedidoModule, VtaComprobanteModule, VtaComprobanteItemModule],
-
+  imports: [
+    ConfigModule.forRoot({ isGlobal: true }),
+    TypeOrmModule.forRootAsync({
+      imports: [ConfigModule],
+      useFactory: (config: ConfigService) => ({
+        type: 'mysql',
+        host: 'localhost',
+        port: 3306,
+        username: 'root',
+        password: config.get<string>('ROOT_PASSWORD'),
+        database: 'wetech',
+        autoLoadEntities: true,
+        synchronize: true,
+      }),
+      inject: [ConfigService],
+    }),
+    StkItemModule,
+    StkExistenciaModule,
+    StkDepositoModule,
+    StkPrecioModule,
+    BasMonedaModule,
+    SysImageModule,
+    StkFamiliaModule,
+    PedidoModule,
+    VtaComprobanteModule,
+    MapsModule,
+    VtaComprobanteItemModule
+  ],
 })
 export class AppModule {}

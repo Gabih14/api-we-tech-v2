@@ -1,8 +1,14 @@
-// src/pedido/dto/create-pedido.dto.ts
-import { IsString, IsNumber, IsArray, ValidateNested } from 'class-validator';
+import {
+  IsArray,
+  IsEmail,
+  IsNotEmpty,
+  IsNumber,
+  IsString,
+  ValidateNested,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 
-class PedidoItemDto {
+export class ProductoDto {
   @IsString()
   nombre: string;
 
@@ -13,21 +19,66 @@ class PedidoItemDto {
   precio_unitario: number;
 }
 
-export class CreatePedidoDto {
+export class BillingAddressDto {
   @IsString()
-  cliente_cuit: string;
+  street: string;
 
+  @IsString()
+  number: string;
+
+  @IsString()
+  city: string;
+
+  @IsString()
+  region: string;
+
+  @IsString()
+  country: string;
+
+  @IsString()
+  postal_code: string;
+}
+
+export class CreatePedidoDto {
   @IsString()
   cliente_nombre: string;
 
   @IsString()
-  external_id: string;
+  cliente_cuit: string;
 
   @IsNumber()
   total: number;
 
+  @IsEmail()
+  email: string;
+
+  @IsString()
+  telefono: string;
+
+  @IsString()
+  calle: string;
+
+  @IsString()
+  ciudad: string;
+
+  @IsString()
+  region: string;
+
+  @IsString()
+  pais: string;
+
+  @IsString()
+  codigo_postal: string;
+
+  @IsString()
+  mobile: string;
+
   @IsArray()
   @ValidateNested({ each: true })
-  @Type(() => PedidoItemDto)
-  productos: PedidoItemDto[];
+  @Type(() => ProductoDto)
+  productos: ProductoDto[];
+
+  @ValidateNested()
+  @Type(() => BillingAddressDto)
+  billing_address: BillingAddressDto;
 }
