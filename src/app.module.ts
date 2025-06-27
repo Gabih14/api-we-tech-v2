@@ -10,6 +10,7 @@ import { SysImageModule } from './sys_image/sys_image.module';
 import { StkFamiliaModule } from './stk_familia/stk_familia.module';
 import { PedidoModule } from './pedido/pedido.module';
 import { VtaComprobanteModule } from './vta-comprobante/vta-comprobante.module';
+import { VtaComprobanteItemModule } from './vta-comprobante-item/vta-comprobante-item.module';
 import { MapsModule } from './maps/maps.module';
 
 @Module({
@@ -39,6 +40,7 @@ import { MapsModule } from './maps/maps.module';
     PedidoModule,
     VtaComprobanteModule,
     MapsModule,
+    VtaComprobanteItemModule
   ],
 })
 export class AppModule {}

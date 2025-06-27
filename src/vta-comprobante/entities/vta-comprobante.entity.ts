@@ -1,5 +1,6 @@
 // src/vta-comprobante/entities/vta-comprobante.entity.ts
-import { Entity, Column, PrimaryColumn } from 'typeorm';
+import { VtaComprobanteItem } from 'src/vta-comprobante-item/entities/vta-comprobante-item.entity';
+import { Entity, Column, PrimaryColumn, OneToMany } from 'typeorm';
 
 @Entity({ name: 'vta_comprobante' })
 export class VtaComprobante {
@@ -47,4 +48,8 @@ export class VtaComprobante {
 
   @Column({ type: 'bit', nullable: true })
   visible: boolean;
+
+  @OneToMany(() => VtaComprobanteItem, (item) => item.comprobante, { cascade: true })
+  items: VtaComprobanteItem[];
+
 }
