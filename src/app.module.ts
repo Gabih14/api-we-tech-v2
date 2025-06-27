@@ -26,7 +26,7 @@ import { MapsModule } from './maps/maps.module';
         password: config.get<string>('ROOT_PASSWORD'),
         database: 'wetech',
         autoLoadEntities: true,
-        synchronize: true,
+        synchronize: false, // Cambiar a true solo en desarrollo
       }),
       inject: [ConfigService],
     }),
