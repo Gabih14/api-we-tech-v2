@@ -18,7 +18,7 @@ import { MapsModule } from './maps/maps.module';
     ConfigModule.forRoot({ isGlobal: true }),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
-      useFactory: (config: ConfigService) => ({
+      useFactory: (config: ConfigService): import('@nestjs/typeorm').TypeOrmModuleOptions => ({
         type: 'mysql',
         host: 'localhost',
         port: 3306,
@@ -26,7 +26,7 @@ import { MapsModule } from './maps/maps.module';
         password: config.get<string>('ROOT_PASSWORD'),
         database: 'wetech',
         autoLoadEntities: true,
-        synchronize: true,
+        synchronize: false,
       }),
       inject: [ConfigService],
     }),
