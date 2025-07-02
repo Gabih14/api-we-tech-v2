@@ -1,7 +1,7 @@
 import { Column, Entity, OneToMany } from "typeorm";
 import { StkItem } from "../../stk-item/entities/stk-item.entity"; // 👈 IMPORTANTE: importás StkItem
 
-@Entity("stk_familia", { schema: "wetech" })
+@Entity("stk_familia")
 export class StkFamilia {
   @Column("varchar", { primary: true, name: "id", length: 20 })
   id: string;

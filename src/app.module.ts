@@ -24,7 +24,7 @@ import { MapsModule } from './maps/maps.module';
         port: 3306,
         username: 'root',
         password: config.get<string>('ROOT_PASSWORD'),
-        database: 'wetech',
+        database: 'wetechv2',
         autoLoadEntities: true,
         synchronize: false,
       }),

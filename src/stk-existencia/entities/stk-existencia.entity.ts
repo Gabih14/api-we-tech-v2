@@ -3,7 +3,7 @@ import { StkItem } from "../../stk-item/entities/stk-item.entity";
 import { StkDeposito } from "../../stk-deposito/entities/stk-deposito.entity"; 
 
 @Index("deposito", ["deposito"], {})
-@Entity("stk_existencia", { schema: "wetech" })
+@Entity("stk_existencia")
 export class StkExistencia {
   @Column("varchar", { primary: true, name: "item", length: 20 })
   item: string;
