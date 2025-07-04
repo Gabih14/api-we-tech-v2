@@ -169,17 +169,20 @@ export class PedidoService {
 
   async obtenerTokenDeNave(): Promise<string> {
     const url = this.configService.get<string>('NAVE_AUTH_URL');
-    if (!url) {
+    const client_id = this.configService.get<string>('CLIENT_ID');
+    const client_secret = this.configService.get<string>('CLIENT_SECRET');
+    const audience = this.configService.get<string>('NAVE_AUDIENCE');
+
+    if (!url || !client_id || !client_secret || !audience) {
       throw new InternalServerErrorException(
-        'NAVE_AUTH_URL no está configurada en las variables de entorno',
+        'Faltan variables de entorno para la autenticación de Nave',
       );
     }
 
     const credentials = {
-      client_id: 'r7lAUUZNNuQFOYLe3v9LGyfLBagDinq2',
-      client_secret:
-        'GFiOS-cG3p--Vo_nuKdYpXdmy8Ze-l4iTNE6wHylYdSNTBzQtqso8OQeaCMmlTJF',
-      audience: 'https://naranja.com/ranty/merchants/api',
+      client_id,
+      client_secret,
+      audience,
     };
 
     let response: Response;
