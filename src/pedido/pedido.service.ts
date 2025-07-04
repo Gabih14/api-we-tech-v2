@@ -16,6 +16,7 @@ import { StkItem } from 'src/stk-item/entities/stk-item.entity';
 import { VtaComprobanteService } from 'src/vta-comprobante/vta-comprobante.service';
 import { PedidoItem } from './entities/pedido-item.entity';
 import { v4 as uuidv4 } from 'uuid';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class PedidoService {
@@ -31,6 +32,8 @@ export class PedidoService {
 
     @Inject(forwardRef(() => VtaComprobanteService))
     private readonly vtaComprobanteService: VtaComprobanteService,
+    
+    private readonly configService: ConfigService,
   ) {}
 
   async crear(
@@ -165,8 +168,12 @@ export class PedidoService {
   }
 
   async obtenerTokenDeNave(): Promise<string> {
-    const url =
-      'https://homoservices.apinaranja.com/security-ms/api/security/auth0/b2b/m2ms';
+    const url = this.configService.get<string>('NAVE_AUTH_URL');
+    if (!url) {
+      throw new InternalServerErrorException(
+        'NAVE_AUTH_URL no está configurada en las variables de entorno',
+      );
+    }
 
     const credentials = {
       client_id: 'r7lAUUZNNuQFOYLe3v9LGyfLBagDinq2',
