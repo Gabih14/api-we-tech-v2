@@ -111,10 +111,22 @@ export class PedidoService {
       };
     });
 
+    // Obtener valores desde variables de entorno
+    const platform = this.configService.get<string>('BODY_PLATFORM');
+    const store_id = this.configService.get<string>('BODY_STORE_ID');
+    const callbackBase = this.configService.get<string>('CALLBACK_URL');
+    const paymentUrl = this.configService.get<string>('NAVE_PAYMENT_URL');
+
+    if (!platform || !store_id || !callbackBase || !paymentUrl) {
+      throw new InternalServerErrorException(
+        'Faltan variables de entorno para la configuración de Nave',
+      );
+    }
+
     const body = {
-      platform: 'platform-x',
-      store_id: 'store1-platform-x',
-      callback_url: `https://platform_x.com.ar/order/${dto.external_id}`,
+      platform,
+      store_id,
+      callback_url: `${callbackBase}${dto.external_id}`,
       order_id: dto.external_id,
       mobile: dto.mobile,
       payment_request: {
@@ -145,17 +157,15 @@ export class PedidoService {
         },
       },
     };
-    const response = await fetch(
-      'https://e3-api.ranty.io/ecommerce/payment_request/external',
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(body),
+
+    const response = await fetch(paymentUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
       },
-    );
+      body: JSON.stringify(body),
+    });
 
     const result = await response.json();
     if (!response.ok) {
