@@ -6,6 +6,7 @@ import {
   Patch,
   Param,
   Delete,
+  ParseIntPipe,
 } from '@nestjs/common';
 import { VtaComprobanteItemService } from './vta-comprobante-item.service';
 import { CreateVtaComprobanteItemDto } from './dto/create-vta-comprobante-item.dto';
@@ -25,18 +26,31 @@ export class VtaComprobanteItemController {
     return this.service.findAll();
   }
 
-  @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.service.findOne(+id);
+  @Get(':tipo/:comprobante/:linea')
+  findOne(
+    @Param('tipo') tipo: string,
+    @Param('comprobante') comprobante: string,
+    @Param('linea', ParseIntPipe) linea: number,
+  ) {
+    return this.service.findOne(tipo,comprobante, linea);
   }
 
-  @Patch(':id')
-  update(@Param('id') id: string, @Body() dto: UpdateVtaComprobanteItemDto) {
-    return this.service.update(+id, dto);
+  @Patch(':tipo/:comprobante/:linea')
+  update(
+    @Param('tipo') tipo: string,
+    @Param('comprobante') comprobante: string,
+    @Param('linea', ParseIntPipe) linea: number,
+    @Body() dto: UpdateVtaComprobanteItemDto,
+  ) {
+    return this.service.update( tipo, comprobante, linea , dto);
   }
 
-  @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.service.remove(+id);
+  @Delete(':tipo/:comprobante/:linea')
+  remove(
+    @Param('tipo') tipo: string,
+    @Param('comprobante') comprobante: string,
+    @Param('linea', ParseIntPipe) linea: number,
+  ) {
+    return this.service.remove( tipo, comprobante, linea );
   }
 }

@@ -1,26 +1,31 @@
-import { IsInt, IsNumber, IsNotEmpty } from 'class-validator';
+import { IsInt, IsNumber, IsNotEmpty, IsString } from 'class-validator';
 
 export class CreateVtaComprobanteItemDto {
-  @IsInt()
-  @IsNotEmpty()
-  cantidad: number;
-
-  @IsNumber()
-  @IsNotEmpty()
-  precioUnitario: number;
-
-  @IsNumber()
-  @IsNotEmpty()
-  total: number;
-
+  @IsString()
   @IsNotEmpty()
   tipo: string;
 
+  @IsString()
   @IsNotEmpty()
   comprobante: string;
 
   @IsInt()
   @IsNotEmpty()
-  itemId: number;
-}
+  linea: number; // 👈 Clave primaria compuesta
 
+  @IsInt()
+  @IsNotEmpty()
+  cantidad: number;
+
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @IsNotEmpty()
+  precio: number;
+
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @IsNotEmpty()
+  importe: number;
+
+  @IsString()
+  @IsNotEmpty()
+  itemId: string; // 👈 En tu entidad `StkItem`, el ID es tipo varchar
+}

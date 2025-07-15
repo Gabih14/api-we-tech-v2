@@ -1,32 +1,41 @@
 import {
   Entity,
-  PrimaryGeneratedColumn,
   Column,
   ManyToOne,
   JoinColumn,
+  PrimaryColumn,
 } from 'typeorm';
 import { VtaComprobante } from '../../vta-comprobante/entities/vta-comprobante.entity';
 import { StkItem } from '../../stk-item/entities/stk-item.entity';
 
 @Entity('vta_comprobante_item')
 export class VtaComprobanteItem {
-  @PrimaryGeneratedColumn()
-  id: number;
+  @PrimaryColumn({ type: 'varchar', length: 4 })
+  tipo: string;
 
-  @Column({ type: 'int' })
+  @PrimaryColumn({ type: 'varchar', length: 16 })
+  comprobante: string;
+
+  @PrimaryColumn({ type: 'int' })
+  linea: number;
+
+  @Column('decimal', { name: 'cantidad', precision: 11, scale: 4 })
   cantidad: number;
 
-  @Column({ type: 'decimal', precision: 10, scale: 2 })
-  precioUnitario: number;
+  @Column('decimal', { name: 'precio', precision: 14, scale: 4 })
+  precio: number;
 
-  @Column({ type: 'decimal', precision: 10, scale: 2 })
-  total: number;
+  @Column('decimal', { name: 'importe', precision: 12, scale: 2 })
+  importe: number;
 
-  @ManyToOne(() => VtaComprobante, (comprobante) => comprobante.items, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'comprobante_id' })
-  comprobante: VtaComprobante;
+  @ManyToOne(() => VtaComprobante, (comprobante) => comprobante.items)
+  @JoinColumn([
+    { name: 'tipo', referencedColumnName: 'tipo' },
+    { name: 'comprobante', referencedColumnName: 'comprobante' },
+  ])
+  comprobanteRef: VtaComprobante;
 
   @ManyToOne(() => StkItem, { eager: true })
-  @JoinColumn({ name: 'item_id' })
+  @JoinColumn({ name: 'item', referencedColumnName: 'id' })
   item: StkItem;
 }

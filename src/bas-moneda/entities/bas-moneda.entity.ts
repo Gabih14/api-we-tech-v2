@@ -1,7 +1,7 @@
 import { Column, Entity, OneToMany } from "typeorm";
 import { StkPrecio } from "../../stk-precio/entities/stk-precio.entity";
 
-@Entity("bas_moneda", { schema: "wetech" })
+@Entity("bas_moneda")
 export class BasMoneda {
   @Column("varchar", { primary: true, name: "id", length: 5 })
   id: string;

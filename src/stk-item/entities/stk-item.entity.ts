@@ -1,53 +1,56 @@
 import {
-    Column,
-    Entity,
-    Index,
-    OneToMany,
-    ManyToOne,
-    JoinColumn,
+  Column,
+  Entity,
+  Index,
+  OneToMany,
+  ManyToOne,
+  JoinColumn,
 } from "typeorm";
 
 import { StkExistencia } from "../../stk-existencia/entities/stk-existencia.entity";
 import { StkPrecio } from "../../stk-precio/entities/stk-precio.entity";
-import { StkFamilia } from "../../stk_familia/entities/stk_familia.entity"; // 👈 IMPORTANTE: importás StkFamilia
+import { StkFamilia } from "../../stk_familia/entities/stk_familia.entity";
 
 @Index("grupo", ["grupo"], {})
 @Index("subgrupo", ["subgrupo"], {})
-@Entity("stk_item", { schema: "wetech" })
+@Entity("stk_item")
 export class StkItem {
-    @Column("varchar", { primary: true, name: "id", length: 20 })
-    id: string;
+  @Column("varchar", { primary: true, name: "id", length: 20 })
+  id: string;
 
-    @Column("varchar", { name: "descripcion", nullable: true, length: 2048 })
-    descripcion: string | null;
+  @Column("varchar", { name: "descripcion", nullable: true, length: 2048 })
+  descripcion: string | null;
 
-    @Column("varchar", { name: "presentacion", nullable: true, length: 100 })
-    presentacion: string | null;
+  @Column("varchar", { name: "presentacion", nullable: true, length: 100 })
+  presentacion: string | null;
 
-    @Column("enum", {
-        name: "tipo",
-        nullable: true,
-        enum: ["PT", "SE", "MP", "CP", "BU", "S", "C"],
-    })
-    tipo: "PT" | "SE" | "MP" | "CP" | "BU" | "S" | "C" | null;
+  @Column("enum", {
+    name: "tipo",
+    nullable: true,
+    enum: ["PT", "SE", "MP", "CP", "BU", "S", "C"],
+  })
+  tipo: "PT" | "SE" | "MP" | "CP" | "BU" | "S" | "C" | null;
 
-    @Column("varchar", { name: "grupo", nullable: true, length: 50 })
-    grupo: string | null;
+  @Column("varchar", { name: "grupo", nullable: true, length: 50 })
+  grupo: string | null;
 
-    @Column("varchar", { name: "subgrupo", nullable: true, length: 50 })
-    subgrupo: string | null;
+  @Column("varchar", { name: "subgrupo", nullable: true, length: 50 })
+  subgrupo: string | null;
 
-    /** 🔥 Agregamos la Foreign Key para familia */
-    @Column("varchar", { name: "familia_id", nullable: true, length: 20 })
-    familiaId: string | null;
+  /** 🔥 Clave foránea real en la DB: "familia" (no "familia_id") */
+  @Column("varchar", { name: "familia", nullable: true, length: 20 })
+  familia: string | null;
 
-    @ManyToOne(() => StkFamilia, (familia) => familia.stkItems)
-    @JoinColumn({ name: "familia_id" }) // 👈 Match exacto al campo de la tabla
-    familia2: StkFamilia;
+  @ManyToOne(() => StkFamilia, (stkFamilia) => stkFamilia.stkItems, {
+    onDelete: "SET NULL",
+    onUpdate: "CASCADE",
+  })
+  @JoinColumn([{ name: "familia", referencedColumnName: "id" }])
+  familia2: StkFamilia;
 
-    @OneToMany(() => StkExistencia, (stkExistencia) => stkExistencia.item2)
-    stkExistencias: StkExistencia[];
+  @OneToMany(() => StkExistencia, (stkExistencia) => stkExistencia.item2)
+  stkExistencias: StkExistencia[];
 
-    @OneToMany(() => StkPrecio, (stkPrecio) => stkPrecio.item2)
-    stkPrecios: StkPrecio[];
+  @OneToMany(() => StkPrecio, (stkPrecio) => stkPrecio.item2)
+  stkPrecios: StkPrecio[];
 }

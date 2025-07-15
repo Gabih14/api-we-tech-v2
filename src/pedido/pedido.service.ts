@@ -16,6 +16,7 @@ import { StkItem } from 'src/stk-item/entities/stk-item.entity';
 import { VtaComprobanteService } from 'src/vta-comprobante/vta-comprobante.service';
 import { PedidoItem } from './entities/pedido-item.entity';
 import { v4 as uuidv4 } from 'uuid';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class PedidoService {
@@ -31,6 +32,8 @@ export class PedidoService {
 
     @Inject(forwardRef(() => VtaComprobanteService))
     private readonly vtaComprobanteService: VtaComprobanteService,
+    
+    private readonly configService: ConfigService,
   ) {}
 
   async crear(
@@ -108,10 +111,22 @@ export class PedidoService {
       };
     });
 
+    // Obtener valores desde variables de entorno
+    const platform = this.configService.get<string>('BODY_PLATFORM');
+    const store_id = this.configService.get<string>('BODY_STORE_ID');
+    const callbackBase = this.configService.get<string>('CALLBACK_URL');
+    const paymentUrl = this.configService.get<string>('NAVE_PAYMENT_URL');
+
+    if (!platform || !store_id || !callbackBase || !paymentUrl) {
+      throw new InternalServerErrorException(
+        'Faltan variables de entorno para la configuración de Nave',
+      );
+    }
+
     const body = {
-      platform: 'platform-x',
-      store_id: 'store1-platform-x',
-      callback_url: `https://platform_x.com.ar/order/${dto.external_id}`,
+      platform,
+      store_id,
+      callback_url: `${callbackBase}${dto.external_id}`,
       order_id: dto.external_id,
       mobile: dto.mobile,
       payment_request: {
@@ -142,17 +157,15 @@ export class PedidoService {
         },
       },
     };
-    const response = await fetch(
-      'https://e3-api.ranty.io/ecommerce/payment_request/external',
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(body),
+
+    const response = await fetch(paymentUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
       },
-    );
+      body: JSON.stringify(body),
+    });
 
     const result = await response.json();
     if (!response.ok) {
@@ -165,14 +178,21 @@ export class PedidoService {
   }
 
   async obtenerTokenDeNave(): Promise<string> {
-    const url =
-      'https://homoservices.apinaranja.com/security-ms/api/security/auth0/b2b/m2ms';
+    const url = this.configService.get<string>('NAVE_AUTH_URL');
+    const client_id = this.configService.get<string>('CLIENT_ID');
+    const client_secret = this.configService.get<string>('CLIENT_SECRET');
+    const audience = this.configService.get<string>('NAVE_AUDIENCE');
+
+    if (!url || !client_id || !client_secret || !audience) {
+      throw new InternalServerErrorException(
+        'Faltan variables de entorno para la autenticación de Nave',
+      );
+    }
 
     const credentials = {
-      client_id: 'r7lAUUZNNuQFOYLe3v9LGyfLBagDinq2',
-      client_secret:
-        'GFiOS-cG3p--Vo_nuKdYpXdmy8Ze-l4iTNE6wHylYdSNTBzQtqso8OQeaCMmlTJF',
-      audience: 'https://naranja.com/ranty/merchants/api',
+      client_id,
+      client_secret,
+      audience,
     };
 
     let response: Response;

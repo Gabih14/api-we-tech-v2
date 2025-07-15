@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { VtaComprobanteItem } from './entities/vta-comprobante-item.entity';
@@ -16,7 +16,7 @@ export class VtaComprobanteItemService {
     private readonly compRepo: Repository<VtaComprobante>,
     @InjectRepository(StkItem)
     private readonly stkItemRepo: Repository<StkItem>,
-  ) { }
+  ) {}
 
   async create(dto: CreateVtaComprobanteItemDto): Promise<VtaComprobanteItem> {
     const comprobante = await this.compRepo.findOneByOrFail({
@@ -24,51 +24,62 @@ export class VtaComprobanteItemService {
       comprobante: dto.comprobante,
     });
 
-    const item = await this.stkItemRepo.findOneByOrFail({ id: String(dto.itemId) });
+    const item = await this.stkItemRepo.findOneByOrFail({
+      id: String(dto.itemId),
+    });
 
-    const nuevoItem = this.itemRepo.create({
-      ...dto,
-      comprobante,
+    const entity = this.itemRepo.create({
+      tipo: dto.tipo,
+      comprobante: dto.comprobante,
+      linea: dto.linea,
+      cantidad: dto.cantidad,
+      precio: dto.precio,
+      importe: dto.importe,
+      comprobanteRef: comprobante,
       item,
     });
 
-    return this.itemRepo.save(nuevoItem);
+    return this.itemRepo.save(entity);
   }
 
   findAll(): Promise<VtaComprobanteItem[]> {
-    return this.itemRepo.find({ relations: ['comprobante', 'item'] });
+    return this.itemRepo.find({
+      relations: ['comprobanteRef', 'item'],
+    });
   }
 
-  async findOne(id: number): Promise<VtaComprobanteItem> {
+  async findOne(tipo: string, comprobante: string, linea: number): Promise<VtaComprobanteItem> {
     const item = await this.itemRepo.findOne({
-      where: { id },
-      relations: ['comprobante', 'item'],
+      where: { tipo, comprobante, linea },
+      relations: ['comprobanteRef', 'item'],
     });
+
     if (!item) {
-      throw new Error(`VtaComprobanteItem with id ${id} not found`);
+      throw new NotFoundException(`Item ${tipo}-${comprobante}-${linea} not found`);
     }
+
     return item;
   }
 
-  async update(id: number, dto: UpdateVtaComprobanteItemDto): Promise<VtaComprobanteItem> {
-    const item = await this.itemRepo.findOneByOrFail({ id });
-
-    if (dto.comprobante && dto.tipo) {
-      item.comprobante = await this.compRepo.findOneByOrFail({
-        tipo: dto.tipo,
-        comprobante: dto.comprobante,
-      });
-    }
+  async update(
+    tipo: string,
+    comprobante: string,
+    linea: number,
+    dto: UpdateVtaComprobanteItemDto,
+  ): Promise<VtaComprobanteItem> {
+    const item = await this.itemRepo.findOneByOrFail({ tipo, comprobante, linea });
 
     if (dto.itemId) {
-      item.item = await this.stkItemRepo.findOneByOrFail({ id: String(dto.itemId) });
+      item.item = await this.stkItemRepo.findOneByOrFail({
+        id: String(dto.itemId),
+      });
     }
 
     Object.assign(item, dto);
     return this.itemRepo.save(item);
   }
 
-  async remove(id: number): Promise<void> {
-    await this.itemRepo.delete(id);
+  async remove(tipo: string, comprobante: string, linea: number): Promise<void> {
+    await this.itemRepo.delete({ tipo, comprobante, linea });
   }
 }

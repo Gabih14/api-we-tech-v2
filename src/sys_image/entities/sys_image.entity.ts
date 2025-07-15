@@ -1,6 +1,6 @@
 import { Column, Entity } from "typeorm";
 
-@Entity("sys_image", { schema: "wetech" })
+@Entity("sys_image")
 export class SysImage {
   @Column("varchar", { primary: true, name: "id", length: 20 })
   id: string;
