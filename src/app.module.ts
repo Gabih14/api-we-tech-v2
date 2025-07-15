@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+
 import { StkItemModule } from './stk-item/stk-item.module';
 import { StkExistenciaModule } from './stk-existencia/stk-existencia.module';
 import { StkDepositoModule } from './stk-deposito/stk-deposito.module';
@@ -16,9 +17,11 @@ import { MapsModule } from './maps/maps.module';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+
+    // 🟡 Conexión Nacional Software (wetechv2)
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
-      useFactory: (config: ConfigService): import('@nestjs/typeorm').TypeOrmModuleOptions => ({
+      useFactory: (config: ConfigService) => ({
         type: 'mysql',
         host: 'localhost',
         port: 3306,
@@ -30,6 +33,24 @@ import { MapsModule } from './maps/maps.module';
       }),
       inject: [ConfigService],
     }),
+
+    // 🔵 Conexión a BD propia (we_tech_back)
+    TypeOrmModule.forRootAsync({
+      imports: [ConfigModule],
+      name: 'back', // 👈 nombre para identificar esta conexión
+      useFactory: (config: ConfigService) => ({
+        type: 'mysql',
+        host: 'localhost',
+        port: 3306,
+        username: 'root',
+        password: config.get<string>('ROOT_PASSWORD'),
+        database: 'we_tech_back',
+        autoLoadEntities: true,
+        synchronize: false,
+      }),
+      inject: [ConfigService],
+    }),
+
     StkItemModule,
     StkExistenciaModule,
     StkDepositoModule,
@@ -40,7 +61,7 @@ import { MapsModule } from './maps/maps.module';
     PedidoModule,
     VtaComprobanteModule,
     MapsModule,
-    VtaComprobanteItemModule
+    VtaComprobanteItemModule,
   ],
 })
 export class AppModule {}
