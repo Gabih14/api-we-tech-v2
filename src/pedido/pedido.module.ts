@@ -8,6 +8,7 @@ import { PedidoItem } from './entities/pedido-item.entity';
 import { StkItem } from 'src/stk-item/entities/stk-item.entity';
 import { StkExistenciaModule } from 'src/stk-existencia/stk-existencia.module';
 import { VtaComprobanteModule } from 'src/vta-comprobante/vta-comprobante.module';
+import { MailerModule } from 'src/mailer/mailer.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { VtaComprobanteModule } from 'src/vta-comprobante/vta-comprobante.module
     TypeOrmModule.forFeature([StkItem]), // Esta sigue en la conexión default (Nacional)
     forwardRef(() => StkExistenciaModule),
     forwardRef(() => VtaComprobanteModule),
+    MailerModule
   ],
   controllers: [PedidoController],
   providers: [PedidoService],
