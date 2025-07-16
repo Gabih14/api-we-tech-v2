@@ -23,10 +23,10 @@ import { MailerService } from 'src/mailer/mailer.service';
 @Injectable()
 export class PedidoService {
   constructor(
-    @InjectRepository(Pedido)
+    @InjectRepository(Pedido, 'back') // 👈 Base de datos propia
     private readonly pedidoRepo: Repository<Pedido>,
 
-    @InjectRepository(StkItem)
+    @InjectRepository(StkItem) // 👈 Viene de la base original
     private readonly stkItemRepo: Repository<StkItem>,
 
     @Inject(forwardRef(() => StkExistenciaService))
@@ -39,6 +39,7 @@ export class PedidoService {
 
     private readonly mailerService: MailerService,
   ) { }
+
 
   async crear(
     dto: CreatePedidoDto,
@@ -198,7 +199,7 @@ export class PedidoService {
       client_secret,
       audience,
     };
-
+    
     let response: Response;
     try {
       response = await fetch(url, {
