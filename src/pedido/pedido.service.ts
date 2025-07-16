@@ -17,14 +17,16 @@ import { VtaComprobanteService } from 'src/vta-comprobante/vta-comprobante.servi
 import { PedidoItem } from './entities/pedido-item.entity';
 import { v4 as uuidv4 } from 'uuid';
 import { ConfigService } from '@nestjs/config';
+import { MailerService } from 'src/mailer/mailer.service';
+
 
 @Injectable()
 export class PedidoService {
   constructor(
-    @InjectRepository(Pedido)
+    @InjectRepository(Pedido, 'back') // 👈 Base de datos propia
     private readonly pedidoRepo: Repository<Pedido>,
 
-    @InjectRepository(StkItem)
+    @InjectRepository(StkItem) // 👈 Viene de la base original
     private readonly stkItemRepo: Repository<StkItem>,
 
     @Inject(forwardRef(() => StkExistenciaService))
@@ -32,9 +34,12 @@ export class PedidoService {
 
     @Inject(forwardRef(() => VtaComprobanteService))
     private readonly vtaComprobanteService: VtaComprobanteService,
-    
+
     private readonly configService: ConfigService,
-  ) {}
+
+    private readonly mailerService: MailerService,
+  ) { }
+
 
   async crear(
     dto: CreatePedidoDto,
@@ -194,7 +199,7 @@ export class PedidoService {
       client_secret,
       audience,
     };
-
+    
     let response: Response;
     try {
       response = await fetch(url, {
@@ -250,7 +255,8 @@ export class PedidoService {
         );
       }
       pedido.estado = 'APROBADO';
-      await this.vtaComprobanteService.crearDesdePedido(pedido);
+      await this.notificarSecretaria(pedido);
+      //await this.vtaComprobanteService.crearDesdePedido(pedido);
     } else if (['REJECTED', 'CANCELLED', 'REFUNDED'].includes(estadoPago)) {
       for (const producto of pedido.productos) {
         await this.stockService.liberarStock(
@@ -271,4 +277,24 @@ export class PedidoService {
       relations: ['productos'],
     });
   }
+  private async notificarSecretaria(pedido: Pedido) {
+    const email = this.configService.get<string>('SECRETARIA_EMAIL');
+
+    const mensaje = `🧾 Pedido Aprobado
+Cliente: ${pedido.cliente_nombre}
+CUIT: ${pedido.cliente_cuit}
+
+Productos:
+${pedido.productos.map(p => `- ${p.nombre} x${p.cantidad} ($${p.precio_unitario})`).join('\n')}
+
+Total: $${pedido.total}
+`;
+    if (!email) {
+      throw new InternalServerErrorException(
+        'Falta la configuración del email de la secretaria',
+      );
+    }
+    await this.mailerService.enviarCorreo(email, '📦 Pedido Aprobado en WeTech', mensaje);
+  }
+
 }
