@@ -12,6 +12,7 @@ import { PedidoModule } from './pedido/pedido.module';
 import { VtaComprobanteModule } from './vta-comprobante/vta-comprobante.module';
 import { VtaComprobanteItemModule } from './vta-comprobante-item/vta-comprobante-item.module';
 import { MapsModule } from './maps/maps.module';
+import { MailerModule } from './mailer/mailer.module';
 
 @Module({
   imports: [
@@ -40,7 +41,8 @@ import { MapsModule } from './maps/maps.module';
     PedidoModule,
     VtaComprobanteModule,
     MapsModule,
-    VtaComprobanteItemModule
+    VtaComprobanteItemModule,
+    MailerModule,
   ],
 })
 export class AppModule {}

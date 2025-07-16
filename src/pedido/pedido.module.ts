@@ -8,12 +8,14 @@ import { PedidoItem } from './entities/pedido-item.entity'; // 👈 Agregalo
 import { StkItem } from 'src/stk-item/entities/stk-item.entity';
 import { StkExistenciaModule } from 'src/stk-existencia/stk-existencia.module';
 import { VtaComprobanteModule } from 'src/vta-comprobante/vta-comprobante.module';
+import { MailerModule } from 'src/mailer/mailer.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Pedido, PedidoItem, StkItem]), // 👈 Agregalo acá también
     forwardRef(() => StkExistenciaModule),
     forwardRef(() => VtaComprobanteModule),
+    MailerModule
   ],
   controllers: [PedidoController],
   providers: [PedidoService],
