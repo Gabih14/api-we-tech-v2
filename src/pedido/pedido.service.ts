@@ -131,7 +131,7 @@ export class PedidoService {
     const body = {
       platform,
       store_id,
-      callback_url: `${callbackBase}${dto.external_id}`,
+      callback_url: `${callbackBase}=${dto.external_id}`,
       order_id: dto.external_id,
       mobile: dto.mobile,
       payment_request: {
