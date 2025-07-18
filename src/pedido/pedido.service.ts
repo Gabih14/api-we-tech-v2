@@ -19,7 +19,6 @@ import { v4 as uuidv4 } from 'uuid';
 import { ConfigService } from '@nestjs/config';
 import { MailerService } from 'src/mailer/mailer.service';
 
-
 @Injectable()
 export class PedidoService {
   constructor(
@@ -38,8 +37,7 @@ export class PedidoService {
     private readonly configService: ConfigService,
 
     private readonly mailerService: MailerService,
-  ) { }
-
+  ) {}
 
   async crear(
     dto: CreatePedidoDto,
@@ -88,6 +86,13 @@ export class PedidoService {
       external_id: externalId,
     });
     return { pedido: pedidoGuardado, naveUrl };
+  }
+
+  async encontrarPorId(id: number): Promise<Pedido | null> {
+    return this.pedidoRepo.findOne({
+      where: { id },
+      relations: ['productos'],
+    });
   }
 
   async generarIntencionDePago(
@@ -199,7 +204,7 @@ export class PedidoService {
       client_secret,
       audience,
     };
-    
+
     let response: Response;
     try {
       response = await fetch(url, {
@@ -285,7 +290,7 @@ Cliente: ${pedido.cliente_nombre}
 CUIT: ${pedido.cliente_cuit}
 
 Productos:
-${pedido.productos.map(p => `- ${p.nombre} x${p.cantidad} ($${p.precio_unitario})`).join('\n')}
+${pedido.productos.map((p) => `- ${p.nombre} x${p.cantidad} ($${p.precio_unitario})`).join('\n')}
 
 Total: $${pedido.total}
 `;
@@ -294,7 +299,10 @@ Total: $${pedido.total}
         'Falta la configuración del email de la secretaria',
       );
     }
-    await this.mailerService.enviarCorreo(email, '📦 Pedido Aprobado en WeTech', mensaje);
+    await this.mailerService.enviarCorreo(
+      email,
+      '📦 Pedido Aprobado en WeTech',
+      mensaje,
+    );
   }
-
 }

@@ -1,5 +1,5 @@
 // src/pedido/pedido.controller.ts
-import { Controller, Post, Body, NotFoundException } from '@nestjs/common';
+import { Controller, Post, Body, NotFoundException, Get, Param } from '@nestjs/common';
 import { PedidoService } from './pedido.service';
 import { CreatePedidoDto } from './dto/create-pedido.dto';
 
@@ -33,5 +33,14 @@ export class PedidoController {
     return {
       message: `Webhook recibido pero sin acción para estado: ${status}`,
     };
+  }
+
+  @Get(':id')
+  async getById(@Param('id') id:string){
+    const pedido=await this.pedidoService.encontrarPorExternalId(id)
+    if(!pedido){
+      throw new NotFoundException(`Pedido con id ${id} no encontrado.`)
+    }
+    return pedido;
   }
 }
