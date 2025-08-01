@@ -10,7 +10,7 @@ import { BasMoneda } from "../../bas-moneda/entities/bas-moneda.entity";
 
 @Index("item", ["item"], {})
 @Index("moneda", ["moneda"], {})
-@Entity("stk_precio", { schema: "wetech" })
+@Entity("stk_precio")
 export class StkPrecio {
   @Column("varchar", { primary: true, name: "lista", length: 20 })
   lista: string;
