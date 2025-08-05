@@ -95,118 +95,143 @@ export class PedidoService {
     });
   }
 
-  async generarIntencionDePago(
-    dto: CreatePedidoDto & { external_id: string },
-  ): Promise<string> {
-    if (!dto.productos || dto.productos.length === 0) {
-      throw new BadRequestException(
-        'Debe enviar al menos un producto en el pedido',
-      );
-    }
+ async generarIntencionDePago(
+  dto: CreatePedidoDto & { external_id: string },
+): Promise<string> {
+  if (!dto.productos || dto.productos.length === 0) {
+    throw new BadRequestException(
+      'Debe enviar al menos un producto en el pedido',
+    );
+  }
 
-    // Validación de billing_address
-    const address = dto.billing_address;
-    const missingFields: string[] = [];
+  // Validación de billing_address
+  const address = dto.billing_address;
+  const missingFields: string[] = [];
 
-    if (!address) {
-      throw new BadRequestException('Falta el campo billing_address');
-    }
+  if (!address) {
+    throw new BadRequestException('Falta el campo billing_address');
+  }
 
-    if (!address.street) missingFields.push('street');
-    if (!address.number) missingFields.push('number');
-    if (!address.city) missingFields.push('city');
-    if (!address.region) missingFields.push('region');
-    if (!address.country) missingFields.push('country');
-    if (!address.postal_code) missingFields.push('postal_code');
+  if (!address.street) missingFields.push('street');
+  if (!address.number) missingFields.push('number');
+  if (!address.city) missingFields.push('city');
+  if (!address.region) missingFields.push('region');
+  if (!address.country) missingFields.push('country');
+  if (!address.postal_code) missingFields.push('postal_code');
 
-    if (missingFields.length > 0) {
-      throw new BadRequestException(
-        `Faltan los siguientes campos en billing_address: ${missingFields.join(', ')}`
-      );
-    }
+  if (missingFields.length > 0) {
+    throw new BadRequestException(
+      `Faltan los siguientes campos en billing_address: ${missingFields.join(', ')}`
+    );
+  }
 
-    const token = await this.obtenerTokenDeNave();
+  const token = await this.obtenerTokenDeNave();
 
-    const productosFormateados = dto.productos.map((p, index) => {
-      const idLimpio = p.nombre.replace(/[^a-zA-Z0-9]/g, '') || `item${index}`;
-
-      return {
-        id: idLimpio,
-        name: p.nombre,
-        description: p.nombre,
-        quantity: p.cantidad,
-        unit_price: {
-          currency: 'ARS',
-          value: p.precio_unitario.toFixed(2),
-        },
-      };
-    });
-
-    // Obtener valores desde variables de entorno
-    const platform = this.configService.get<string>('BODY_PLATFORM');
-    const store_id = this.configService.get<string>('BODY_STORE_ID');
-    const callbackBase = this.configService.get<string>('CALLBACK_URL');
-    const paymentUrl = this.configService.get<string>('NAVE_PAYMENT_URL');
-
-    if (!platform || !store_id || !callbackBase || !paymentUrl) {
-      throw new InternalServerErrorException(
-        'Faltan variables de entorno para la configuración de Nave',
-      );
-    }
-
-    const body = {
-      platform,
-      store_id,
-      callback_url: `${callbackBase}=${dto.external_id}`,
-      order_id: dto.external_id,
-      mobile: dto.mobile,
-      payment_request: {
-        transactions: [
-          {
-            products: productosFormateados,
-            amount: {
-              currency: 'ARS',
-              value: dto.total.toFixed(2),
-            },
-          },
-        ],
-        buyer: {
-          user_id: dto.email,
-          doc_type: 'DNI',
-          doc_number: 'N/A',
-          user_email: dto.email,
-          name: dto.cliente_nombre,
-          phone: dto.telefono,
-          billing_address: {
-            street_1: address.street,
-            street_2: address.number,
-            city: address.city,
-            region: address.region,
-            country: address.country,
-            zipcode: address.postal_code,
-          },
-        },
+  const productosFormateados = dto.productos.map((p, index) => {
+    const idLimpio = p.nombre.replace(/[^a-zA-Z0-9]/g, '') || `item${index}`;
+    return {
+      id: idLimpio,
+      name: p.nombre,
+      description: p.nombre,
+      quantity: p.cantidad,
+      unit_price: {
+        currency: 'ARS',
+        value: p.precio_unitario.toFixed(2),
       },
     };
+  });
 
-    const response = await fetch(paymentUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify(body),
-    });
+  // Obtener valores desde variables de entorno
+  const platform = this.configService.get<string>('BODY_PLATFORM');
+  const store_id = this.configService.get<string>('BODY_STORE_ID');
+  const callbackBase = this.configService.get<string>('CALLBACK_URL');
+  const paymentUrl = this.configService.get<string>('NAVE_PAYMENT_URL');
 
-    const result = await response.json();
-    if (!response.ok) {
-      throw new InternalServerErrorException(
-        `Error en Nave: ${JSON.stringify(result)}`,
-      );
-    }
-
-    return result.data.redirect_to || result.data.checkout_url;
+  if (!platform || !store_id || !callbackBase || !paymentUrl) {
+    throw new InternalServerErrorException(
+      'Faltan variables de entorno para la configuración de Nave',
+    );
   }
+
+  const body = {
+    platform,
+    store_id,
+    callback_url: `${callbackBase}=${dto.external_id}`,
+    order_id: dto.external_id,
+    mobile: dto.mobile,
+    payment_request: {
+      transactions: [
+        {
+          products: productosFormateados,
+          amount: {
+            currency: 'ARS',
+            value: dto.total.toFixed(2),
+          },
+        },
+      ],
+      buyer: {
+        user_id: dto.email,
+        doc_type: 'DNI',
+        doc_number: 'N/A',
+        user_email: dto.email,
+        name: dto.cliente_nombre,
+        phone: dto.telefono,
+        billing_address: {
+          street_1: address.street,
+          street_2: address.number,
+          city: address.city,
+          region: address.region,
+          country: address.country,
+          zipcode: address.postal_code,
+        },
+      },
+    },
+  };
+
+  // Hasta 2 intentos si falla por razones temporales (como HTML inesperado)
+  const maxRetries = 2;
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await fetch(paymentUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(body),
+      });
+
+      const contentType = response.headers.get('content-type');
+
+      if (!contentType?.includes('application/json')) {
+        const text = await response.text();
+        throw new InternalServerErrorException(
+          `Respuesta inesperada de Nave (no es JSON): ${text.slice(0, 200)}`
+        );
+      }
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new InternalServerErrorException(
+          `Error en Nave: ${JSON.stringify(result)}`
+        );
+      }
+
+      return result.data.redirect_to || result.data.checkout_url;
+    } catch (error) {
+      if (attempt === maxRetries) {
+        throw new InternalServerErrorException(
+          `Fallo al generar intención de pago (intento ${attempt}): ${error.message}`,
+        );
+      }
+      await new Promise((resolve) => setTimeout(resolve, 1500)); // espera 1.5 segundos antes de reintentar
+    }
+  }
+
+  throw new InternalServerErrorException('No se pudo generar el enlace de pago.');
+}
+
 
 
   async obtenerTokenDeNave(): Promise<string> {
