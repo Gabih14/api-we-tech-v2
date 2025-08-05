@@ -99,6 +99,27 @@ export class PedidoService {
       );
     }
 
+    // Validación de billing_address
+    const address = dto.billing_address;
+    const missingFields: string[] = [];
+
+    if (!address) {
+      throw new BadRequestException('Falta el campo billing_address');
+    }
+
+    if (!address.street) missingFields.push('street');
+    if (!address.number) missingFields.push('number');
+    if (!address.city) missingFields.push('city');
+    if (!address.region) missingFields.push('region');
+    if (!address.country) missingFields.push('country');
+    if (!address.postal_code) missingFields.push('postal_code');
+
+    if (missingFields.length > 0) {
+      throw new BadRequestException(
+        `Faltan los siguientes campos en billing_address: ${missingFields.join(', ')}`
+      );
+    }
+
     const token = await this.obtenerTokenDeNave();
 
     const productosFormateados = dto.productos.map((p, index) => {
@@ -152,12 +173,12 @@ export class PedidoService {
           name: dto.cliente_nombre,
           phone: dto.telefono,
           billing_address: {
-            street_1: dto.billing_address.street,
-            street_2: dto.billing_address.number,
-            city: dto.billing_address.city,
-            region: dto.billing_address.region,
-            country: dto.billing_address.country,
-            zipcode: dto.billing_address.postal_code,
+            street_1: address.street,
+            street_2: address.number,
+            city: address.city,
+            region: address.region,
+            country: address.country,
+            zipcode: address.postal_code,
           },
         },
       },
@@ -182,6 +203,7 @@ export class PedidoService {
     return result.data.redirect_to || result.data.checkout_url;
   }
 
+
   async obtenerTokenDeNave(): Promise<string> {
     const url = this.configService.get<string>('NAVE_AUTH_URL');
     const client_id = this.configService.get<string>('CLIENT_ID');
@@ -199,7 +221,7 @@ export class PedidoService {
       client_secret,
       audience,
     };
-    
+
     let response: Response;
     try {
       response = await fetch(url, {
