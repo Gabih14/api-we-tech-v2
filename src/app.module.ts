@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
-import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { StkItemModule } from './stk-item/stk-item.module';
 import { StkExistenciaModule } from './stk-existencia/stk-existencia.module';
@@ -17,6 +17,7 @@ import { MailerModule } from './mailer/mailer.module';
 
 @Module({
   imports: [
+    // Cargar variables de entorno de forma global
     ConfigModule.forRoot({ isGlobal: true }),
 
     // 🟡 Conexión Nacional Software (wetechv2)
@@ -24,11 +25,11 @@ import { MailerModule } from './mailer/mailer.module';
       imports: [ConfigModule],
       useFactory: (config: ConfigService) => ({
         type: 'mysql',
-        host: 'localhost',
-        port: 3306,
-        username: 'root',
-        password: config.get<string>('ROOT_PASSWORD'),
-        database: 'wetechv2',
+        host: config.get<string>('DB_HOST'),
+        port: +config.get<number>('DB_PORT', 3306),
+        username: config.get<string>('DB_USERNAME'),
+        password: config.get<string>('DB_PASSWORD'),
+        database: config.get<string>('DB_NAME'),
         autoLoadEntities: true,
         synchronize: false,
       }),
@@ -38,20 +39,21 @@ import { MailerModule } from './mailer/mailer.module';
     // 🔵 Conexión a BD propia (we_tech_back)
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
-      name: 'back', // 👈 nombre para identificar esta conexión
+      name: 'back',
       useFactory: (config: ConfigService) => ({
         type: 'mysql',
-        host: 'localhost',
-        port: 3306,
-        username: 'root',
-        password: config.get<string>('ROOT_PASSWORD'),
-        database: 'we_tech_back',
+        host: config.get<string>('BACK_DB_HOST'),
+        port: +config.get<number>('BACK_DB_PORT', 3306),
+        username: config.get<string>('BACK_DB_USERNAME'),
+        password: config.get<string>('BACK_DB_PASSWORD'),
+        database: config.get<string>('BACK_DB_NAME'),
         autoLoadEntities: true,
         synchronize: false,
       }),
       inject: [ConfigService],
     }),
 
+    // Otros módulos
     StkItemModule,
     StkExistenciaModule,
     StkDepositoModule,
