@@ -53,4 +53,8 @@ export class StkItem {
 
   @OneToMany(() => StkPrecio, (stkPrecio) => stkPrecio.item2)
   stkPrecios: StkPrecio[];
+
+  @Column({ type: 'boolean', name: 'visible', nullable: true, default: true })
+  visible: boolean | null;
+
 }
