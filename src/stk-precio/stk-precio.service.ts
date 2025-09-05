@@ -17,38 +17,25 @@ export class StkPrecioService {
   }
 
   async findAll(): Promise<any[]> {
-    // Obtén la cotización del dólar
-    const dolar = await this.stkPrecioRepository.query(
-      `SELECT cotizacion FROM bas_moneda WHERE id = 'DOL'`
-    );
-  
-    const cotizacionDolar = parseFloat(dolar[0]?.cotizacion || '1'); // Valor por defecto si no se encuentra
-  
     const precios = await this.stkPrecioRepository.find({
       relations: ['item2', 'moneda'],
     });
   
     return precios.map((p) => {
       const precioVta = parseFloat(p.precioVta || '0');
+      const cotizacion = parseFloat(p.moneda?.cotizacion || '1');
   
       return {
         ...p,
         precioVtaCotizado:
-          !isNaN(precioVta) && !isNaN(cotizacionDolar)
-            ? (precioVta * cotizacionDolar).toFixed(2) // Siempre cotiza al dólar
+          !isNaN(precioVta) && !isNaN(cotizacion)
+            ? (precioVta * cotizacion).toFixed(2) // Multiplica por la cotización de la moneda del precio
             : null,
       };
     });
   }
   
   async findOne(lista: string, item: string): Promise<any> {
-    // Obtén la cotización del dólar
-    const dolar = await this.stkPrecioRepository.query(
-      `SELECT cotizacion FROM bas_moneda WHERE id = 'DOL'`
-    );
-  
-    const cotizacionDolar = parseFloat(dolar[0]?.cotizacion || '1'); // Valor por defecto si no se encuentra
-  
     const precio = await this.stkPrecioRepository.findOne({
       where: { lista, item },
       relations: ['item2', 'moneda'],
@@ -57,12 +44,13 @@ export class StkPrecioService {
     if (!precio) return null;
   
     const precioVta = parseFloat(precio.precioVta || '0');
+    const cotizacion = parseFloat(precio.moneda?.cotizacion || '1');
   
     return {
       ...precio,
       precioVtaCotizado:
-        !isNaN(precioVta) && !isNaN(cotizacionDolar)
-          ? (precioVta * cotizacionDolar).toFixed(2) // Siempre cotiza al dólar
+        !isNaN(precioVta) && !isNaN(cotizacion)
+          ? (precioVta * cotizacion).toFixed(2) // Multiplica por la cotización de la moneda del precio
           : null,
     };
   }
