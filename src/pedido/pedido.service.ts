@@ -254,21 +254,26 @@ export class PedidoService {
   }
 
   async procesarNotificacionDeNave(data: any) {
-    const estadoPago = data.status;
-    const externalId = data.order_id;
+  const estadoPago = data.status;
+  const externalId = data.order_id;
 
-    const pedido = await this.pedidoRepo.findOne({
-      where: { external_id: externalId },
-      relations: ['productos'],
-    });
+  const pedido = await this.pedidoRepo.findOne({
+    where: { external_id: externalId },
+    relations: ['productos'],
+  });
 
-    if (!pedido) {
-      throw new NotFoundException(
-        `Pedido con external_id ${externalId} no encontrado`,
-      );
-    }
+  if (!pedido) {
+    throw new NotFoundException(
+      `Pedido con external_id ${externalId} no encontrado`,
+    );
+  }
 
-    if (estadoPago === 'APPROVED') {
+  switch (estadoPago) {
+    case 'PENDING':
+      pedido.estado = 'PENDIENTE';
+      break;
+
+    case 'APPROVED':
       for (const producto of pedido.productos) {
         await this.stockService.confirmarStock(
           producto.nombre,
@@ -277,9 +282,14 @@ export class PedidoService {
         );
       }
       pedido.estado = 'APROBADO';
+      pedido.aprobado = new Date();
       await this.notificarSecretaria(pedido);
-      //await this.vtaComprobanteService.crearDesdePedido(pedido);
-    } else if (['REJECTED', 'CANCELLED', 'REFUNDED'].includes(estadoPago)) {
+      // await this.vtaComprobanteService.crearDesdePedido(pedido);
+      break;
+
+    case 'REJECTED':
+    case 'CANCELLED':
+    case 'REFUNDED':
       for (const producto of pedido.productos) {
         await this.stockService.liberarStock(
           producto.nombre,
@@ -288,10 +298,16 @@ export class PedidoService {
         );
       }
       pedido.estado = 'CANCELADO';
-    }
+      break;
 
-    return this.pedidoRepo.save(pedido);
+    default:
+      console.warn(`⚠ Estado desconocido recibido de Nave: ${estadoPago}`);
+      break;
   }
+
+  return this.pedidoRepo.save(pedido);
+}
+
 
   async encontrarPorExternalId(externalId: string): Promise<Pedido | null> {
     return this.pedidoRepo.findOne({
