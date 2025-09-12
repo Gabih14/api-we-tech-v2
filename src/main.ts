@@ -1,29 +1,17 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { ApiTokenGuard } from './common/guards/api-token.guard';
-import { Reflector } from '@nestjs/core';
-import { ConfigService } from '@nestjs/config';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-
   const allowedOrigins = process.env.ALLOWED_ORIGINS
     ? process.env.ALLOWED_ORIGINS.split(',')
     : ['https://shop.wetech.ar'];
-
   app.enableCors({
     origin: allowedOrigins,
     methods: 'GET,POST,PUT,DELETE,PATCH,OPTIONS',
     allowedHeaders: 'Content-Type,Authorization',
     credentials: true, // Permitir cookies y autenticación
   });
-
-
-  // 🔒 Guard global: toda la API protegida por tokens
-  const reflector = app.get(Reflector);
-  const configService = app.get(ConfigService);
-  app.useGlobalGuards(new ApiTokenGuard(reflector, configService));
-
   /* BORRAR */
   app.use((req, res, next) => {
     res.setHeader(
@@ -42,6 +30,5 @@ async function bootstrap() {
     allowedOrigins,
   );
   console.log(`Servidor corriendo en ${process.env.PORT ?? 3000}`);
-
 }
 bootstrap();

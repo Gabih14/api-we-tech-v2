@@ -28,25 +28,16 @@ export class StkItemService {
       relations: ['stkPrecios', 'stkExistencias', 'familia2'], // agregás relaciones necesarias
     });
 
-    // Obtener la cotización del dólar
-    const cotizacionDolar = await this.stkPrecioService.getCotizacionDolar();
+    // Traés todos los precios
+    const precios = await this.stkPrecioService.findAll();
 
-    // Combinás cada item con su precioVtaCotizadoMin
+    // Combinás cada item con su precioVtaCotizado
     return items.map((item) => {
-      // Buscar el precio de la lista MINORISTA
-      const precioMinorista = item.stkPrecios?.find((p) => p.lista === 'MINORISTA');
-      
-      let precioVtaCotizadoMin: string | null = null;
-      if (precioMinorista) {
-        const precioVta = parseFloat(precioMinorista.precioVta || '0');
-        if (!isNaN(precioVta) && !isNaN(cotizacionDolar)) {
-          precioVtaCotizadoMin = (precioVta * cotizacionDolar).toFixed(2);
-        }
-      }
+      const precioItem = precios.find((p) => p.item2?.id === item.id);
 
       return {
         ...item,
-        precioVtaCotizadoMin,
+        precioVtaCotizado: precioItem?.precioVtaCotizado || null,
       };
     });
   }
@@ -61,23 +52,13 @@ export class StkItemService {
       throw new NotFoundException(`Item con id ${id} no encontrado`);
     }
 
-    // Obtener la cotización del dólar
-    const cotizacionDolar = await this.stkPrecioService.getCotizacionDolar();
-
-    // Buscar el precio de la lista MINORISTA
-    const precioMinorista = item.stkPrecios?.find((p) => p.lista === 'MINORISTA');
-    
-    let precioVtaCotizadoMin: string | null = null;
-    if (precioMinorista) {
-      const precioVta = parseFloat(precioMinorista.precioVta || '0');
-      if (!isNaN(precioVta) && !isNaN(cotizacionDolar)) {
-        precioVtaCotizadoMin = (precioVta * cotizacionDolar).toFixed(2);
-      }
-    }
+    // Traés el precio específico
+    const precioItem = await this.stkPrecioService.findOne('LISTA_ID', id); 
+    // 👆🏻 Acá debes reemplazar 'LISTA_ID' con la lista que uses, o parametrizarlo
 
     return {
       ...item,
-      precioVtaCotizadoMin,
+      precioVtaCotizado: precioItem?.precioVtaCotizado || null,
     };
   }
 
