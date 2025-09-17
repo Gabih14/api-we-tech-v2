@@ -41,4 +41,7 @@ export class CreateStkItemDto {
   @IsString()
   familiaId?: string;
 
+  @IsOptional()
+  visible?: boolean;
+
 }
