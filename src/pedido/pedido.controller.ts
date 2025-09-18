@@ -1,9 +1,18 @@
 // src/pedido/pedido.controller.ts
-import { Controller, Post, Body, NotFoundException } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Body,
+  UseGuards,
+  HttpCode,
+} from '@nestjs/common';
 import { PedidoService } from './pedido.service';
 import { CreatePedidoDto } from './dto/create-pedido.dto';
+import { ApiTokenGuard } from '../common/guards/api-token.guard';
+import { AuthType } from '../common/decorators/auth-type.decorator';
 
 @Controller('pedido')
+@UseGuards(ApiTokenGuard) // 👈 Todos los endpoints usan API_TOKEN por defecto
 export class PedidoController {
   constructor(private readonly pedidoService: PedidoService) {}
 
@@ -13,28 +22,30 @@ export class PedidoController {
   }
 
   @Post('nave-webhook')
+  @AuthType('nave')
+  @HttpCode(200) // 👈 Fuerza status 200 OK
   async recibirWebhook(@Body() body: any) {
     const { order_id, status } = body;
 
     const pedido = await this.pedidoService.encontrarPorExternalId(order_id);
+
     if (!pedido) {
-      throw new NotFoundException(
-        `Pedido con order_id ${order_id} no encontrado.`,
-      );
+      console.warn(`⚠ Pedido con order_id ${order_id} no encontrado.`);
+      return { message: `Pedido no encontrado, se ignoró la notificación.` };
     }
 
     if (
       status === 'APPROVED' ||
       ['REJECTED', 'CANCELLED', 'REFUNDED'].includes(status)
     ) {
-      return this.pedidoService.procesarNotificacionDeNave(body);
+      await this.pedidoService.procesarNotificacionDeNave(body);
+      return { message: `Webhook procesado con estado: ${status}` };
     }
 
     return {
       message: `Webhook recibido pero sin acción para estado: ${status}`,
     };
   }
-
 
   @Post('nave-webhook/test')
   @AuthType('nave')
@@ -45,5 +56,4 @@ export class PedidoController {
       received: body,
     };
   }
-
 }
