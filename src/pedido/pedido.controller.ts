@@ -34,4 +34,16 @@ export class PedidoController {
       message: `Webhook recibido pero sin acción para estado: ${status}`,
     };
   }
+
+
+  @Post('nave-webhook/test')
+  @AuthType('nave')
+  @HttpCode(200) // respuesta 200
+  async testWebhook(@Body() body: any) {
+    return {
+      message: '✅ Endpoint de prueba activo para Nave',
+      received: body,
+    };
+  }
+
 }
