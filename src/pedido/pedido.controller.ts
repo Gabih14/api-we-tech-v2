@@ -49,7 +49,7 @@ export class PedidoController {
 
   @Post('nave-webhook/test')
   @AuthType('nave')
-  @HttpCode(200) // 👈 También respuesta 200
+  @HttpCode(200) // respuesta 200
   async testWebhook(@Body() body: any) {
     return {
       message: '✅ Endpoint de prueba activo para Nave',
