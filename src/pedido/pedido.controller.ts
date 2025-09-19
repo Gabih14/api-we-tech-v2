@@ -5,6 +5,9 @@ import {
   Body,
   UseGuards,
   HttpCode,
+  Get,
+  Param,
+  NotFoundException,
 } from '@nestjs/common';
 import { PedidoService } from './pedido.service';
 import { CreatePedidoDto } from './dto/create-pedido.dto';
@@ -55,5 +58,14 @@ export class PedidoController {
       message: '✅ Endpoint de prueba activo para Nave',
       received: body,
     };
+  }
+
+  @Get(':externalId')
+  async getByExternalId(@Param('externalId') externalId: string) {
+    const pedido = await this.pedidoService.encontrarPorExternalId(externalId);
+    if (!pedido) {
+      throw new NotFoundException(`Pedido con external_id ${externalId} no encontrado.`);
+    }
+    return pedido;
   }
 }
