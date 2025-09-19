@@ -19,7 +19,6 @@ import { v4 as uuidv4 } from 'uuid';
 import { ConfigService } from '@nestjs/config';
 import { MailerService } from 'src/mailer/mailer.service';
 
-
 @Injectable()
 export class PedidoService {
   constructor(
@@ -38,8 +37,7 @@ export class PedidoService {
     private readonly configService: ConfigService,
 
     private readonly mailerService: MailerService,
-  ) { }
-
+  ) {}
 
   async crear(
     dto: CreatePedidoDto,
@@ -116,7 +114,7 @@ export class PedidoService {
 
     if (missingFields.length > 0) {
       throw new BadRequestException(
-        `Faltan los siguientes campos en billing_address: ${missingFields.join(', ')}`
+        `Faltan los siguientes campos en billing_address: ${missingFields.join(', ')}`,
       );
     }
 
@@ -203,7 +201,6 @@ export class PedidoService {
     return result.data.redirect_to || result.data.checkout_url;
   }
 
-
   async obtenerTokenDeNave(): Promise<string> {
     const url = this.configService.get<string>('NAVE_AUTH_URL');
     const client_id = this.configService.get<string>('CLIENT_ID');
@@ -254,60 +251,59 @@ export class PedidoService {
   }
 
   async procesarNotificacionDeNave(data: any) {
-  const estadoPago = data.status;
-  const externalId = data.order_id;
+    const estadoPago = data.status;
+    const externalId = data.order_id;
 
-  const pedido = await this.pedidoRepo.findOne({
-    where: { external_id: externalId },
-    relations: ['productos'],
-  });
+    const pedido = await this.pedidoRepo.findOne({
+      where: { external_id: externalId },
+      relations: ['productos'],
+    });
 
-  if (!pedido) {
-    throw new NotFoundException(
-      `Pedido con external_id ${externalId} no encontrado`,
-    );
+    if (!pedido) {
+      throw new NotFoundException(
+        `Pedido con external_id ${externalId} no encontrado`,
+      );
+    }
+
+    switch (estadoPago) {
+      case 'PENDING':
+        pedido.estado = 'PENDIENTE';
+        break;
+
+      case 'APPROVED':
+        for (const producto of pedido.productos) {
+          await this.stockService.confirmarStock(
+            producto.nombre,
+            producto.cantidad,
+            'DEPOSITO',
+          );
+        }
+        pedido.estado = 'APROBADO';
+        pedido.aprobado = new Date();
+        await this.notificarSecretaria(pedido);
+        // await this.vtaComprobanteService.crearDesdePedido(pedido);
+        break;
+
+      case 'REJECTED':
+      case 'CANCELLED':
+      case 'REFUNDED':
+        for (const producto of pedido.productos) {
+          await this.stockService.liberarStock(
+            producto.nombre,
+            producto.cantidad,
+            'DEPOSITO',
+          );
+        }
+        pedido.estado = 'CANCELADO';
+        break;
+
+      default:
+        console.warn(`⚠ Estado desconocido recibido de Nave: ${estadoPago}`);
+        break;
+    }
+
+    return this.pedidoRepo.save(pedido);
   }
-
-  switch (estadoPago) {
-    case 'PENDING':
-      pedido.estado = 'PENDIENTE';
-      break;
-
-    case 'APPROVED':
-      for (const producto of pedido.productos) {
-        await this.stockService.confirmarStock(
-          producto.nombre,
-          producto.cantidad,
-          'DEPOSITO',
-        );
-      }
-      pedido.estado = 'APROBADO';
-      pedido.aprobado = new Date();
-      await this.notificarSecretaria(pedido);
-      // await this.vtaComprobanteService.crearDesdePedido(pedido);
-      break;
-
-    case 'REJECTED':
-    case 'CANCELLED':
-    case 'REFUNDED':
-      for (const producto of pedido.productos) {
-        await this.stockService.liberarStock(
-          producto.nombre,
-          producto.cantidad,
-          'DEPOSITO',
-        );
-      }
-      pedido.estado = 'CANCELADO';
-      break;
-
-    default:
-      console.warn(`⚠ Estado desconocido recibido de Nave: ${estadoPago}`);
-      break;
-  }
-
-  return this.pedidoRepo.save(pedido);
-}
-
 
   async encontrarPorExternalId(externalId: string): Promise<Pedido | null> {
     return this.pedidoRepo.findOne({
@@ -323,7 +319,7 @@ Cliente: ${pedido.cliente_nombre}
 CUIT: ${pedido.cliente_cuit}
 
 Productos:
-${pedido.productos.map(p => `- ${p.nombre} x${p.cantidad} ($${p.precio_unitario})`).join('\n')}
+${pedido.productos.map((p) => `- ${p.nombre} x${p.cantidad} ($${p.precio_unitario})`).join('\n')}
 
 Total: $${pedido.total}
 `;
@@ -332,7 +328,10 @@ Total: $${pedido.total}
         'Falta la configuración del email de la secretaria',
       );
     }
-    await this.mailerService.enviarCorreo(email, '📦 Pedido Aprobado en WeTech', mensaje);
+    await this.mailerService.enviarCorreo(
+      email,
+      '📦 Pedido Aprobado en WeTech',
+      mensaje,
+    );
   }
-
 }
