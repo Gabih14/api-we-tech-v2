@@ -108,4 +108,52 @@ export class StkItemService {
     const item = await this.findOne(id);
     await this.stkItemRepository.remove(item);
   }
+
+  async getCostoEnvio(distancia: number): Promise<any> {
+    // Determinar qué item de envío usar según la distancia
+    let itemId: string;
+    
+    if (distancia <= 3) {
+      itemId = 'ENVIO3KM';
+    } else if (distancia <= 5) {
+      itemId = 'ENVIO5KM';
+    } else if (distancia <= 7) {
+      itemId = 'ENVIO7KM';
+    } else if (distancia <= 12) {
+      itemId = 'ENVIO12KM';
+    } else if (distancia <= 17) {
+      itemId = 'ENVIO17KM';
+    } else {
+      throw new NotFoundException(`No hay servicio de envío para distancias mayores a 17km`);
+    }
+
+    const item = await this.stkItemRepository.findOne({
+      where: { id: itemId },
+      relations: ['stkPrecios', 'stkExistencias', 'familia2'],
+    });
+
+    if (!item) {
+      throw new NotFoundException(`Item con id ${itemId} no encontrado`);
+    }
+
+    // Obtener la cotización del dólar
+    const cotizacionDolar = await this.stkPrecioService.getCotizacionDolar();
+
+    // Buscar el precio de la lista MINORISTA
+    const precioMinorista = item.stkPrecios?.find((p) => p.lista === 'MINORISTA');
+    
+    let precioVtaCotizadoMin: string | null = null;
+    if (precioMinorista) {
+      const precioVta = parseFloat(precioMinorista.precioVta || '0');
+      if (!isNaN(precioVta) && !isNaN(cotizacionDolar)) {
+        precioVtaCotizadoMin = (precioVta * cotizacionDolar).toFixed(2);
+      }
+    }
+
+    return {
+      ...item,
+      precioVtaCotizadoMin,
+      distanciaMaxima: distancia <= 3 ? 3 : distancia <= 5 ? 5 : distancia <= 7 ? 7 : distancia <= 12 ? 12 : 17,
+    };
+  }
 }
