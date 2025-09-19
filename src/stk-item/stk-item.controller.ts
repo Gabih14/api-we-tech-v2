@@ -17,6 +17,12 @@ export class StkItemController {
     return this.stkItemService.findAll();
   }
 
+  @Get('costo/:distancia')
+  getCostoEnvio(@Param('distancia') distancia: string) {
+    const distanciaNum = parseFloat(distancia);
+    return this.stkItemService.getCostoEnvio(distanciaNum);
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.stkItemService.findOne(id);
