@@ -110,50 +110,83 @@ export class StkItemService {
   }
 
   async getCostoEnvio(distancia: number): Promise<any> {
-    // Determinar qué item de envío usar según la distancia
-    let itemId: string;
-    
-    if (distancia <= 3) {
-      itemId = 'ENVIO3KM';
-    } else if (distancia <= 5) {
-      itemId = 'ENVIO5KM';
-    } else if (distancia <= 7) {
-      itemId = 'ENVIO7KM';
-    } else if (distancia <= 12) {
-      itemId = 'ENVIO12KM';
-    } else if (distancia <= 17) {
-      itemId = 'ENVIO17KM';
-    } else {
-      throw new NotFoundException(`No hay servicio de envío para distancias mayores a 17km`);
+  // Redondear la distancia hacia arriba
+  distancia = Math.ceil(distancia);
+  // Si la distancia es menor o igual a 4km, solo se cobra ENVIO4KM
+  if (distancia <= 4) {
+      const item = await this.stkItemRepository.findOne({
+        where: { id: 'ENVIO4KM' },
+        relations: ['stkPrecios', 'stkExistencias', 'familia2'],
+      });
+      if (!item) {
+        throw new NotFoundException(`Item con id ENVIO4KM no encontrado`);
+      }
+      const cotizacionDolar = await this.stkPrecioService.getCotizacionDolar();
+      const precioMinorista = item.stkPrecios?.find((p) => p.lista === 'MINORISTA');
+      let precioVtaCotizadoMin: number | null = null;
+      if (precioMinorista) {
+        const precioVta = parseFloat(precioMinorista.precioVta || '0');
+        if (!isNaN(precioVta) && !isNaN(cotizacionDolar)) {
+          const bruto = precioVta * cotizacionDolar;
+          precioVtaCotizadoMin = Math.ceil(bruto - 0.5) + (bruto - Math.ceil(bruto - 0.5) >= 0.5 ? 1 : 0);
+          // Alternativamente, simplemente Math.round(bruto) si quieres redondeo clásico
+        }
+      }
+      return {
+        ...item,
+        precioVtaCotizadoMin,
+        costoTotal: precioVtaCotizadoMin,
+        detalle: `Hasta 4km: ENVIO4KM` 
+      };
     }
 
-    const item = await this.stkItemRepository.findOne({
-      where: { id: itemId },
-      relations: ['stkPrecios', 'stkExistencias', 'familia2'],
+    // Si la distancia es mayor a 4km, se cobra ENVIO4KM + (km extra * ENVIO+1KM)
+    const item4km = await this.stkItemRepository.findOne({
+      where: { id: 'ENVIO4KM' },
+      relations: ['stkPrecios'],
     });
-
-    if (!item) {
-      throw new NotFoundException(`Item con id ${itemId} no encontrado`);
+    const itemMas1km = await this.stkItemRepository.findOne({
+      where: { id: 'ENVIO+1KM' },
+      relations: ['stkPrecios'],
+    });
+    if (!item4km || !itemMas1km) {
+      throw new NotFoundException(`No se encontró ENVIO4KM o ENVIO+1KM`);
     }
-
-    // Obtener la cotización del dólar
     const cotizacionDolar = await this.stkPrecioService.getCotizacionDolar();
-
-    // Buscar el precio de la lista MINORISTA
-    const precioMinorista = item.stkPrecios?.find((p) => p.lista === 'MINORISTA');
-    
-    let precioVtaCotizadoMin: string | null = null;
-    if (precioMinorista) {
-      const precioVta = parseFloat(precioMinorista.precioVta || '0');
-      if (!isNaN(precioVta) && !isNaN(cotizacionDolar)) {
-        precioVtaCotizadoMin = (precioVta * cotizacionDolar).toFixed(2);
+    // Precio base hasta 4km
+    const precioMinorista4km = item4km.stkPrecios?.find((p) => p.lista === 'MINORISTA');
+    const precioMinoristaMas1km = itemMas1km.stkPrecios?.find((p) => p.lista === 'MINORISTA');
+    let precioVta4km = 0;
+    let precioVtaMas1km = 0;
+    if (precioMinorista4km) {
+      const v = parseFloat(precioMinorista4km.precioVta || '0');
+      if (!isNaN(v) && !isNaN(cotizacionDolar)) {
+        const bruto = v * cotizacionDolar;
+        precioVta4km = Math.ceil(bruto - 0.5) + (bruto - Math.ceil(bruto - 0.5) >= 0.5 ? 1 : 0);
       }
     }
-
+    if (precioMinoristaMas1km) {
+      const v = parseFloat(precioMinoristaMas1km.precioVta || '0');
+      if (!isNaN(v) && !isNaN(cotizacionDolar)) {
+        const bruto = v * cotizacionDolar;
+        precioVtaMas1km = Math.ceil(bruto - 0.5) + (bruto - Math.ceil(bruto - 0.5) >= 0.5 ? 1 : 0);
+      }
+    }
+    const kmExtras = Math.ceil(distancia - 4);
+    const costoTotalBruto = precioVta4km + (kmExtras * precioVtaMas1km);
+    const costoTotal = Math.ceil(costoTotalBruto - 0.5) + (costoTotalBruto - Math.ceil(costoTotalBruto - 0.5) >= 0.5 ? 1 : 0);
     return {
-      ...item,
-      precioVtaCotizadoMin,
-      distanciaMaxima: distancia <= 3 ? 3 : distancia <= 5 ? 5 : distancia <= 7 ? 7 : distancia <= 12 ? 12 : 17,
+      base: {
+        id: 'ENVIO4KM',
+        precioVtaCotizadoMin: precioVta4km,
+      },
+      extra: {
+        id: 'ENVIO+1KM',
+        precioVtaCotizadoMin: precioVtaMas1km,
+        cantidad: kmExtras,
+      },
+      costoTotal,
+      detalle: `Hasta 4km: ENVIO4KM + ${kmExtras}km extra x ENVIO+1KM`,
     };
   }
 }
