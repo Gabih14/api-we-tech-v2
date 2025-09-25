@@ -25,7 +25,7 @@ export class StkItemService {
 
   async findAll(): Promise<any[]> {
     const items = await this.stkItemRepository.find({
-      relations: ['stkPrecios', 'stkExistencias', 'familia2'], // agregás relaciones necesarias
+      relations: ['stkPrecios', 'stkExistencias','stkPrecios.moneda', 'familia2'], // agregás relaciones necesarias
     });
 
     // Obtener la cotización del dólar
@@ -33,17 +33,24 @@ export class StkItemService {
 
     // Combinás cada item con su precioVtaCotizadoMin
     return items.map((item) => {
+      if (item.id === 'BAMBULAB A1') {
+        console.log('Se encontró el item BAMBULAB A1:', JSON.stringify(item, null, 2));
+        console.log('Cotización del dólar:', cotizacionDolar);
+      }
       // Buscar el precio de la lista MINORISTA
       const precioMinorista = item.stkPrecios?.find((p) => p.lista === 'MINORISTA');
-      
       let precioVtaCotizadoMin: string | null = null;
       if (precioMinorista) {
         const precioVta = parseFloat(precioMinorista.precioVta || '0');
-        if (!isNaN(precioVta) && !isNaN(cotizacionDolar)) {
-          precioVtaCotizadoMin = (precioVta * cotizacionDolar).toFixed(2);
+        const moneda = precioMinorista.moneda?.id;
+        if (!isNaN(precioVta)) {
+          if (moneda === 'DOL' && !isNaN(cotizacionDolar)) {
+            precioVtaCotizadoMin = (precioVta * cotizacionDolar).toFixed(2);
+          } else {
+            precioVtaCotizadoMin = precioVta.toFixed(2);
+          }
         }
       }
-
       return {
         ...item,
         precioVtaCotizadoMin,
@@ -66,15 +73,18 @@ export class StkItemService {
 
     // Buscar el precio de la lista MINORISTA
     const precioMinorista = item.stkPrecios?.find((p) => p.lista === 'MINORISTA');
-    
     let precioVtaCotizadoMin: string | null = null;
     if (precioMinorista) {
       const precioVta = parseFloat(precioMinorista.precioVta || '0');
-      if (!isNaN(precioVta) && !isNaN(cotizacionDolar)) {
-        precioVtaCotizadoMin = (precioVta * cotizacionDolar).toFixed(2);
+      const moneda = precioMinorista.moneda?.id;
+      if (!isNaN(precioVta)) {
+        if (moneda === 'DOL' && !isNaN(cotizacionDolar)) {
+          precioVtaCotizadoMin = (precioVta * cotizacionDolar).toFixed(2);
+        } else {
+          precioVtaCotizadoMin = precioVta.toFixed(2);
+        }
       }
     }
-
     return {
       ...item,
       precioVtaCotizadoMin,
