@@ -3,6 +3,7 @@ import { AppModule } from './app.module';
 import { ApiTokenGuard } from './common/guards/api-token.guard';
 import { Reflector } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
+import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -18,6 +19,7 @@ async function bootstrap() {
     credentials: true, // Permitir cookies y autenticación
   });
 
+  app.useGlobalInterceptors(new LoggingInterceptor());
 
   // 🔒 Guard global: toda la API protegida por tokens
   const reflector = app.get(Reflector);
@@ -42,6 +44,7 @@ async function bootstrap() {
     allowedOrigins,
   );
   console.log(`Servidor corriendo en ${process.env.PORT ?? 3000}`);
+  console.log("versión con logging interceptor :)");
 
 }
 bootstrap();
