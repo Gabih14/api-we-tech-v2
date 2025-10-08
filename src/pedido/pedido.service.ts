@@ -37,8 +37,9 @@ export class PedidoService {
     private readonly configService: ConfigService,
 
     private readonly mailerService: MailerService,
-  ) {}
+  ) { }
 
+  // 🧾 Crear pedido e intención de pago
   async crear(
     dto: CreatePedidoDto,
   ): Promise<{ pedido: Pedido; naveUrl: string }> {
@@ -85,101 +86,58 @@ export class PedidoService {
       ...dto,
       external_id: externalId,
     });
+
     return { pedido: pedidoGuardado, naveUrl };
   }
 
+  // 💳 Generar intención de pago (nueva API)
   async generarIntencionDePago(
     dto: CreatePedidoDto & { external_id: string },
   ): Promise<string> {
-    if (!dto.productos || dto.productos.length === 0) {
-      throw new BadRequestException(
-        'Debe enviar al menos un producto en el pedido',
-      );
-    }
-
-    // Validación de billing_address
-    const address = dto.billing_address;
-    const missingFields: string[] = [];
-
-    if (!address) {
-      throw new BadRequestException('Falta el campo billing_address');
-    }
-
-    if (!address.street) missingFields.push('street');
-    if (!address.number) missingFields.push('number');
-    if (!address.city) missingFields.push('city');
-    if (!address.region) missingFields.push('region');
-    if (!address.country) missingFields.push('country');
-    if (!address.postal_code) missingFields.push('postal_code');
-
-    if (missingFields.length > 0) {
-      throw new BadRequestException(
-        `Faltan los siguientes campos en billing_address: ${missingFields.join(', ')}`,
-      );
-    }
-
     const token = await this.obtenerTokenDeNave();
 
-    const productosFormateados = dto.productos.map((p, index) => {
-      const idLimpio = p.nombre.replace(/[^a-zA-Z0-9]/g, '') || `item${index}`;
-
-      return {
-        id: idLimpio,
-        name: p.nombre,
-        description: p.nombre,
-        quantity: p.cantidad,
-        unit_price: {
-          currency: 'ARS',
-          value: p.precio_unitario.toFixed(2),
-        },
-      };
-    });
-
-    // Obtener valores desde variables de entorno
-    const platform = this.configService.get<string>('BODY_PLATFORM');
-    const store_id = this.configService.get<string>('BODY_STORE_ID');
-    const callbackBase = this.configService.get<string>('CALLBACK_URL');
+    const pos_id = this.configService.get<string>('NAVE_POS_ID');
     const paymentUrl = this.configService.get<string>('NAVE_PAYMENT_URL');
+    const callbackBase = this.configService.get<string>('CALLBACK_URL');
 
-    if (!platform || !store_id || !callbackBase || !paymentUrl) {
+    if (!pos_id || !paymentUrl) {
       throw new InternalServerErrorException(
-        'Faltan variables de entorno para la configuración de Nave',
+        'Faltan variables de entorno para Nave',
       );
     }
 
     const body = {
-      platform,
-      store_id,
-      callback_url: `${callbackBase}=${dto.external_id}`,
-      order_id: dto.external_id,
-      mobile: dto.mobile,
-      payment_request: {
-        transactions: [
-          {
-            products: productosFormateados,
-            amount: {
-              currency: 'ARS',
-              value: dto.total.toFixed(2),
-            },
-          },
-        ],
-        buyer: {
-          user_id: dto.email,
-          doc_type: 'DNI',
-          doc_number: 'N/A',
-          user_email: dto.email,
-          name: dto.cliente_nombre,
-          phone: dto.telefono,
-          billing_address: {
-            street_1: address.street,
-            street_2: address.number,
-            city: address.city,
-            region: address.region,
-            country: address.country,
-            zipcode: address.postal_code,
-          },
+      external_payment_id: dto.external_id,
+      seller: { pos_id },
+      transactions: [
+        {
+          amount: { currency: 'ARS', value: dto.total.toFixed(2) },
+          products: dto.productos.map((p) => ({
+            name: p.nombre,
+            description: p.nombre,
+            quantity: p.cantidad,
+            unit_price: { currency: 'ARS', value: p.precio_unitario.toFixed(2) },
+          })),
+        },
+      ],
+      buyer: {
+        doc_type: 'DNI',
+        doc_number: 'N/A',
+        name: dto.cliente_nombre,
+        user_email: dto.email,
+        billing_address: {
+          street_1: dto.billing_address.street,
+          street_2: dto.billing_address.number,
+          city: dto.billing_address.city,
+          region: dto.billing_address.region,
+          country: dto.billing_address.country,
+          zipcode: dto.billing_address.postal_code,
         },
       },
+      additional_info: {
+        callback_url: `${callbackBase}?order_id=${dto.external_id}`,
+      },
+      duration_time: 3000,
     };
 
     const response = await fetch(paymentUrl, {
@@ -198,9 +156,10 @@ export class PedidoService {
       );
     }
 
-    return result.data.redirect_to || result.data.checkout_url;
+    return result.checkout_url;
   }
 
+  // 🔐 Obtener token Nave (nuevo endpoint)
   async obtenerTokenDeNave(): Promise<string> {
     const url = this.configService.get<string>('NAVE_AUTH_URL');
     const client_id = this.configService.get<string>('CLIENT_ID');
@@ -213,34 +172,13 @@ export class PedidoService {
       );
     }
 
-    const credentials = {
-      client_id,
-      client_secret,
-      audience,
-    };
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ client_id, client_secret, audience }),
+    });
 
-    let response: Response;
-    try {
-      response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(credentials),
-      });
-    } catch (error) {
-      throw new InternalServerErrorException(
-        `Error al conectar con el servicio de Nave: ${error.message}`,
-      );
-    }
-
-    let data: any;
-    try {
-      data = await response.json();
-    } catch (error) {
-      throw new InternalServerErrorException(
-        `Respuesta no válida del servicio de Nave`,
-      );
-    }
-
+    const data = await response.json();
     if (!response.ok || !data.access_token) {
       throw new InternalServerErrorException(
         `Error al obtener token de Nave: ${JSON.stringify(data)}`,
@@ -250,59 +188,53 @@ export class PedidoService {
     return data.access_token;
   }
 
+  // 🔔 Procesar notificación (nuevo flujo)
   async procesarNotificacionDeNave(data: any) {
-    const estadoPago = data.status;
-    const externalId = data.order_id;
+    const { payment_check_url, external_payment_id } = data;
+    const token = await this.obtenerTokenDeNave();
 
     const pedido = await this.pedidoRepo.findOne({
-      where: { external_id: externalId },
+      where: { external_id: external_payment_id },
       relations: ['productos'],
     });
 
     if (!pedido) {
-      throw new NotFoundException(
-        `Pedido con external_id ${externalId} no encontrado`,
-      );
+      console.warn(`⚠ Pedido con ID ${external_payment_id} no encontrado.`);
+      return;
     }
 
-    switch (estadoPago) {
-      case 'PENDING':
-        pedido.estado = 'PENDIENTE';
-        break;
+    // Consultar estado real del pago
+    const resp = await fetch(`https://${payment_check_url}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const pago = await resp.json();
+    const estado = pago.status?.name ?? 'PENDING';
 
+    switch (estado) {
       case 'APPROVED':
-        for (const producto of pedido.productos) {
-          await this.stockService.confirmarStock(
-            producto.nombre,
-            producto.cantidad,
-            'DEPOSITO',
-          );
-        }
         pedido.estado = 'APROBADO';
         pedido.aprobado = new Date();
+        for (const p of pedido.productos) {
+          await this.stockService.confirmarStock(p.nombre, p.cantidad, 'DEPOSITO');
+        }
         await this.notificarSecretaria(pedido);
-        // await this.vtaComprobanteService.crearDesdePedido(pedido);
         break;
 
       case 'REJECTED':
       case 'CANCELLED':
       case 'REFUNDED':
-        for (const producto of pedido.productos) {
-          await this.stockService.liberarStock(
-            producto.nombre,
-            producto.cantidad,
-            'DEPOSITO',
-          );
-        }
         pedido.estado = 'CANCELADO';
+        for (const p of pedido.productos) {
+          await this.stockService.liberarStock(p.nombre, p.cantidad, 'DEPOSITO');
+        }
         break;
 
       default:
-        console.warn(`⚠ Estado desconocido recibido de Nave: ${estadoPago}`);
+        pedido.estado = 'PENDIENTE';
         break;
     }
 
-    return this.pedidoRepo.save(pedido);
+    await this.pedidoRepo.save(pedido);
   }
 
   async encontrarPorExternalId(externalId: string): Promise<Pedido | null> {
@@ -311,6 +243,7 @@ export class PedidoService {
       relations: ['productos'],
     });
   }
+
   private async notificarSecretaria(pedido: Pedido) {
     const email = this.configService.get<string>('SECRETARIA_EMAIL');
 
@@ -323,11 +256,10 @@ ${pedido.productos.map((p) => `- ${p.nombre} x${p.cantidad} ($${p.precio_unitari
 
 Total: $${pedido.total}
 `;
-    if (!email) {
-      throw new InternalServerErrorException(
-        'Falta la configuración del email de la secretaria',
-      );
-    }
+
+    if (!email)
+      throw new InternalServerErrorException('Falta el email de secretaria');
+
     await this.mailerService.enviarCorreo(
       email,
       '📦 Pedido Aprobado en WeTech',
