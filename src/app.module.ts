@@ -14,6 +14,7 @@ import { VtaComprobanteModule } from './vta-comprobante/vta-comprobante.module';
 import { VtaComprobanteItemModule } from './vta-comprobante-item/vta-comprobante-item.module';
 import { MapsModule } from './maps/maps.module';
 import { MailerModule } from './mailer/mailer.module';
+import { VtaClienteModule } from './vta_cliente/vta_cliente.module';
 
 @Module({
   imports: [
@@ -66,6 +67,7 @@ import { MailerModule } from './mailer/mailer.module';
     MapsModule,
     VtaComprobanteItemModule,
     MailerModule,
+    VtaClienteModule,
   ],
 })
 export class AppModule {}
