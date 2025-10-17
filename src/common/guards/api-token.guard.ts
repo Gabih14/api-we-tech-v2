@@ -13,6 +13,19 @@ export class ApiTokenGuard implements CanActivate {
 
   canActivate(context: ExecutionContext): boolean {
     const request = context.switchToHttp().getRequest();
+
+    // Tipo de auth requerido por metadata (clase o handler). Default si no hay.
+    const requiredAuthType =
+      this.reflector.getAllAndOverride<AuthType>(AUTH_TYPE_KEY, [
+        context.getHandler(),
+        context.getClass(),
+      ]) || 'default';
+
+    // Si es público, permitir el acceso sin token
+    if (requiredAuthType === 'public') {
+      return true;
+    }
+
     const authHeader = request.headers['authorization'];
     if (!authHeader) throw new UnauthorizedException('Falta el header Authorization');
 
@@ -20,13 +33,6 @@ export class ApiTokenGuard implements CanActivate {
     if (type !== 'Bearer' || !token) {
       throw new UnauthorizedException('Formato inválido. Usa "Bearer <token>"');
     }
-
-    // 👇 Buscar el tipo de token requerido por metadata
-    const requiredAuthType =
-      this.reflector.getAllAndOverride<AuthType>(AUTH_TYPE_KEY, [
-        context.getHandler(),
-        context.getClass(),
-      ]) || 'default'; // si no hay metadata → usa default
 
     // Tokens desde variables de entorno
     const defaultToken = this.configService.get<string>('API_TOKEN');
