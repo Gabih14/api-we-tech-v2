@@ -25,7 +25,7 @@ export class PedidoController {
   }
 
   @Post('nave-webhook')
-  @AuthType('nave')
+  @AuthType('public')
   @HttpCode(200) // 👈 Fuerza status 200 OK
   async recibirWebhook(@Body() body: any) {
     const { order_id, status } = body;
@@ -51,7 +51,7 @@ export class PedidoController {
   }
 
   @Post('nave-webhook/test')
-  @AuthType('nave')
+  @AuthType('public')
   @HttpCode(200) // respuesta 200
   async testWebhook(@Body() body: any) {
     return {
