@@ -14,11 +14,18 @@ export class LoggingInterceptor implements NestInterceptor {
     const { method, url, body } = req;
     const now = Date.now();
 
-    // Evita loguear bodies grandes o binarios
-    const bodyPreview =
-      JSON.stringify(body).length > 1000
-        ? '[omitted large body]'
-        : body;
+    // Evita loguear bodies grandes o no serializables
+    let bodyPreview: any = body;
+    try {
+      const serialized = JSON.stringify(body);
+      if (serialized && serialized.length > 1000) {
+        bodyPreview = '[omitted large body]';
+      } else {
+        bodyPreview = body;
+      }
+    } catch {
+      bodyPreview = '[unserializable body]';
+    }
 
     console.log(`➡️ ${method} ${url} | Body:`, bodyPreview);
 
