@@ -112,14 +112,14 @@ export class StkItemService {
   async getCostoEnvio(distancia: number): Promise<any> {
   // Redondear la distancia hacia arriba
   distancia = Math.ceil(distancia);
-  // Si la distancia es menor o igual a 4km, solo se cobra ENVIO4KM
+  // Si la distancia es menor o igual a 4km, solo se cobra ENVIO HASTA 2KM
   if (distancia <= 4) {
       const item = await this.stkItemRepository.findOne({
-        where: { id: 'ENVIO4KM' },
+        where: { id: 'ENVIO HASTA 2KM' },
         relations: ['stkPrecios', 'stkExistencias', 'familia2'],
       });
       if (!item) {
-        throw new NotFoundException(`Item con id ENVIO4KM no encontrado`);
+        throw new NotFoundException(`Item con id ENVIO HASTA 2KM no encontrado`);
       }
       const cotizacionDolar = await this.stkPrecioService.getCotizacionDolar();
       const precioMinorista = item.stkPrecios?.find((p) => p.lista === 'MINORISTA');
@@ -136,21 +136,21 @@ export class StkItemService {
         ...item,
         precioVtaCotizadoMin,
         costoTotal: precioVtaCotizadoMin,
-        detalle: `Hasta 4km: ENVIO4KM` 
+        detalle: `Hasta 4km: ENVIO HASTA 2KM` 
       };
     }
 
-    // Si la distancia es mayor a 4km, se cobra ENVIO4KM + (km extra * ENVIO+1KM)
+    // Si la distancia es mayor a 4km, se cobra ENVIO HASTA 2KM + (km extra * ENVIO KM ADICIONAL)
     const item4km = await this.stkItemRepository.findOne({
-      where: { id: 'ENVIO4KM' },
+      where: { id: 'ENVIO HASTA 2KM' },
       relations: ['stkPrecios'],
     });
     const itemMas1km = await this.stkItemRepository.findOne({
-      where: { id: 'ENVIO+1KM' },
+      where: { id: 'ENVIO KM ADICIONAL' },
       relations: ['stkPrecios'],
     });
     if (!item4km || !itemMas1km) {
-      throw new NotFoundException(`No se encontró ENVIO4KM o ENVIO+1KM`);
+      throw new NotFoundException(`No se encontró ENVIO HASTA 2KM o ENVIO KM ADICIONAL`);
     }
     const cotizacionDolar = await this.stkPrecioService.getCotizacionDolar();
     // Precio base hasta 4km
@@ -177,16 +177,16 @@ export class StkItemService {
     const costoTotal = Math.ceil(costoTotalBruto - 0.5) + (costoTotalBruto - Math.ceil(costoTotalBruto - 0.5) >= 0.5 ? 1 : 0);
     return {
       base: {
-        id: 'ENVIO4KM',
+        id: 'ENVIO HASTA 2KM',
         precioVtaCotizadoMin: precioVta4km,
       },
       extra: {
-        id: 'ENVIO+1KM',
+        id: 'ENVIO KM ADICIONAL',
         precioVtaCotizadoMin: precioVtaMas1km,
         cantidad: kmExtras,
       },
       costoTotal,
-      detalle: `Hasta 4km: ENVIO4KM + ${kmExtras}km extra x ENVIO+1KM`,
+      detalle: `Hasta 4km: ENVIO HASTA 2KM + ${kmExtras}km extra x ENVIO KM ADICIONAL`,
     };
   }
 }
