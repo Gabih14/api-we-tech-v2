@@ -51,6 +51,16 @@ export class StkExistenciaService {
     if (!existencia) throw new NotFoundException('Stock no encontrado');
 
     const comprometido = Number(existencia.comprometido || 0);
+    const cantidadActual = Number(existencia.cantidad || 0);
+    const disponible = cantidadActual - comprometido;
+
+    // ✅ Validar stock disponible antes de reservar
+    if (disponible < cantidad) {
+      throw new ConflictException(
+        `Stock insuficiente para ${item}. Disponible: ${disponible}, Solicitado: ${cantidad}`
+      );
+    }
+
     existencia.comprometido = (comprometido + cantidad).toString();
 
     await this.stkExistenciaRepository.save(existencia);
