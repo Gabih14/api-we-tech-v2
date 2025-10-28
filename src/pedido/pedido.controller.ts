@@ -54,9 +54,38 @@ export class PedidoController {
   @AuthType('public')
   @HttpCode(200) // respuesta 200
   async testWebhook(@Body() body: any) {
+    const { order_id, status } = body;
+
+    const pedido = await this.pedidoService.encontrarPorExternalId(order_id);
+
+    if (!pedido) {
+      console.warn(`⚠ [TEST] Pedido con order_id ${order_id} no encontrado.`);
+      return { message: `[TEST] Pedido no encontrado, se ignoró la notificación.` };
+    }
+
+    // Verificar que el pedido contenga el producto de prueba
+    const tieneProductoDePrueba = pedido.productos.some(
+      producto => producto.nombre === 'TEST PLA 1KG'
+    );
+
+    if (!tieneProductoDePrueba) {
+      console.warn(`⚠ [TEST] Pedido ${order_id} no contiene el producto 'TEST PLA 1KG'.`);
+      return { 
+        message: `[TEST] Pedido rechazado - debe contener el producto 'TEST PLA 1KG'`,
+        productos_encontrados: pedido.productos.map(p => p.nombre)
+      };
+    }
+
+    if (
+      status === 'APPROVED' ||
+      ['REJECTED', 'CANCELLED', 'REFUNDED'].includes(status)
+    ) {
+      await this.pedidoService.procesarNotificacionDeNave(body);
+      return { message: `[TEST] Webhook procesado con estado: ${status}` };
+    }
+
     return {
-      message: '✅ Endpoint de prueba activo para Nave',
-      received: body,
+      message: `[TEST] Webhook recibido pero sin acción para estado: ${status}`,
     };
   }
 
