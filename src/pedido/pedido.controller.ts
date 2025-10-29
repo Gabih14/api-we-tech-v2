@@ -64,7 +64,7 @@ export class PedidoController {
     }
 
     // Verificar que el pedido contenga el producto de prueba
-    const tieneProductoDePrueba = pedido.productos.some(
+    /* const tieneProductoDePrueba = pedido.productos.some(
       producto => producto.nombre === 'TEST PLA 1KG'
     );
 
@@ -74,7 +74,7 @@ export class PedidoController {
         message: `[TEST] Pedido rechazado - debe contener el producto 'TEST PLA 1KG'`,
         productos_encontrados: pedido.productos.map(p => p.nombre)
       };
-    }
+    } */
 
     if (
       status === 'APPROVED' ||
