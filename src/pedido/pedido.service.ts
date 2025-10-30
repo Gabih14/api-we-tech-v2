@@ -203,7 +203,7 @@ export class PedidoService {
 
       // 🔐 Obtener token de Nave
       const token = await this.obtenerTokenDeNave();
-
+      console.log('token obtenido:', token);
       // 🧾 Buscar pedido por external_id
       const pedido = await this.pedidoRepo.findOne({
         where: { external_id: external_payment_id },
