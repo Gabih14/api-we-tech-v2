@@ -44,7 +44,7 @@ async function bootstrap() {
     allowedOrigins,
   );
   console.log(`Servidor corriendo en ${process.env.PORT ?? 3000}`);
-  console.log("versión con logging interceptor :)");
+  console.log("versión con logging en pedidos");
 
 }
 bootstrap();
