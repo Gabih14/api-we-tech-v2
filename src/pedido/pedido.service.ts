@@ -125,7 +125,7 @@ export class PedidoService {
       ],
       buyer: {
         doc_type: 'DNI',
-        doc_number: 'N/A',
+        doc_number: dto.cliente_cuit.slice(2, -1), // Quita los primeros 2 y el último dígito
         name: dto.cliente_nombre,
         user_email: dto.email,
         billing_address: {
