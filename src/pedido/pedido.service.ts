@@ -125,7 +125,7 @@ export class PedidoService {
       ],
       buyer: {
         doc_type: 'DNI',
-        doc_number: 'N/A',
+        doc_number: dto.cliente_cuit.slice(2, -1), // Quita los primeros 2 y el último dígito
         name: dto.cliente_nombre,
         user_email: dto.email,
         billing_address: {
@@ -191,96 +191,75 @@ export class PedidoService {
     return data.access_token;
   }
 
-  // 🔔 Procesar notificación (nuevo flujo Nave)
+  // 🔔 Procesar notificación (nuevo flujo)
   async procesarNotificacionDeNave(data: any) {
-    try {
-      const { payment_check_url, external_payment_id } = data;
+    const { payment_check_url, external_payment_id } = data;
+    const token = await this.obtenerTokenDeNave();
 
-      if (!payment_check_url || !external_payment_id) {
-        console.warn('⚠️ Webhook inválido: faltan campos requeridos:', data);
-        return;
-      }
+    const pedido = await this.pedidoRepo.findOne({
+      where: { external_id: external_payment_id },
+      relations: ['productos'],
+    });
 
-      // 🔐 Obtener token de Nave
-      const token = await this.obtenerTokenDeNave();
-      console.log('token obtenido:', token);
-      // 🧾 Buscar pedido por external_id
-      const pedido = await this.pedidoRepo.findOne({
-        where: { external_id: external_payment_id },
-        relations: ['productos'],
-      });
-
-      if (!pedido) {
-        console.warn(
-          `⚠️ Pedido con external_id ${external_payment_id} no encontrado.`,
-        );
-        return;
-      }
-
-      // 🔍 Consultar estado real del pago
-      const url = payment_check_url.startsWith('http')
-        ? payment_check_url
-        : `https://${payment_check_url}`;
-
-      console.log(`🌐 Consultando estado de pago en Nave: ${url}`);
-
-      const resp = await fetch(url, {
-        method: 'GET',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      if (!resp.ok) {
-        const text = await resp.text();
-        console.error(`❌ Error al consultar Nave (${resp.status}): ${text}`);
-        throw new Error(`Nave respondió con ${resp.status}`);
-      }
-
-      const pago = await resp.json();
-      const estado = pago.status?.name ?? 'PENDING';
-      console.log(`💳 Estado recibido de Nave: ${estado}`);
-
-      // 🔄 Actualizar estado del pedido según respuesta de Nave
-      switch (estado) {
-        case 'APPROVED':
-          pedido.estado = 'APROBADO';
-          pedido.aprobado = new Date();
-          for (const p of pedido.productos) {
-            await this.stockService.confirmarStock(
-              p.nombre,
-              p.cantidad,
-              'DEPOSITO',
-            );
-          }
-          await this.notificarSecretaria(pedido);
-          break;
-
-        case 'REJECTED':
-        case 'CANCELLED':
-        case 'REFUNDED':
-          pedido.estado = 'CANCELADO';
-          for (const p of pedido.productos) {
-            await this.stockService.liberarStock(
-              p.nombre,
-              p.cantidad,
-              'DEPOSITO',
-            );
-          }
-          break;
-
-        default:
-          pedido.estado = 'PENDIENTE';
-          break;
-      }
-
-      // 💾 Guardar cambios en la base
-      await this.pedidoRepo.save(pedido);
-
-      console.log(
-        `✅ Pedido ${pedido.external_id} actualizado a estado ${pedido.estado}`,
-      );
-    } catch (err) {
-      console.error('🚨 Error procesando notificación de Nave:', err);
+    if (!pedido) {
+      console.warn(`⚠ Pedido con ID ${external_payment_id} no encontrado.`);
+      return;
     }
+
+    // Consultar estado real del pago en Nave
+    const resp = await fetch(`https://${payment_check_url}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const pago = await resp.json();
+    const estado = pago.status?.name ?? 'PENDING';
+
+    switch (estado) {
+      case 'APPROVED':
+        pedido.estado = 'APROBADO';
+        pedido.aprobado = new Date();
+
+        // ✅ Confirmar stock
+        for (const p of pedido.productos) {
+          await this.stockService.confirmarStock(
+            p.nombre,
+            p.cantidad,
+            'DEPOSITO',
+          );
+        }
+
+        // ✅ Crear comprobante en Nacional Gestión
+        try {
+          await this.vtaComprobanteService.crearDesdePedido(pedido);
+          console.log(
+            `🧾 Comprobante generado para pedido ${pedido.external_id}`,
+          );
+        } catch (err) {
+          console.error(`❌ Error al generar comprobante:`, err);
+        }
+
+        // ✅ Notificar a la secretaría por correo
+        await this.notificarSecretaria(pedido);
+        break;
+
+      case 'REJECTED':
+      case 'CANCELLED':
+      case 'REFUNDED':
+        pedido.estado = 'CANCELADO';
+        for (const p of pedido.productos) {
+          await this.stockService.liberarStock(
+            p.nombre,
+            p.cantidad,
+            'DEPOSITO',
+          );
+        }
+        break;
+
+      default:
+        pedido.estado = 'PENDIENTE';
+        break;
+    }
+
+    await this.pedidoRepo.save(pedido);
   }
 
   async encontrarPorExternalId(externalId: string): Promise<Pedido | null> {

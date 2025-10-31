@@ -9,6 +9,7 @@ import { StkItem } from 'src/stk-item/entities/stk-item.entity';
 import { StkExistenciaModule } from 'src/stk-existencia/stk-existencia.module';
 import { VtaComprobanteModule } from 'src/vta-comprobante/vta-comprobante.module';
 import { MailerModule } from 'src/mailer/mailer.module';
+import { VtaComprobanteItemModule } from 'src/vta-comprobante-item/vta-comprobante-item.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { MailerModule } from 'src/mailer/mailer.module';
     TypeOrmModule.forFeature([StkItem]), // Esta sigue en la conexión default (Nacional)
     forwardRef(() => StkExistenciaModule),
     forwardRef(() => VtaComprobanteModule),
+    forwardRef(() => VtaComprobanteItemModule),
     MailerModule
   ],
   controllers: [PedidoController],
