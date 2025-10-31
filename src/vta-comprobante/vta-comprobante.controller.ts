@@ -1,41 +1,22 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import { Controller, Get, Param } from '@nestjs/common';
 import { VtaComprobanteService } from './vta-comprobante.service';
-import { CreateVtaComprobanteDto } from './dto/create-vta-comprobante.dto';
-import { UpdateVtaComprobanteDto } from './dto/update-vta-comprobante.dto';
 
 @Controller('vta-comprobante')
 export class VtaComprobanteController {
   constructor(private readonly vtaComprobanteService: VtaComprobanteService) {}
 
-  @Post()
-  create(@Body() dto: CreateVtaComprobanteDto) {
-    return this.vtaComprobanteService.create(dto);
-  }
-
+  // 📋 Listar todos los comprobantes
   @Get()
   findAll() {
     return this.vtaComprobanteService.findAll();
   }
 
+  // 🔍 Buscar un comprobante por tipo y número
   @Get(':tipo/:comprobante')
-  findOne(@Param('tipo') tipo: string, @Param('comprobante') comprobante: string) {
-    return this.vtaComprobanteService.findOne(tipo, comprobante);
-  }
-
-  @Patch(':tipo/:comprobante')
-  update(
+  findOne(
     @Param('tipo') tipo: string,
     @Param('comprobante') comprobante: string,
-    @Body() dto: UpdateVtaComprobanteDto
   ) {
-    return this.vtaComprobanteService.update(tipo, comprobante, dto);
-  }
-
-  @Delete(':tipo/:comprobante')
-  remove(
-    @Param('tipo') tipo: string,
-    @Param('comprobante') comprobante: string
-  ) {
-    return this.vtaComprobanteService.remove(tipo, comprobante);
+    return this.vtaComprobanteService.findOne(tipo, comprobante);
   }
 }
