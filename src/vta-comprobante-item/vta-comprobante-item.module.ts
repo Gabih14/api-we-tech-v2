@@ -10,5 +10,6 @@ import { StkItem } from '../stk-item/entities/stk-item.entity';
   imports: [TypeOrmModule.forFeature([VtaComprobanteItem, VtaComprobante, StkItem])],
   controllers: [VtaComprobanteItemController],
   providers: [VtaComprobanteItemService],
+  exports: [VtaComprobanteItemService],
 })
 export class VtaComprobanteItemModule {}
