@@ -49,7 +49,7 @@ export class VtaComprobante {
   @Column({ type: 'bit', nullable: true })
   visible: boolean;
 
-  @OneToMany(() => VtaComprobanteItem, (item) => item.comprobante, { cascade: true })
+  @OneToMany(() => VtaComprobanteItem, (item) => item.comprobanteRef, { cascade: true })
   items: VtaComprobanteItem[];
 
 }
