@@ -31,6 +31,7 @@ export class PedidoController {
     console.log('📩 Webhook Nave recibido:', body);
 
     try {
+      console.log('Procesando notificación de Nave: ', body);
       await this.pedidoService.procesarNotificacionDeNave(body);
       return { message: 'Notificación recibida y procesada correctamente.' };
     } catch (err) {
