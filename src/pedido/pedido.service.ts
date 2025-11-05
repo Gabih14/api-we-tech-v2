@@ -210,7 +210,9 @@ export class PedidoService {
     const resp = await fetch(`https://${payment_check_url}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
+    console.log('Respuesta de verificación de pago Nave: ', resp);
     const pago = await resp.json();
+    console.log('Datos de pago obtenidos: ', pago);
     const estado = pago.status?.name ?? 'PENDING';
 
     switch (estado) {
