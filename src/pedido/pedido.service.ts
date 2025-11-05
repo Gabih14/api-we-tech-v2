@@ -196,6 +196,8 @@ export class PedidoService {
     const { payment_check_url, external_payment_id } = data;
     const token = await this.obtenerTokenDeNave();
 
+    console.log(token);
+
     const pedido = await this.pedidoRepo.findOne({
       where: { external_id: external_payment_id },
       relations: ['productos'],
