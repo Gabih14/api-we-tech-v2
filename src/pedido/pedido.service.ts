@@ -209,7 +209,7 @@ export class PedidoService {
     }
 
     // Consultar estado real del pago en Nave
-    const resp = await fetch(`https://${payment_check_url}`, {
+    const resp = await fetch(`${payment_check_url}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     console.log('Respuesta de verificación de pago Nave: ', resp);
