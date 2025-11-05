@@ -37,7 +37,7 @@ export class PedidoService {
     private readonly configService: ConfigService,
 
     private readonly mailerService: MailerService,
-  ) {}
+  ) { }
 
   // 🧾 Crear pedido e intención de pago
   async crear(
@@ -200,7 +200,7 @@ export class PedidoService {
       where: { external_id: external_payment_id },
       relations: ['productos'],
     });
-
+    console.log('Pedido encontrado para notificación: ', pedido);
     if (!pedido) {
       console.warn(`⚠ Pedido con ID ${external_payment_id} no encontrado.`);
       return;
