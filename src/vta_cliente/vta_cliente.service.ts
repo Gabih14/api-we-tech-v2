@@ -16,6 +16,7 @@ export class VtaClienteService {
    * Busca un cliente por CUIT (id). Si no existe, lo crea.
    * Si existe y cambió algún dato, lo actualiza.
    */
+  /* findOrCreateOrUpdate */
   async findOrCreateOrUpdate(dto: CreateVtaClienteDto): Promise<VtaCliente> {
     if (!dto.id) {
       throw new Error('El cliente debe tener un CUIT válido como ID.');
