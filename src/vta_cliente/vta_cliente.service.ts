@@ -65,11 +65,21 @@ export class VtaClienteService {
   }
 
   async findAll() {
-    return this.repo.find();
+    const clientes = await this.repo.find();
+    return clientes.map(cliente => ({
+      ...cliente,
+      id: cliente.id.replace(/-/g, '')
+    }));
   }
 
   async findOne(id: string) {
-    return this.repo.findOne({ where: { id } });
+    const cliente = await this.repo.findOne({ where: { id } });
+    if (!cliente) return null;
+    
+    return {
+      ...cliente,
+      id: cliente.id.replace(/-/g, '')
+    };
   }
 
   async update(id: string, dto: UpdateVtaClienteDto) {
@@ -79,7 +89,7 @@ export class VtaClienteService {
 
   async remove(id: string) {
     const result = await this.repo.delete(id);
-    return result.affected && result.affected > 0
+    return typeof result.affected === 'number' && result.affected > 0
       ? { message: `Cliente ${id} eliminado.` }
       : { message: `Cliente ${id} no encontrado.` };
   }
