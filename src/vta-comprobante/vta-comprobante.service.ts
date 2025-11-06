@@ -5,6 +5,8 @@ import { Repository } from 'typeorm';
 import { VtaComprobante } from './entities/vta-comprobante.entity';
 import { Pedido } from 'src/pedido/entities/pedido.entity';
 import { VtaComprobanteItemService } from 'src/vta-comprobante-item/vta-comprobante-item.service';
+import { VtaClienteService } from 'src/vta_cliente/vta_cliente.service';
+import { CreateVtaClienteDto } from 'src/vta_cliente/dto/create-vta_cliente.dto';
 
 @Injectable()
 export class VtaComprobanteService {
@@ -13,11 +15,22 @@ export class VtaComprobanteService {
     private readonly comprobanteRepository: Repository<VtaComprobante>,
 
     private readonly comprobanteItemService: VtaComprobanteItemService,
+    private readonly clienteService: VtaClienteService,
   ) {}
 
   // 🧾 Crear comprobante a partir de un pedido aprobado
   async crearDesdePedido(pedido: Pedido): Promise<VtaComprobante> {
     if (!pedido) throw new NotFoundException('Pedido no encontrado');
+
+    // 👤 Asegurar que el cliente exista (crear/actualizar según corresponda)
+    const clientePayload: CreateVtaClienteDto = {
+      id: pedido.cliente_cuit,
+      razonSocial: pedido.cliente_nombre,
+      tipoDocumento: 'CUIT',
+      numeroDocumento: pedido.cliente_cuit,
+      visible: true,
+    };
+    await this.clienteService.findOrCreateOrUpdate(clientePayload);
 
     const numero = await this.generarNumeroComprobante();
 
