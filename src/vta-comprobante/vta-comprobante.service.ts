@@ -48,7 +48,6 @@ export class VtaComprobanteService {
       nogravado: 0,
       total: pedido.total,
       cobrado: pedido.total,
-      estado: 'GENERADO',
       mail: false,
       visible: true,
     });
