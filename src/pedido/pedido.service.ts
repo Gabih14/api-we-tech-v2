@@ -82,12 +82,26 @@ export class PedidoService {
 
     const pedidoGuardado = await this.pedidoRepo.save(pedido);
 
-    const naveUrl = await this.generarIntencionDePago({
-      ...dto,
-      external_id: externalId,
-    });
-
-    return { pedido: pedidoGuardado, naveUrl };
+    try {
+      const naveUrl = await this.generarIntencionDePago({
+        ...dto,
+        external_id: externalId,
+      });
+      return { pedido: pedidoGuardado, naveUrl };
+    } catch (err) {
+      // Rollback: liberar stock y marcar pedido como cancelado
+      for (const p of productosValidados) {
+        try {
+          await this.stockService.liberarStock(p.nombre, p.cantidad, 'DEPOSITO');
+        } catch (e) {
+          // log y continuar intentando liberar el resto
+          console.error(`Error liberando stock de ${p.nombre}:`, e?.message || e);
+        }
+      }
+      pedidoGuardado.estado = 'CANCELADO';
+      await this.pedidoRepo.save(pedidoGuardado);
+      throw err;
+    }
   }
 
   // 💳 Generar intención de pago (nueva API)
@@ -159,7 +173,8 @@ export class PedidoService {
       );
     }
 
-    return result.checkout_url;
+    // Fallback: usar redirect_to si existe, sino checkout_url
+    return result?.redirect_to || result?.checkout_url;
   }
 
   // 🔐 Obtener token Nave (nuevo endpoint)
@@ -205,6 +220,12 @@ export class PedidoService {
     console.log('Pedido encontrado para notificación: ', pedido);
     if (!pedido) {
       console.warn(`⚠ Pedido con ID ${external_payment_id} no encontrado.`);
+      return;
+    }
+
+    // Idempotencia: si ya fue procesado, no repetir
+    if (pedido.estado !== 'PENDIENTE') {
+      console.log(`ℹ Pedido ${pedido.external_id} ya procesado (${pedido.estado}).`);
       return;
     }
 
@@ -259,7 +280,7 @@ export class PedidoService {
         break;
 
       default:
-        pedido.estado = 'PENDIENTE';
+        // Mantener PENDIENTE sin cambios
         break;
     }
 

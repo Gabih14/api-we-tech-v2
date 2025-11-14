@@ -10,6 +10,7 @@ import { StkExistenciaModule } from 'src/stk-existencia/stk-existencia.module';
 import { VtaComprobanteModule } from 'src/vta-comprobante/vta-comprobante.module';
 import { MailerModule } from 'src/mailer/mailer.module';
 import { VtaComprobanteItemModule } from 'src/vta-comprobante-item/vta-comprobante-item.module';
+import { PedidoExpirationService } from './pedido-expiration.service';
 
 @Module({
   imports: [
@@ -22,7 +23,7 @@ import { VtaComprobanteItemModule } from 'src/vta-comprobante-item/vta-comproban
     MailerModule
   ],
   controllers: [PedidoController],
-  providers: [PedidoService],
+  providers: [PedidoService, PedidoExpirationService],
   exports: [PedidoService],
 })
 export class PedidoModule {}
