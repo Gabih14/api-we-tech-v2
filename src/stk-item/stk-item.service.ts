@@ -25,22 +25,20 @@ export class StkItemService {
 
   async findAll(): Promise<any[]> {
     const items = await this.stkItemRepository.find({
-      relations: ['stkPrecios', 'stkExistencias', 'familia2'], // agregás relaciones necesarias
+      relations: ['stkPrecios', 'stkPrecios.moneda', 'stkExistencias', 'familia2'], // incluir moneda para decidir cotización
     });
 
-    // Obtener la cotización del dólar
-    const cotizacionDolar = await this.stkPrecioService.getCotizacionDolar();
-
-    // Combinás cada item con su precioVtaCotizadoMin
+    // Combinás cada item con su precioVtaCotizadoMin (aplica cotización solo si la moneda es DOL)
     return items.map((item) => {
-      // Buscar el precio de la lista MINORISTA
       const precioMinorista = item.stkPrecios?.find((p) => p.lista === 'MINORISTA');
-      
+
       let precioVtaCotizadoMin: string | null = null;
       if (precioMinorista) {
         const precioVta = parseFloat(precioMinorista.precioVta || '0');
-        if (!isNaN(precioVta) && !isNaN(cotizacionDolar)) {
-          precioVtaCotizadoMin = (precioVta * cotizacionDolar).toFixed(2);
+        const isDol = precioMinorista?.moneda?.id === 'DOL';
+        const cot = isDol ? parseFloat(precioMinorista?.moneda?.cotizacion || '1') : 1;
+        if (!isNaN(precioVta) && !isNaN(cot)) {
+          precioVtaCotizadoMin = (precioVta * cot).toFixed(2);
         }
       }
 
@@ -54,15 +52,12 @@ export class StkItemService {
   async findOne(id: string): Promise<any> {
     const item = await this.stkItemRepository.findOne({
       where: { id },
-      relations: ['stkPrecios', 'stkExistencias', 'familia2'],
+      relations: ['stkPrecios', 'stkPrecios.moneda', 'stkExistencias', 'familia2'],
     });
 
     if (!item) {
       throw new NotFoundException(`Item con id ${id} no encontrado`);
     }
-
-    // Obtener la cotización del dólar
-    const cotizacionDolar = await this.stkPrecioService.getCotizacionDolar();
 
     // Buscar el precio de la lista MINORISTA
     const precioMinorista = item.stkPrecios?.find((p) => p.lista === 'MINORISTA');
@@ -70,8 +65,10 @@ export class StkItemService {
     let precioVtaCotizadoMin: string | null = null;
     if (precioMinorista) {
       const precioVta = parseFloat(precioMinorista.precioVta || '0');
-      if (!isNaN(precioVta) && !isNaN(cotizacionDolar)) {
-        precioVtaCotizadoMin = (precioVta * cotizacionDolar).toFixed(2);
+      const isDol = precioMinorista?.moneda?.id === 'DOL';
+      const cot = isDol ? parseFloat(precioMinorista?.moneda?.cotizacion || '1') : 1;
+      if (!isNaN(precioVta) && !isNaN(cot)) {
+        precioVtaCotizadoMin = (precioVta * cot).toFixed(2);
       }
     }
 
@@ -110,26 +107,28 @@ export class StkItemService {
   }
 
   async getCostoEnvio(distancia: number): Promise<any> {
+  // Helper de redondeo half-up
+  const halfUp = (n: number) => Math.floor(n + 0.5);
+
   // Redondear la distancia hacia arriba
   distancia = Math.ceil(distancia);
   // Si la distancia es menor o igual a 4km, solo se cobra ENVIO HASTA 2KM
   if (distancia <= 4) {
       const item = await this.stkItemRepository.findOne({
         where: { id: 'ENVIO HASTA 2KM' },
-        relations: ['stkPrecios', 'stkExistencias', 'familia2'],
+        relations: ['stkPrecios', 'stkPrecios.moneda', 'stkExistencias', 'familia2'],
       });
       if (!item) {
         throw new NotFoundException(`Item con id ENVIO HASTA 2KM no encontrado`);
       }
-      const cotizacionDolar = await this.stkPrecioService.getCotizacionDolar();
       const precioMinorista = item.stkPrecios?.find((p) => p.lista === 'MINORISTA');
       let precioVtaCotizadoMin: number | null = null;
       if (precioMinorista) {
-        const precioVta = parseFloat(precioMinorista.precioVta || '0');
-        if (!isNaN(precioVta) && !isNaN(cotizacionDolar)) {
-          const bruto = precioVta * cotizacionDolar;
-          precioVtaCotizadoMin = Math.ceil(bruto - 0.5) + (bruto - Math.ceil(bruto - 0.5) >= 0.5 ? 1 : 0);
-          // Alternativamente, simplemente Math.round(bruto) si quieres redondeo clásico
+        const v = parseFloat(precioMinorista.precioVta || '0');
+        const isDol = precioMinorista?.moneda?.id === 'DOL';
+        const cot = isDol ? parseFloat(precioMinorista?.moneda?.cotizacion || '1') : 1;
+        if (!isNaN(v) && !isNaN(cot)) {
+          precioVtaCotizadoMin = halfUp(v * cot);
         }
       }
       return {
@@ -143,16 +142,15 @@ export class StkItemService {
     // Si la distancia es mayor a 4km, se cobra ENVIO HASTA 2KM + (km extra * ENVIO KM ADICIONAL)
     const item4km = await this.stkItemRepository.findOne({
       where: { id: 'ENVIO HASTA 2KM' },
-      relations: ['stkPrecios'],
+      relations: ['stkPrecios', 'stkPrecios.moneda'],
     });
     const itemMas1km = await this.stkItemRepository.findOne({
       where: { id: 'ENVIO KM ADICIONAL' },
-      relations: ['stkPrecios'],
+      relations: ['stkPrecios', 'stkPrecios.moneda'],
     });
     if (!item4km || !itemMas1km) {
       throw new NotFoundException(`No se encontró ENVIO HASTA 2KM o ENVIO KM ADICIONAL`);
     }
-    const cotizacionDolar = await this.stkPrecioService.getCotizacionDolar();
     // Precio base hasta 4km
     const precioMinorista4km = item4km.stkPrecios?.find((p) => p.lista === 'MINORISTA');
     const precioMinoristaMas1km = itemMas1km.stkPrecios?.find((p) => p.lista === 'MINORISTA');
@@ -160,21 +158,23 @@ export class StkItemService {
     let precioVtaMas1km = 0;
     if (precioMinorista4km) {
       const v = parseFloat(precioMinorista4km.precioVta || '0');
-      if (!isNaN(v) && !isNaN(cotizacionDolar)) {
-        const bruto = v * cotizacionDolar;
-        precioVta4km = Math.ceil(bruto - 0.5) + (bruto - Math.ceil(bruto - 0.5) >= 0.5 ? 1 : 0);
+      const isDol = precioMinorista4km?.moneda?.id === 'DOL';
+      const cot = isDol ? parseFloat(precioMinorista4km?.moneda?.cotizacion || '1') : 1;
+      if (!isNaN(v) && !isNaN(cot)) {
+        precioVta4km = halfUp(v * cot);
       }
     }
     if (precioMinoristaMas1km) {
       const v = parseFloat(precioMinoristaMas1km.precioVta || '0');
-      if (!isNaN(v) && !isNaN(cotizacionDolar)) {
-        const bruto = v * cotizacionDolar;
-        precioVtaMas1km = Math.ceil(bruto - 0.5) + (bruto - Math.ceil(bruto - 0.5) >= 0.5 ? 1 : 0);
+      const isDol = precioMinoristaMas1km?.moneda?.id === 'DOL';
+      const cot = isDol ? parseFloat(precioMinoristaMas1km?.moneda?.cotizacion || '1') : 1;
+      if (!isNaN(v) && !isNaN(cot)) {
+        precioVtaMas1km = halfUp(v * cot);
       }
     }
     const kmExtras = Math.ceil(distancia - 4);
     const costoTotalBruto = precioVta4km + (kmExtras * precioVtaMas1km);
-    const costoTotal = Math.ceil(costoTotalBruto - 0.5) + (costoTotalBruto - Math.ceil(costoTotalBruto - 0.5) >= 0.5 ? 1 : 0);
+    const costoTotal = halfUp(costoTotalBruto);
     return {
       base: {
         id: 'ENVIO HASTA 2KM',
