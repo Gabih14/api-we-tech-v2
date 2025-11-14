@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { ScheduleModule } from '@nestjs/schedule';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
@@ -68,6 +69,8 @@ import { VtaClienteModule } from './vta_cliente/vta_cliente.module';
     VtaComprobanteItemModule,
     MailerModule,
     VtaClienteModule,
+    // Scheduler para tareas periódicas (expiración de pedidos, etc.)
+    ScheduleModule.forRoot(),
   ],
 })
 export class AppModule {}
