@@ -35,5 +35,17 @@ export class VtaClienteController {
     return cliente;
   }
 
- 
+  @Patch(':id')
+  async update(@Param('id') id: string, @Body() dto: UpdateVtaClienteDto) {
+    const cliente = await this.vtaClienteService.update(id, dto);
+    if (!cliente) {
+      throw new NotFoundException(`Cliente con ID ${id} no encontrado`);
+    }
+    return cliente;
+  }
+
+  @Delete(':id')
+  async remove(@Param('id') id: string) {
+    return this.vtaClienteService.remove(id);
+  }
 }
