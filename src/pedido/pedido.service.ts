@@ -18,6 +18,7 @@ import { PedidoItem } from './entities/pedido-item.entity';
 import { v4 as uuidv4 } from 'uuid';
 import { ConfigService } from '@nestjs/config';
 import { MailerService } from 'src/mailer/mailer.service';
+import { WhatsappService } from 'src/whatsapp/whatsapp.service';
 
 @Injectable()
 export class PedidoService {
@@ -37,6 +38,8 @@ export class PedidoService {
     private readonly configService: ConfigService,
 
     private readonly mailerService: MailerService,
+
+    private readonly whatsappService: WhatsappService,
   ) { }
 
   // 🧾 Crear pedido e intención de pago
@@ -244,27 +247,28 @@ export class PedidoService {
         pedido.estado = 'APROBADO';
         pedido.aprobado = new Date();
 
-        // ✅ Confirmar stock
         for (const p of pedido.productos) {
-          await this.stockService.confirmarStock(
-            p.nombre,
-            p.cantidad,
-            'DEPOSITO',
-          );
+          await this.stockService.confirmarStock(p.nombre, p.cantidad, 'DEPOSITO');
         }
 
-        // ✅ Crear comprobante en Nacional Gestión
         try {
           await this.vtaComprobanteService.crearDesdePedido(pedido);
-          console.log(
-            `🧾 Comprobante generado para pedido ${pedido.external_id}`,
-          );
+          console.log(`🧾 Comprobante generado para pedido ${pedido.external_id}`);
         } catch (err) {
           console.error(`❌ Error al generar comprobante:`, err);
         }
 
         // ✅ Notificar a la secretaría por correo
         await this.notificarSecretaria(pedido);
+
+        // ✅ Notificar por WhatsApp
+        try {
+          const mensaje = this.whatsappService.formatearMensajePedido(pedido);
+          await this.whatsappService.enviarMensaje(mensaje);
+        } catch (err) {
+          console.error(`❌ Error al enviar WhatsApp:`, err);
+          // No lanzar error para que no afecte el flujo principal
+        }
         break;
 
       case 'REJECTED':
