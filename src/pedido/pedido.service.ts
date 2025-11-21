@@ -74,7 +74,7 @@ export class PedidoService {
     const pedido = this.pedidoRepo.create({
       cliente_cuit: dto.cliente_cuit,
       cliente_nombre: dto.cliente_nombre,
-      cliente_mail: dto.cliente_mail,
+      cliente_mail: dto.email,
       external_id: externalId,
       total: dto.total,
       estado: 'PENDIENTE',
