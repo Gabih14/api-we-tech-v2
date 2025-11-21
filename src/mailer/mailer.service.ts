@@ -26,6 +26,7 @@ export class MailerService {
         subject,
         text,
       });
+      console.log(`Correo enviado a ${to} con asunto "${subject}"`);
     } catch (err) {
       throw new InternalServerErrorException(`Error al enviar el correo: ${err.message}`);
     }
