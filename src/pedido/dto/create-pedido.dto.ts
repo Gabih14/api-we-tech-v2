@@ -46,6 +46,9 @@ export class CreatePedidoDto {
   @IsString()
   cliente_cuit: string;
 
+  @IsEmail()
+  cliente_mail: string;
+
   @IsNumber()
   total: number;
 

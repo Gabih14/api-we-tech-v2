@@ -74,6 +74,7 @@ export class PedidoService {
     const pedido = this.pedidoRepo.create({
       cliente_cuit: dto.cliente_cuit,
       cliente_nombre: dto.cliente_nombre,
+      cliente_mail: dto.cliente_mail,
       external_id: externalId,
       total: dto.total,
       estado: 'PENDIENTE',
@@ -295,7 +296,7 @@ export class PedidoService {
   }
 
   private async notificarSecretaria(pedido: Pedido) {
-    const email = this.configService.get<string>('SECRETARIA_EMAIL'); //separar por coma si hay varios
+    const email = this.configService.get<string>('SECRETARIA_EMAIL')+", "+pedido.cliente_mail; //separar por coma si hay varios
 
     const mensaje = `🧾 Pedido Aprobado
 Cliente: ${pedido.cliente_nombre}
