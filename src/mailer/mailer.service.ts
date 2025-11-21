@@ -18,13 +18,13 @@ export class MailerService {
     });
   }
 
-  async enviarCorreo(to: string, subject: string, text: string) {
+  async enviarCorreo(to: string, subject: string, html: string) {
     try {
       await this.transporter.sendMail({
         from: `"WeTech Ventas" <${this.configService.get<string>('SMTP_USER')}>`,
         to,
         subject,
-        text,
+        html,
       });
       console.log(`Correo enviado a ${to} con asunto "${subject}"`);
     } catch (err) {
