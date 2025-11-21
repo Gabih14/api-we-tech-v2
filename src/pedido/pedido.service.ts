@@ -296,25 +296,99 @@ export class PedidoService {
   }
 
   private async notificarSecretaria(pedido: Pedido) {
-    const email = this.configService.get<string>('SECRETARIA_EMAIL')+", "+pedido.cliente_mail; //separar por coma si hay varios
+    const secretariaEmail = this.configService.get<string>('SECRETARIA_EMAIL');
+    const destinatarios = `${secretariaEmail}, ${pedido.cliente_mail}`;
 
-    const mensaje = `🧾 Pedido Aprobado
-Cliente: ${pedido.cliente_nombre}
-CUIT: ${pedido.cliente_cuit}
-
-Productos:
-${pedido.productos.map((p) => `- ${p.nombre} x${p.cantidad} ($${p.precio_unitario})`).join('\n')}
-
-Total: $${pedido.total}
-`;
-
-    if (!email)
+    if (!secretariaEmail) {
       throw new InternalServerErrorException('Falta el email de secretaria');
+    }
+
+    // Lista de productos en HTML
+    const productosHtml = pedido.productos
+      .map(
+        (p) => `
+      <table style="width: 100%; border-collapse: collapse;">
+        <tbody>
+          <tr style="vertical-align: top;">
+            <td style="padding: 16px 8px 0 0; width: 100%;">
+              <div>${p.nombre}</div>
+              <div style="font-size: 14px; color: #888; padding-top: 4px;">Cantidad: ${p.cantidad}</div>
+            </td>
+            <td style="padding: 16px 4px 0 0; white-space: nowrap; text-align: right;">
+              <strong>$${p.precio_unitario.toFixed(2)}</strong>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    `,
+      )
+      .join('');
+
+    const htmlMensaje = `
+<div style="font-family: system-ui, sans-serif, Arial; font-size: 14px; color: #333; padding: 14px 8px; background-color: #f5f5f5;">
+  <div style="max-width: 600px; margin: auto; background-color: #fff;">
+    <!-- Encabezado con logo -->
+    <div style="border-top: 6px solid #458500; padding: 16px;">
+      <a style="text-decoration: none; outline: none; margin-right: 8px; vertical-align: middle;" href="https://shop.wetech.ar" target="_blank" rel="noopener">
+        <img src="https://shop.wetech.ar/assets/Logo%20WeTECH%20Negro%20PNG-CPBuO7yQ.png" width="103" height="41" alt="WeTECH Logo">
+      </a>
+      <span style="font-size: 16px; vertical-align: middle; border-left: 1px solid #333; padding-left: 8px;">
+        <strong>Pedido Aprobado</strong>
+      </span>
+    </div>
+
+    <!-- Contenido principal -->
+    <div style="padding: 0 16px;">
+      <p>Estimado/a <strong>${pedido.cliente_nombre}</strong>,<br>
+      hemos recibido y aprobado su pedido. A continuación, los detalles:</p>
+
+      <!-- Datos del cliente -->
+      <div style="margin: 16px 0; font-size: 14px; color: #555;">
+        <div><strong>Cliente:</strong> ${pedido.cliente_nombre}</div>
+        <div><strong>CUIT:</strong> ${pedido.cliente_cuit}</div>
+      </div>
+
+      <!-- Productos -->
+      <div style="text-align: left; font-size: 14px; padding-bottom: 4px; border-bottom: 2px solid #333;">
+        <strong>Detalles del Pedido</strong>
+      </div>
+
+      ${productosHtml}
+
+      <!-- Total -->
+      <div style="padding: 24px 0;">
+        <div style="border-top: 2px solid #333;">&nbsp;</div>
+      </div>
+      <table style="border-collapse: collapse; width: 100%; text-align: right;">
+        <tbody>
+          <tr>
+            <td style="width: 60%;">&nbsp;</td>
+            <td style="border-top: 2px solid #333;">
+              <strong style="white-space: nowrap;">Total del Pedido</strong>
+            </td>
+            <td style="padding: 16px 8px; border-top: 2px solid #333; white-space: nowrap;">
+              <strong>$${pedido.total.toFixed(2)}</strong>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div style="max-width: 600px; margin: auto; padding: 12px; text-align: center;">
+    <p style="color: #999; font-size: 12px;">
+      Este correo fue enviado a ${pedido.cliente_mail}<br>
+      Usted recibió este correo porque realizó un pedido en WeTECH
+    </p>
+  </div>
+</div>
+    `;
 
     await this.mailerService.enviarCorreo(
-      email,
+      destinatarios,
       '📦 Pedido Aprobado en WeTech',
-      mensaje,
+      htmlMensaje,
     );
   }
 }
