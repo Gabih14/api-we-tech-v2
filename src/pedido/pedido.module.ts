@@ -11,6 +11,7 @@ import { VtaComprobanteModule } from 'src/vta-comprobante/vta-comprobante.module
 import { MailerModule } from 'src/mailer/mailer.module';
 import { VtaComprobanteItemModule } from 'src/vta-comprobante-item/vta-comprobante-item.module';
 import { PedidoExpirationService } from './pedido-expiration.service';
+import { WhatsappModule } from '../whatsapp/whatsapp.module';
 
 @Module({
   imports: [
@@ -20,7 +21,8 @@ import { PedidoExpirationService } from './pedido-expiration.service';
     forwardRef(() => StkExistenciaModule),
     forwardRef(() => VtaComprobanteModule),
     forwardRef(() => VtaComprobanteItemModule),
-    MailerModule
+    MailerModule,
+    WhatsappModule,
   ],
   controllers: [PedidoController],
   providers: [PedidoService, PedidoExpirationService],
