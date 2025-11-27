@@ -4,6 +4,7 @@ import { ApiTokenGuard } from './common/guards/api-token.guard';
 import { Reflector } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
+import { HttpErrorFilter } from './common/filters/http-exception.filter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -20,6 +21,7 @@ async function bootstrap() {
   });
 
   app.useGlobalInterceptors(new LoggingInterceptor());
+  app.useGlobalFilters(new HttpErrorFilter());
 
   // 🔒 Guard global: toda la API protegida por tokens
   const reflector = app.get(Reflector);

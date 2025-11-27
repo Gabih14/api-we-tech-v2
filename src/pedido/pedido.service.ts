@@ -6,6 +6,8 @@ import {
   NotFoundException,
   InternalServerErrorException,
   BadRequestException,
+  HttpException,
+  HttpStatus,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Pedido } from './entities/pedido.entity';
@@ -46,6 +48,16 @@ export class PedidoService {
   async crear(
     dto: CreatePedidoDto,
   ): Promise<{ pedido: Pedido; naveUrl: string }> {
+    if (!dto.productos || dto.productos.length === 0) {
+      throw new HttpException(
+        {
+          code: 'ERR_VALIDATION_PRODUCTS',
+          message: 'Debes incluir al menos un producto.',
+          retryable: false,
+        },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
     const productosValidados: PedidoItem[] = [];
 
     for (const producto of dto.productos) {
@@ -161,24 +173,67 @@ export class PedidoService {
       duration_time: 3000,
     };
 
-    const response = await fetch(paymentUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify(body),
-    });
-
-    const result = await response.json();
-    if (!response.ok) {
-      throw new InternalServerErrorException(
-        `Error en Nave: ${JSON.stringify(result)}`,
+    let response: Response;
+    try {
+      response = await fetch(paymentUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(body),
+      });
+    } catch (error: any) {
+      // Fallo de red / Nave caído
+      throw new HttpException(
+        {
+          code: 'ERR_NAVE_UNAVAILABLE',
+          message: 'El servicio de pagos está con problemas. Vuelve más tarde.',
+          retryable: false,
+        },
+        HttpStatus.SERVICE_UNAVAILABLE,
       );
     }
 
-    // Fallback: usar redirect_to si existe, sino checkout_url
-    return result?.redirect_to || result?.checkout_url;
+    let result: any;
+    try {
+      result = await response.json();
+    } catch {
+      throw new HttpException(
+        {
+          code: 'ERR_NAVE_INVALID_RESPONSE',
+          message: 'El servicio de pagos no respondió correctamente. Vuelve más tarde.',
+          retryable: false,
+        },
+        HttpStatus.BAD_GATEWAY,
+      );
+    }
+
+    if (!response.ok) {
+      throw new HttpException(
+        {
+          code: 'ERR_NAVE_BAD_RESPONSE',
+          message: 'No pudimos procesar el pago. Intenta nuevamente.',
+          retryable: true,
+          details: result,
+        },
+        HttpStatus.BAD_GATEWAY,
+      );
+    }
+
+    const url = result?.redirect_to || result?.checkout_url;
+    if (!url) {
+      throw new HttpException(
+        {
+          code: 'ERR_NAVE_NO_URL',
+          message: 'No pudimos generar el enlace de pago. Intenta nuevamente.',
+          retryable: true,
+        },
+        HttpStatus.BAD_GATEWAY,
+      );
+    }
+
+    return url;
   }
 
   // 🔐 Obtener token Nave (nuevo endpoint)
@@ -194,16 +249,47 @@ export class PedidoService {
       );
     }
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ client_id, client_secret, audience }),
-    });
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ client_id, client_secret, audience }),
+      });
+    } catch (error: any) {
+      throw new HttpException(
+        {
+          code: 'ERR_NAVE_AUTH_UNAVAILABLE',
+          message: 'El servicio de autenticación de pagos está con problemas. Vuelve más tarde.',
+          retryable: false,
+        },
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    }
 
-    const data = await response.json();
+    let data: any;
+    try {
+      data = await response.json();
+    } catch {
+      throw new HttpException(
+        {
+          code: 'ERR_NAVE_AUTH_INVALID_RESPONSE',
+          message: 'Autenticación de pagos no respondió correctamente. Vuelve más tarde.',
+          retryable: false,
+        },
+        HttpStatus.BAD_GATEWAY,
+      );
+    }
+
     if (!response.ok || !data.access_token) {
-      throw new InternalServerErrorException(
-        `Error al obtener token de Nave: ${JSON.stringify(data)}`,
+      throw new HttpException(
+        {
+          code: 'ERR_NAVE_AUTH_FAILED',
+          message: 'No pudimos autenticarte para el pago. Intenta nuevamente.',
+          retryable: true,
+          details: data,
+        },
+        HttpStatus.BAD_GATEWAY,
       );
     }
 
