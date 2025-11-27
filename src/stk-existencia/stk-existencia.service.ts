@@ -44,25 +44,60 @@ export class StkExistenciaService {
     await this.stkExistenciaRepository.remove(existencia);
   }
 
-  async reservarStock(item: string, cantidad: number, deposito: string) {
-    const existencia = await this.stkExistenciaRepository.findOne({
-      where: { item, deposito },
-    });
-    if (!existencia) throw new NotFoundException('Stock no encontrado');
+  async reservarStock(item: string, cantidad: number, depositoPreferido?: string) {
+    // Si se especifica depósito, usar lógica actual
+    if (depositoPreferido) {
+      const existencia = await this.stkExistenciaRepository.findOne({
+        where: { item, deposito: depositoPreferido },
+      });
+      if (!existencia) {
+        throw new NotFoundException(`Stock no encontrado para ${item} en ${depositoPreferido}`);
+      }
 
-    const comprometido = Number(existencia.comprometido || 0);
-    const cantidadActual = Number(existencia.cantidad || 0);
-    const disponible = cantidadActual - comprometido;
+      const comprometido = Number(existencia.comprometido || 0);
+      const cantidadActual = Number(existencia.cantidad || 0);
+      const disponible = cantidadActual - comprometido;
 
-    // ✅ Validar stock disponible antes de reservar
+      if (disponible < cantidad) {
+        throw new ConflictException(
+          `Stock insuficiente para ${item} en ${depositoPreferido}. Disponible: ${disponible}, Solicitado: ${cantidad}`
+        );
+      }
+
+      existencia.comprometido = (comprometido + cantidad).toString();
+      await this.stkExistenciaRepository.save(existencia);
+      return;
+    }
+
+    // Sin depósito especificado: buscar en todos
+    const existencias = await this.stkExistenciaRepository.find({ where: { item } });
+
+    if (!existencias.length) {
+      throw new NotFoundException(`Item ${item} no encontrado en ningún depósito`);
+    }
+
+    // Calcular disponible por depósito y ordenar
+    const conDisponibilidad = existencias.map(e => ({
+      existencia: e,
+      disponible: Number(e.cantidad || 0) - Number(e.comprometido || 0),
+    })).filter(e => e.disponible > 0)
+      .sort((a, b) => b.disponible - a.disponible);
+
+    if (!conDisponibilidad.length) {
+      throw new ConflictException(`Sin stock disponible para ${item} en ningún depósito`);
+    }
+
+    // Reservar del depósito con más stock
+    const { existencia, disponible } = conDisponibilidad[0];
+
     if (disponible < cantidad) {
       throw new ConflictException(
-        `Stock insuficiente para ${item}. Disponible: ${disponible}, Solicitado: ${cantidad}`
+        `Stock insuficiente para ${item}. Disponible total: ${disponible}, Solicitado: ${cantidad}`
       );
     }
 
+    const comprometido = Number(existencia.comprometido || 0);
     existencia.comprometido = (comprometido + cantidad).toString();
-
     await this.stkExistenciaRepository.save(existencia);
   }
 
