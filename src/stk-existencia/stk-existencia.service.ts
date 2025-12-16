@@ -44,7 +44,7 @@ export class StkExistenciaService {
     await this.stkExistenciaRepository.remove(existencia);
   }
 
-  async reservarStock(item: string, cantidad: number, depositoPreferido?: string) {
+  async reservarStock(item: string, cantidad: number, depositoPreferido?: string): Promise<string> {
     // Si se especifica depósito, usar lógica actual
     if (depositoPreferido) {
       const existencia = await this.stkExistenciaRepository.findOne({
@@ -66,7 +66,7 @@ export class StkExistenciaService {
 
       existencia.comprometido = (comprometido + cantidad).toString();
       await this.stkExistenciaRepository.save(existencia);
-      return;
+      return depositoPreferido;
     }
 
     // Sin depósito especificado: buscar en todos
@@ -99,12 +99,26 @@ export class StkExistenciaService {
     const comprometido = Number(existencia.comprometido || 0);
     existencia.comprometido = (comprometido + cantidad).toString();
     await this.stkExistenciaRepository.save(existencia);
+    
+    return existencia.deposito; // 👈 Retornar el depósito usado
   }
 
-  async confirmarStock(item: string, cantidad: number, deposito: string) {
-    const existencia = await this.stkExistenciaRepository.findOne({
-      where: { item, deposito },
-    });
+  async confirmarStock(item: string, cantidad: number, deposito?: string) {
+    let existencia: StkExistencia | null;
+    
+    if (deposito) {
+      // Depósito específico
+      existencia = await this.stkExistenciaRepository.findOne({
+        where: { item, deposito },
+      });
+    } else {
+      // Buscar depósito con stock comprometido >= cantidad
+      const existencias = await this.stkExistenciaRepository.find({ where: { item } });
+      existencia = existencias
+        .filter(e => Number(e.comprometido || 0) >= cantidad)
+        .sort((a, b) => Number(b.comprometido || 0) - Number(a.comprometido || 0))[0] || null;
+    }
+    
     if (!existencia) throw new NotFoundException('Stock no encontrado');
 
     const comprometido = Number(existencia.comprometido || 0);
@@ -119,10 +133,22 @@ export class StkExistenciaService {
     await this.stkExistenciaRepository.save(existencia);
   }
 
-  async liberarStock(item: string, cantidad: number, deposito: string) {
-    const existencia = await this.stkExistenciaRepository.findOne({
-      where: { item, deposito },
-    });
+  async liberarStock(item: string, cantidad: number, deposito?: string) {
+    let existencia: StkExistencia | null;
+    
+    if (deposito) {
+      // Depósito específico
+      existencia = await this.stkExistenciaRepository.findOne({
+        where: { item, deposito },
+      });
+    } else {
+      // Buscar depósito con stock comprometido
+      const existencias = await this.stkExistenciaRepository.find({ where: { item } });
+      existencia = existencias
+        .filter(e => Number(e.comprometido || 0) > 0)
+        .sort((a, b) => Number(b.comprometido || 0) - Number(a.comprometido || 0))[0] || null;
+    }
+    
     if (!existencia) throw new NotFoundException('Stock no encontrado');
 
     const comprometido = Number(existencia.comprometido || 0);

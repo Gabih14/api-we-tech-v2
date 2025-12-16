@@ -74,7 +74,6 @@ export class PedidoService {
       await this.stockService.reservarStock(
         item.id,
         producto.cantidad,
-        'DEPOSITO',
       );
 
       productosValidados.push({
@@ -108,7 +107,7 @@ export class PedidoService {
       // Rollback: liberar stock y marcar pedido como cancelado
       for (const p of productosValidados) {
         try {
-          await this.stockService.liberarStock(p.nombre, p.cantidad, 'DEPOSITO');
+          await this.stockService.liberarStock(p.nombre, p.cantidad);
         } catch (e) {
           // log y continuar intentando liberar el resto
           console.error(`Error liberando stock de ${p.nombre}:`, e?.message || e);
@@ -334,7 +333,7 @@ export class PedidoService {
         pedido.aprobado = new Date();
 
         for (const p of pedido.productos) {
-          await this.stockService.confirmarStock(p.nombre, p.cantidad, 'DEPOSITO');
+          await this.stockService.confirmarStock(p.nombre, p.cantidad);
         }
 
         try {
@@ -365,7 +364,6 @@ export class PedidoService {
           await this.stockService.liberarStock(
             p.nombre,
             p.cantidad,
-            'DEPOSITO',
           );
         }
         break;
