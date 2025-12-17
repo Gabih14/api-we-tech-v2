@@ -74,7 +74,6 @@ export class PedidoService {
       await this.stockService.reservarStock(
         item.id,
         producto.cantidad,
-        'DEPOSITO',
       );
 
       productosValidados.push({
@@ -108,7 +107,7 @@ export class PedidoService {
       // Rollback: liberar stock y marcar pedido como cancelado
       for (const p of productosValidados) {
         try {
-          await this.stockService.liberarStock(p.nombre, p.cantidad, 'DEPOSITO');
+          await this.stockService.liberarStock(p.nombre, p.cantidad);
         } catch (e) {
           // log y continuar intentando liberar el resto
           console.error(`Error liberando stock de ${p.nombre}:`, e?.message || e);
@@ -307,16 +306,21 @@ export class PedidoService {
       where: { external_id: external_payment_id },
       relations: ['productos'],
     });
-    console.log('Pedido encontrado para notificación: ', pedido);
+    
+    // ✅ VALIDACIÓN: Si no existe el pedido, rechazar la notificación
     if (!pedido) {
-      console.warn(`⚠ Pedido con ID ${external_payment_id} no encontrado.`);
-      return;
+      console.error(`❌ Pedido con ID ${external_payment_id} no encontrado en esta base de datos.`);
+      throw new NotFoundException(
+        `Pedido ${external_payment_id} no encontrado. Posiblemente fue creado en otro ambiente.`
+      );
     }
+
+    console.log('Pedido encontrado para notificación: ', pedido);
 
     // Idempotencia: si ya fue procesado, no repetir
     if (pedido.estado !== 'PENDIENTE') {
       console.log(`ℹ Pedido ${pedido.external_id} ya procesado (${pedido.estado}).`);
-      return;
+      return { message: `Pedido ya procesado con estado: ${pedido.estado}`, estado: pedido.estado };
     }
 
     // Consultar estado real del pago en Nave
@@ -334,7 +338,7 @@ export class PedidoService {
         pedido.aprobado = new Date();
 
         for (const p of pedido.productos) {
-          await this.stockService.confirmarStock(p.nombre, p.cantidad, 'DEPOSITO');
+          await this.stockService.confirmarStock(p.nombre, p.cantidad);
         }
 
         try {
@@ -365,17 +369,21 @@ export class PedidoService {
           await this.stockService.liberarStock(
             p.nombre,
             p.cantidad,
-            'DEPOSITO',
           );
         }
         break;
 
       default:
-        // Mantener PENDIENTE sin cambios
+        console.log(`ℹ Estado ${estado} no requiere acción, manteniendo PENDIENTE`);
         break;
     }
 
     await this.pedidoRepo.save(pedido);
+    
+    return {
+      message: `Pedido ${pedido.external_id} procesado correctamente`,
+      estado: pedido.estado
+    };
   }
 
   async encontrarPorExternalId(externalId: string): Promise<Pedido | null> {

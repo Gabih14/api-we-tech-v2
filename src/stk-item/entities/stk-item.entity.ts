@@ -57,4 +57,7 @@ export class StkItem {
   @Column({ type: 'boolean', name: 'visible', nullable: true, default: true })
   visible: boolean | null;
 
+  @Column("blob", { name: "foto", nullable: true })
+  foto: Buffer | null;
+
 }
