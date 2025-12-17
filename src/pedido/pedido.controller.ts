@@ -26,36 +26,23 @@ export class PedidoController {
 
   @Post('nave-webhook')
   @AuthType('public')
-  @HttpCode(200)
   async recibirWebhook(@Body() body: any) {
     console.log('📩 Webhook Nave recibido:', body);
 
-    try {
-      console.log('Procesando notificación de Nave: ', body);
-      await this.pedidoService.procesarNotificacionDeNave(body);
-      return { message: 'Notificación recibida y procesada correctamente.' };
-    } catch (err) {
-      console.error('❌ Error procesando notificación Nave:', err.message);
-      return { message: `Error procesando webhook: ${err.message}` };
-    }
+    const resultado = await this.pedidoService.procesarNotificacionDeNave(body);
+    return resultado || { message: 'Notificación recibida y procesada correctamente.' };
   }
 
   @Post('nave-webhook/test')
   @AuthType('public')
-  @HttpCode(200)
   async testWebhook(@Body() body: any) {
     console.log('🧪 Webhook Nave TEST recibido:', body);
 
-    try {
-      await this.pedidoService.procesarNotificacionDeNave(body);
-      return { message: '[TEST] Notificación procesada correctamente.' };
-    } catch (err) {
-      console.error(
-        '❌ [TEST] Error procesando notificación Nave:',
-        err.message,
-      );
-      return { message: `[TEST] Error procesando webhook: ${err.message}` };
-    }
+    const resultado = await this.pedidoService.procesarNotificacionDeNave(body);
+    return {
+      ...resultado,
+      test: true
+    };
   }
 
   @Get(':externalId')

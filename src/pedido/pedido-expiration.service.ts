@@ -30,7 +30,7 @@ export class PedidoExpirationService {
     for (const pedido of pendientes) {
       try {
         for (const p of pedido.productos) {
-          await this.existenciaService.liberarStock(p.nombre, p.cantidad, 'DEPOSITO');
+          await this.existenciaService.liberarStock(p.nombre, p.cantidad);
         }
         pedido.estado = 'CANCELADO';
         await this.pedidoRepo.save(pedido);
