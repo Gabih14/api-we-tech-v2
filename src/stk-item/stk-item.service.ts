@@ -107,86 +107,67 @@ export class StkItemService {
   }
 
   async getCostoEnvio(distancia: number): Promise<any> {
-  // Helper de redondeo half-up
-  const halfUp = (n: number) => Math.floor(n + 0.5);
+    // Nueva lógica: tomar el precio del item según la distancia sin cálculos
+    // y si no existe ese item, redondear al siguiente más caro (mayor km) si existe.
+    const kmInicial = Math.ceil(distancia);
 
-  // Redondear la distancia hacia arriba
-  distancia = Math.ceil(distancia);
-  // Si la distancia es menor o igual a 4km, solo se cobra ENVIO HASTA 2KM
-  if (distancia <= 4) {
+    const findItemForKm = async (km: number) => {
+      const id = `ENV-${String(km).padStart(2, '0')}K-GM-DELIVERY`;
       const item = await this.stkItemRepository.findOne({
-        where: { id: 'ENVIO HASTA 2KM' },
+        where: { id },
         relations: ['stkPrecios', 'stkPrecios.moneda', 'stkExistencias', 'familia2'],
       });
-      if (!item) {
-        throw new NotFoundException(`Item con id ENVIO HASTA 2KM no encontrado`);
-      }
-      const precioMinorista = item.stkPrecios?.find((p) => p.lista === 'MINORISTA');
-      let precioVtaCotizadoMin: number | null = null;
-      if (precioMinorista) {
-        const v = parseFloat(precioMinorista.precioVta || '0');
-        const isDol = precioMinorista?.moneda?.id === 'DOL';
-        const cot = isDol ? parseFloat(precioMinorista?.moneda?.cotizacion || '1') : 1;
-        if (!isNaN(v) && !isNaN(cot)) {
-          precioVtaCotizadoMin = halfUp(v * cot);
+      return { id, item };
+    };
+
+    // Intentar con el km inicial y, si no existe, ir subiendo hasta encontrar el siguiente más caro
+    let elegidoId = '';
+    let elegidoItem: StkItem | null = null;
+
+    // Intento exacto
+    const exacto = await findItemForKm(kmInicial);
+    if (exacto.item) {
+      elegidoId = exacto.id;
+      elegidoItem = exacto.item;
+    } else {
+      // Buscar el siguiente disponible hacia arriba (límite de búsqueda para evitar loops largos)
+      const LIMITE_BUSQUEDA = 20;
+      for (let delta = 1; delta <= LIMITE_BUSQUEDA; delta++) {
+        const siguiente = await findItemForKm(kmInicial + delta);
+        if (siguiente.item) {
+          elegidoId = siguiente.id;
+          elegidoItem = siguiente.item;
+          break;
         }
       }
-      return {
-        ...item,
-        precioVtaCotizadoMin,
-        costoTotal: precioVtaCotizadoMin,
-        detalle: `Hasta 4km: ENVIO HASTA 2KM` 
-      };
     }
 
-    // Si la distancia es mayor a 4km, se cobra ENVIO HASTA 2KM + (km extra * ENVIO KM ADICIONAL)
-    const item4km = await this.stkItemRepository.findOne({
-      where: { id: 'ENVIO HASTA 2KM' },
-      relations: ['stkPrecios', 'stkPrecios.moneda'],
-    });
-    const itemMas1km = await this.stkItemRepository.findOne({
-      where: { id: 'ENVIO KM ADICIONAL' },
-      relations: ['stkPrecios', 'stkPrecios.moneda'],
-    });
-    if (!item4km || !itemMas1km) {
-      throw new NotFoundException(`No se encontró ENVIO HASTA 2KM o ENVIO KM ADICIONAL`);
+    if (!elegidoItem) {
+      throw new NotFoundException(
+        `No se encontró item de envío para ${kmInicial}km ni un siguiente más caro disponible`,
+      );
     }
-    // Precio base hasta 4km
-    const precioMinorista4km = item4km.stkPrecios?.find((p) => p.lista === 'MINORISTA');
-    const precioMinoristaMas1km = itemMas1km.stkPrecios?.find((p) => p.lista === 'MINORISTA');
-    let precioVta4km = 0;
-    let precioVtaMas1km = 0;
-    if (precioMinorista4km) {
-      const v = parseFloat(precioMinorista4km.precioVta || '0');
-      const isDol = precioMinorista4km?.moneda?.id === 'DOL';
-      const cot = isDol ? parseFloat(precioMinorista4km?.moneda?.cotizacion || '1') : 1;
-      if (!isNaN(v) && !isNaN(cot)) {
-        precioVta4km = halfUp(v * cot);
-      }
+
+    const precioMinorista = elegidoItem.stkPrecios?.find((p) => p.lista === 'MINORISTA');
+    if (!precioMinorista) {
+      throw new NotFoundException(`Precio MINORISTA no disponible para ${elegidoId}`);
     }
-    if (precioMinoristaMas1km) {
-      const v = parseFloat(precioMinoristaMas1km.precioVta || '0');
-      const isDol = precioMinoristaMas1km?.moneda?.id === 'DOL';
-      const cot = isDol ? parseFloat(precioMinoristaMas1km?.moneda?.cotizacion || '1') : 1;
-      if (!isNaN(v) && !isNaN(cot)) {
-        precioVtaMas1km = halfUp(v * cot);
-      }
-    }
-    const kmExtras = Math.ceil(distancia - 4);
-    const costoTotalBruto = precioVta4km + (kmExtras * precioVtaMas1km);
-    const costoTotal = halfUp(costoTotalBruto);
+
+    // Tomar el precio tal cual está definido en el item, sin cálculos adicionales
+    const precioVta = parseFloat(precioMinorista.precioVta || '0');
+    const isDol = precioMinorista?.moneda?.id === 'DOL';
+    const cotizacion = isDol ? parseFloat(precioMinorista?.moneda?.cotizacion || '1') : 1;
+    const costoTotal = !isNaN(precioVta) && !isNaN(cotizacion)
+      ? parseFloat((precioVta * cotizacion).toFixed(2))
+      : precioVta;
+
     return {
-      base: {
-        id: 'ENVIO HASTA 2KM',
-        precioVtaCotizadoMin: precioVta4km,
-      },
-      extra: {
-        id: 'ENVIO KM ADICIONAL',
-        precioVtaCotizadoMin: precioVtaMas1km,
-        cantidad: kmExtras,
-      },
+      itemId: elegidoId,
+      descripcion: (elegidoItem as any).descripcion,
+      lista: 'MINORISTA',
+      moneda: precioMinorista?.moneda?.id || null,
+      precioVta,
       costoTotal,
-      detalle: `Hasta 4km: ENVIO HASTA 2KM + ${kmExtras}km extra x ENVIO KM ADICIONAL`,
     };
   }
 }
