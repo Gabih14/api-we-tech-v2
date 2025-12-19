@@ -44,6 +44,7 @@ export class StkItemService {
 
       return {
         ...item,
+        fotoUrl: this.extractFotoUrl(item.foto),
         precioVtaCotizadoMin,
       };
     });
@@ -170,4 +171,13 @@ export class StkItemService {
       costoTotal,
     };
   }
+  private extractFotoUrl(foto: Buffer | null): string | null {
+  if (!foto) return null;
+
+  const text = foto.toString('utf8');
+  const match = text.match(/https?:\/\/[^\0]+/);
+
+  return match ? match[0] : null;
+}
+
 }
