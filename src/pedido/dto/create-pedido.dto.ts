@@ -84,4 +84,7 @@ export class CreatePedidoDto {
   @ValidateNested()
   @Type(() => BillingAddressDto)
   billing_address: BillingAddressDto;
+
+  @IsNumber()
+  costo_envio: number;
 }

@@ -91,6 +91,7 @@ export class PedidoService {
       cliente_mail: dto.email,
       external_id: externalId,
       total: dto.total,
+      costo_envio: dto.costo_envio,
       estado: 'PENDIENTE',
       productos: productosValidados,
     });
