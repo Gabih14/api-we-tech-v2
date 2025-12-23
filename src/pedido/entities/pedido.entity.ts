@@ -36,4 +36,12 @@ export class Pedido {
 
   @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
   costo_envio: number;
+
+  @Column({
+    type: 'enum',
+    enum: ['pickup', 'shipping'],
+    nullable: true,
+    default: 'pickup',
+  })
+  delivery_method: 'pickup' | 'shipping';
 }

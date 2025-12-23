@@ -92,6 +92,7 @@ export class PedidoService {
       external_id: externalId,
       total: dto.total,
       costo_envio: dto.costo_envio,
+      delivery_method: dto.tipo_envio,
       estado: 'PENDIENTE',
       productos: productosValidados,
     });
