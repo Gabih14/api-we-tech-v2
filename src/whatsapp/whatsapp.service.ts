@@ -5,28 +5,28 @@ import { ConfigService } from '@nestjs/config';
 export class WhatsappService {
   constructor(private configService: ConfigService) {}
 
-  async enviarMensaje(mensaje: string): Promise<void> {
-    const phone = this.configService.get<string>('WHATSAPP_PHONE');
-    const apiKey = this.configService.get<string>('WHATSAPP_API_KEY');
+  async enviarMensaje(mensaje: string, phone?: string, apiKey?: string): Promise<void> {
+    const phoneToUse = phone || this.configService.get<string>('WHATSAPP_PHONE');
+    const apiKeyToUse = apiKey || this.configService.get<string>('WHATSAPP_API_KEY');
 
-    if (!phone || !apiKey) {
+    if (!phoneToUse || !apiKeyToUse) {
       throw new InternalServerErrorException(
-        'Faltan variables de entorno para WhatsApp (WHATSAPP_PHONE, WHATSAPP_API_KEY)',
+        'Faltan variables de entorno para WhatsApp (phone y apiKey)',
       );
     }
 
     // Codificar el mensaje para URL
     const mensajeCodificado = encodeURIComponent(mensaje);
-    const url = `https://api.callmebot.com/whatsapp.php?phone=${phone}&text=${mensajeCodificado}&apikey=${apiKey}`;
+    const url = `https://api.callmebot.com/whatsapp.php?phone=${phoneToUse}&text=${mensajeCodificado}&apikey=${apiKeyToUse}`;
 
     try {
       const response = await fetch(url, { method: 'POST' });
-      
+
       if (!response.ok) {
         throw new Error(`Error HTTP: ${response.status}`);
       }
 
-      console.log(`✅ Mensaje de WhatsApp enviado a ${phone}`);
+      console.log(`✅ Mensaje de WhatsApp enviado a ${phoneToUse}`);
     } catch (err) {
       console.error(`❌ Error al enviar WhatsApp:`, err);
       throw new InternalServerErrorException(
@@ -40,17 +40,21 @@ export class WhatsappService {
       .map((p) => `• ${p.nombre} x${p.cantidad} - $${p.precio_unitario.toFixed(2)}`)
       .join('\n');
 
-    return `🛒 *Nuevo Pedido Aprobado*
 
-📋 *Cliente:* ${pedido.cliente_nombre}
-🆔 *CUIT:* ${pedido.cliente_cuit}
-📧 *Email:* ${pedido.cliente_mail}
 
-*Productos:*
-${productos}
 
-💰 *Total:* $${pedido.total.toFixed(2)}
 
-ID: ${pedido.external_id}`;
+      const ubicacion = pedido.cliente_ubicacion || 'No especificada';
+      const costoEnvio = (pedido.costo_envio != null) ? `$${Number(pedido.costo_envio).toFixed(2)}` : '$0.00';
+      const tipoEnvio = pedido.delivery_method || 'pickup';
+
+      return `🛒 *Nuevo Pedido Aprobado*\n\n📋 *Cliente:* ${pedido.cliente_nombre}\n🆔 *CUIT:* ${pedido.cliente_cuit}\n📧 *Email:* ${pedido.cliente_mail}\n\n📍 *Ubicación:* ${ubicacion}\n🚚 *Tipo envío:* ${tipoEnvio}\n💰 *Costo envío:* ${costoEnvio}\n\n*Productos:*\n${productos}\n\n💰 *Total:* $${pedido.total.toFixed(2)}\n\nID: ${pedido.external_id}`;
   }
+  
+    formatearMensajeParaDelivery(pedido: any): string {
+      const ubicacion = pedido.cliente_ubicacion || 'Sin ubicación proporcionada';
+      const costoEnvio = (pedido.costo_envio != null) ? `$${Number(pedido.costo_envio).toFixed(2)}` : 'No especificado';
+
+      return `🚚 *Nuevo Pedido para Delivery*\n\n📋 *Cliente:* ${pedido.cliente_nombre}\n📍 *Ubicación:* ${ubicacion}\n💰 *Costo envío:* ${costoEnvio}\n\nID: ${pedido.external_id}`;
+    }
 }
