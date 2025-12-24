@@ -44,4 +44,7 @@ export class Pedido {
     default: 'pickup',
   })
   delivery_method: 'pickup' | 'shipping';
+
+  @Column({ type: 'varchar', length: 512, nullable: true })
+  cliente_ubicacion: string;
 }
