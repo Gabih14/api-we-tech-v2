@@ -84,6 +84,9 @@ export class PedidoService {
     }
 
     const externalId = uuidv4().replace(/-/g, '');
+    const clienteUbicacion = dto.billing_address
+      ? `${dto.billing_address.street} ${dto.billing_address.number}, ${dto.billing_address.city}, ${dto.billing_address.region}, ${dto.billing_address.country}, ${dto.billing_address.postal_code}`
+      : `${dto.calle || ''} ${dto.ciudad || ''}`.trim();
 
     const pedido = this.pedidoRepo.create({
       cliente_cuit: dto.cliente_cuit,
@@ -91,6 +94,9 @@ export class PedidoService {
       cliente_mail: dto.email,
       external_id: externalId,
       total: dto.total,
+      costo_envio: dto.costo_envio,
+      delivery_method: dto.tipo_envio,
+      cliente_ubicacion: clienteUbicacion,
       estado: 'PENDIENTE',
       productos: productosValidados,
     });
@@ -359,6 +365,20 @@ export class PedidoService {
           console.error(`❌ Error al enviar WhatsApp:`, err);
           // No lanzar error para que no afecte el flujo principal
         }
+
+        // ✅ Notificar al servicio de delivery (teléfono y apiKey desde env)
+        try {
+          const mensajeDelivery = this.whatsappService.formatearMensajeParaDelivery(pedido);
+          const deliveryPhone = this.configService.get<string>('DELIVERY_WHATSAPP_PHONE');
+          const deliveryApiKey = this.configService.get<string>('DELIVERY_WHATSAPP_API_KEY');
+          if (deliveryPhone && deliveryApiKey) {
+            await this.whatsappService.enviarMensaje(mensajeDelivery, deliveryPhone, deliveryApiKey);
+          } else {
+            console.warn('No se enviará WhatsApp a delivery: faltan DELIVERY_WHATSAPP_PHONE o DELIVERY_WHATSAPP_API_KEY');
+          }
+        } catch (err) {
+          console.error(`❌ Error al enviar WhatsApp a delivery:`, err);
+        }
         break;
 
       case 'REJECTED':
@@ -444,6 +464,9 @@ export class PedidoService {
       <div style="margin: 16px 0; font-size: 14px; color: #555;">
         <div><strong>Cliente:</strong> ${pedido.cliente_nombre}</div>
         <div><strong>CUIT:</strong> ${pedido.cliente_cuit}</div>
+        <div><strong>Ubicación:</strong> ${pedido.cliente_ubicacion || 'No especificada'}</div>
+        <div><strong>Tipo de envío:</strong> ${pedido.delivery_method || 'pickup'}</div>
+        <div><strong>Costo de envío:</strong> $${pedido.costo_envio != null ? Number(pedido.costo_envio).toFixed(2) : '0.00'}</div>
       </div>
 
       <!-- Productos -->

@@ -33,4 +33,18 @@ export class Pedido {
 
   @Column()
   cliente_mail: string;
+
+  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
+  costo_envio: number;
+
+  @Column({
+    type: 'enum',
+    enum: ['pickup', 'shipping'],
+    nullable: true,
+    default: 'pickup',
+  })
+  delivery_method: 'pickup' | 'shipping';
+
+  @Column({ type: 'varchar', length: 512, nullable: true })
+  cliente_ubicacion: string;
 }

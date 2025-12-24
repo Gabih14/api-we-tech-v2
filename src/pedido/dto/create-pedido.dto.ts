@@ -4,6 +4,7 @@ import {
   IsNotEmpty,
   IsNumber,
   IsString,
+  IsIn,
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -84,4 +85,11 @@ export class CreatePedidoDto {
   @ValidateNested()
   @Type(() => BillingAddressDto)
   billing_address: BillingAddressDto;
+
+  @IsString()
+  @IsIn(['pickup', 'shipping'])
+  tipo_envio: 'pickup' | 'shipping';
+
+  @IsNumber()
+  costo_envio: number;
 }
