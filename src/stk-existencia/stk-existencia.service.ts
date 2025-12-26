@@ -45,6 +45,11 @@ export class StkExistenciaService {
   }
 
   async reservarStock(item: string, cantidad: number, depositoPreferido?: string): Promise<string> {
+    // 🚚 Items de envío (ENV-*) no requieren validación de depósito
+    if (item.startsWith('ENV')) {
+      return 'ENV'; // Retornar depósito virtual para items de envío
+    }
+
     // Si se especifica depósito, usar lógica actual
     if (depositoPreferido) {
       const existencia = await this.stkExistenciaRepository.findOne({
@@ -104,6 +109,11 @@ export class StkExistenciaService {
   }
 
   async confirmarStock(item: string, cantidad: number, deposito?: string) {
+    // 🚚 Items de envío (ENV-*) no requieren confirmación de stock
+    if (item.startsWith('ENV')) {
+      return; // Sin operación para items de envío
+    }
+
     let existencia: StkExistencia | null;
     
     if (deposito) {
@@ -134,6 +144,11 @@ export class StkExistenciaService {
   }
 
   async liberarStock(item: string, cantidad: number, deposito?: string) {
+    // 🚚 Items de envío (ENV-*) no requieren liberación de stock
+    if (item.startsWith('ENV')) {
+      return; // Sin operación para items de envío
+    }
+
     let existencia: StkExistencia | null;
     
     if (deposito) {
