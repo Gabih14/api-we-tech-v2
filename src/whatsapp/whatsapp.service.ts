@@ -47,14 +47,17 @@ export class WhatsappService {
       const ubicacion = pedido.cliente_ubicacion || 'No especificada';
       const costoEnvio = (pedido.costo_envio != null) ? `$${Number(pedido.costo_envio).toFixed(2)}` : '$0.00';
       const tipoEnvio = pedido.delivery_method || 'pickup';
+      const observaciones = pedido.observaciones_direccion ? `\n📝 *Observaciones:* ${pedido.observaciones_direccion}` : '';
 
-      return `🛒 *Nuevo Pedido Aprobado*\n\n📋 *Cliente:* ${pedido.cliente_nombre}\n🆔 *CUIT:* ${pedido.cliente_cuit}\n📧 *Email:* ${pedido.cliente_mail}\n\n📍 *Ubicación:* ${ubicacion}\n🚚 *Tipo envío:* ${tipoEnvio}\n💰 *Costo envío:* ${costoEnvio}\n\n*Productos:*\n${productos}\n\n💰 *Total:* $${pedido.total.toFixed(2)}\n\nID: ${pedido.external_id}`;
+
+      return `🛒 *Nuevo Pedido Aprobado*\n\n📋 *Cliente:* ${pedido.cliente_nombre}\n🆔 *CUIT:* ${pedido.cliente_cuit}\n📧 *Email:* ${pedido.cliente_mail}\n\n📍 *Ubicación:* ${ubicacion}${observaciones}\n🚚 *Tipo envío:* ${tipoEnvio}\n💰 *Costo envío:* ${costoEnvio}\n\n*Productos:*\n${productos}\n\n💰 *Total:* $${pedido.total.toFixed(2)}\n\nID: ${pedido.external_id}`;
   }
   
     formatearMensajeParaDelivery(pedido: any): string {
       const ubicacion = pedido.cliente_ubicacion || 'Sin ubicación proporcionada';
       const costoEnvio = (pedido.costo_envio != null) ? `$${Number(pedido.costo_envio).toFixed(2)}` : 'No especificado';
+      const observaciones = pedido.observaciones_direccion ? `\n📝 *Observaciones:* ${pedido.observaciones_direccion}` : '';
 
-      return `🚚 *Nuevo Pedido para Delivery*\n\n📋 *Cliente:* ${pedido.cliente_nombre}\n📍 *Ubicación:* ${ubicacion}\n💰 *Costo envío:* ${costoEnvio}\n\nID: ${pedido.external_id}`;
+      return `🚚 *Nuevo Pedido para Delivery*\n\n📋 *Cliente:* ${pedido.cliente_nombre}\n📍 *Ubicación:* ${ubicacion}${observaciones}\n💰 *Costo envío:* ${costoEnvio}\n\nID: ${pedido.external_id}`;
     }
 }
