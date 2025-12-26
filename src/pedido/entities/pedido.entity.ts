@@ -47,4 +47,7 @@ export class Pedido {
 
   @Column({ type: 'varchar', length: 512, nullable: true })
   cliente_ubicacion: string;
+
+  @Column({ type: 'text', nullable: true })
+  observaciones_direccion: string | null;
 }

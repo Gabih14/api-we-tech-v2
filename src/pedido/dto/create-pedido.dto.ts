@@ -92,4 +92,7 @@ export class CreatePedidoDto {
 
   @IsNumber()
   costo_envio: number;
+
+  @IsString()
+  observaciones?: string;
 }

@@ -97,6 +97,7 @@ export class PedidoService {
       costo_envio: dto.costo_envio,
       delivery_method: dto.tipo_envio,
       cliente_ubicacion: clienteUbicacion,
+      observaciones_direccion: dto.observaciones || null,
       estado: 'PENDIENTE',
       productos: productosValidados,
     });
