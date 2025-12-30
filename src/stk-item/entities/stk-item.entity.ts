@@ -54,8 +54,17 @@ export class StkItem {
   @OneToMany(() => StkPrecio, (stkPrecio) => stkPrecio.item2)
   stkPrecios: StkPrecio[];
 
-  @Column({ type: 'boolean', name: 'visible', nullable: true, default: true })
-  visible: boolean | null;
+@Column({
+  type: 'bit',
+  width: 1,
+  nullable: true,
+  transformer: {
+    to: (value: boolean) => (value ? 1 : 0),
+    from: (value: Buffer) => value?.[0] === 1,
+  },
+})
+visible: boolean;
+
 
   @Column("blob", { name: "foto", nullable: true })
   foto: Buffer | null;
