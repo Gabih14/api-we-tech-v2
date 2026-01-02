@@ -54,6 +54,9 @@ export class WhatsappService {
   }
   
     formatearMensajeParaDelivery(pedido: any): string {
+      const productos = pedido.productos
+      .map((p) => `• ${p.nombre} x${p.cantidad} - $${p.precio_unitario.toFixed(2)}`)
+      .join('\n');
       const ubicacion = pedido.cliente_ubicacion || 'Sin ubicación proporcionada';
       const costoEnvio = (pedido.costo_envio != null) ? `$${Number(pedido.costo_envio).toFixed(2)}` : 'No especificado';
       const observaciones = pedido.observaciones_direccion ? `\n📝 *Observaciones:* ${pedido.observaciones_direccion}` : '';

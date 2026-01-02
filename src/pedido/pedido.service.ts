@@ -386,17 +386,19 @@ export class PedidoService {
         }
 
         // ✅ Notificar al servicio de delivery (teléfono y apiKey desde env)
-        try {
-          const mensajeDelivery = this.whatsappService.formatearMensajeParaDelivery(pedido);
-          const deliveryPhone = this.configService.get<string>('DELIVERY_WHATSAPP_PHONE');
-          const deliveryApiKey = this.configService.get<string>('DELIVERY_WHATSAPP_API_KEY');
-          if (deliveryPhone && deliveryApiKey) {
-            await this.whatsappService.enviarMensaje(mensajeDelivery, deliveryPhone, deliveryApiKey);
-          } else {
-            console.warn('No se enviará WhatsApp a delivery: faltan DELIVERY_WHATSAPP_PHONE o DELIVERY_WHATSAPP_API_KEY');
+        if (pedido.delivery_method === 'shipping') {
+          try {
+            const mensajeDelivery = this.whatsappService.formatearMensajeParaDelivery(pedido);
+            const deliveryPhone = this.configService.get<string>('DELIVERY_WHATSAPP_PHONE');
+            const deliveryApiKey = this.configService.get<string>('DELIVERY_WHATSAPP_API_KEY');
+            if (deliveryPhone && deliveryApiKey) {
+              await this.whatsappService.enviarMensaje(mensajeDelivery, deliveryPhone, deliveryApiKey);
+            } else {
+              console.warn('No se enviará WhatsApp a delivery: faltan DELIVERY_WHATSAPP_PHONE o DELIVERY_WHATSAPP_API_KEY');
+            }
+          } catch (err) {
+            console.error(`❌ Error al enviar WhatsApp a delivery:`, err);
           }
-        } catch (err) {
-          console.error(`❌ Error al enviar WhatsApp a delivery:`, err);
         }
         break;
 
