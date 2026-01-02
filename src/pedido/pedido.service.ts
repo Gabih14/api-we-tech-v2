@@ -6,6 +6,7 @@ import {
   NotFoundException,
   InternalServerErrorException,
   BadRequestException,
+  ConflictException,
   HttpException,
   HttpStatus,
 } from '@nestjs/common';
@@ -326,7 +327,7 @@ export class PedidoService {
     console.log('Pedido encontrado para notificación: ', pedido);
 
     // Idempotencia: si ya fue procesado, no repetir
-    if (pedido.estado !== 'PENDIENTE') {
+    if (pedido.estado !== 'PENDIENTE' && pedido.estado !== 'CANCELADO') {
       console.log(`ℹ Pedido ${pedido.external_id} ya procesado (${pedido.estado}).`);
       return { message: `Pedido ya procesado con estado: ${pedido.estado}`, estado: pedido.estado };
     }
@@ -342,6 +343,22 @@ export class PedidoService {
 
     switch (estado) {
       case 'APPROVED':
+        // Si el pedido estaba cancelado, intentamos reservar stock nuevamente
+        if (pedido.estado === 'CANCELADO') {
+             console.log(`🔄 Pedido ${pedido.external_id} estaba CANCELADO. Re-reservando stock...`);
+             for (const p of pedido.productos) {
+                try {
+                   await this.stockService.reservarStock(p.nombre, p.cantidad);
+                } catch (error) {
+                   console.error(`❌ Error re-reservando stock para ${p.nombre}:`, error);
+                   // Si falla la reserva, no podemos aprobar el pedido. 
+                   // Dejamos el estado como CANCELADO o lanzamos error para reintentar?
+                   // Al lanzar error, Nave reintentará la notificación.
+                    throw new ConflictException(`No hay stock disponible para reactivar el pedido ${pedido.external_id}`);
+                }
+             }
+        }
+
         pedido.estado = 'APROBADO';
         pedido.aprobado = new Date();
 
