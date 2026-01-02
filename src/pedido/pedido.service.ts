@@ -78,6 +78,7 @@ export class PedidoService {
 
       productosValidados.push({
         nombre: producto.nombre,
+        descripcion: item.descripcion,
         cantidad: producto.cantidad,
         precio_unitario: producto.precio_unitario,
       } as PedidoItem);
