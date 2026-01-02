@@ -10,6 +10,9 @@ export class PedidoItem {
     @Column()
     nombre: string;
 
+    @Column({ nullable: true })
+    descripcion: string;
+
     @Column()
     cantidad: number;
 
