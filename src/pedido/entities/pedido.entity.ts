@@ -37,6 +37,13 @@ export class Pedido {
   @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
   costo_envio: number;
 
+  // Información de cupón aplicado
+  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
+  descuento_cupon: number | null;
+
+  @Column({ type: 'varchar', length: 64, nullable: true })
+  codigo_cupon: string | null;
+
   @Column({
     type: 'enum',
     enum: ['pickup', 'shipping'],

@@ -97,6 +97,8 @@ export class PedidoService {
       external_id: externalId,
       total: dto.total,
       costo_envio: dto.costo_envio,
+      descuento_cupon: dto.descuento_cupon ?? null,
+      codigo_cupon: dto.codigo_cupon ?? null,
       delivery_method: dto.tipo_envio,
       cliente_ubicacion: clienteUbicacion,
       observaciones_direccion: dto.observaciones || null,
