@@ -5,6 +5,7 @@ import {
   IsNumber,
   IsString,
   IsIn,
+  IsOptional,
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -95,4 +96,13 @@ export class CreatePedidoDto {
 
   @IsString()
   observaciones?: string;
+
+  // Opcionales para cupones de descuento
+  @IsOptional()
+  @IsNumber()
+  descuento_cupon?: number;
+
+  @IsOptional()
+  @IsString()
+  codigo_cupon?: string;
 }
