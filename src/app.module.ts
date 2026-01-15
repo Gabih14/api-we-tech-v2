@@ -16,6 +16,8 @@ import { VtaComprobanteItemModule } from './vta-comprobante-item/vta-comprobante
 import { MapsModule } from './maps/maps.module';
 import { MailerModule } from './mailer/mailer.module';
 import { VtaClienteModule } from './vta_cliente/vta_cliente.module';
+import { CuponModule } from './cupon/cupon.module';
+import { CuponUsoModule } from './cupon_uso/cupon_uso.module';
 
 @Module({
   imports: [
@@ -71,6 +73,8 @@ import { VtaClienteModule } from './vta_cliente/vta_cliente.module';
     VtaClienteModule,
     // Scheduler para tareas periódicas (expiración de pedidos, etc.)
     ScheduleModule.forRoot(),
+    CuponModule,
+    CuponUsoModule,
   ],
 })
 export class AppModule {}
