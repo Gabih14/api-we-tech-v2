@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { CreateCuponDto } from './dto/create-cupon.dto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Cupon } from './entities/cupon.entity';
@@ -8,7 +12,7 @@ import { CreateCuponUsoDto } from 'src/cupon_uso/dto/create-cupon_uso.dto';
 
 @Injectable()
 export class CuponService {
- constructor(
+  constructor(
     @InjectRepository(Cupon, 'back')
     private cuponRepository: Repository<Cupon>,
     @InjectRepository(CuponUso, 'back')
@@ -18,7 +22,7 @@ export class CuponService {
   // Crear nuevo cupón
   async crear(crearCuponDto: CreateCuponDto): Promise<Cupon> {
     const cuponExistente = await this.cuponRepository.findOne({
-      where: { id: crearCuponDto.id }
+      where: { id: crearCuponDto.id },
     });
 
     if (cuponExistente) {
@@ -33,7 +37,7 @@ export class CuponService {
   async buscarPorId(id: string): Promise<Cupon> {
     const cupon = await this.cuponRepository.findOne({
       where: { id, activo: true },
-      relations: ['usos']
+      relations: ['usos'],
     });
 
     if (!cupon) {
@@ -59,7 +63,7 @@ export class CuponService {
     // Validar usos totales
     if (cupon.max_usos) {
       const usosTotales = await this.cuponUsoRepository.count({
-        where: { cuponId: cupon.id }
+        where: { cuponId: cupon.id },
       });
 
       if (usosTotales >= cupon.max_usos) {
@@ -70,14 +74,16 @@ export class CuponService {
     // Validar usos por CUIT
     if (cupon.maxUsosPorCuit) {
       const usosPorCuit = await this.cuponUsoRepository.count({
-        where: { 
+        where: {
           cuponId: cupon.id,
-          cuit: usarCuponDto.cuit 
-        }
+          cuit: usarCuponDto.cuit,
+        },
       });
 
       if (usosPorCuit >= cupon.maxUsosPorCuit) {
-        throw new BadRequestException('Has alcanzado el límite de usos para este cupón');
+        throw new BadRequestException(
+          'Has alcanzado el límite de usos para este cupón',
+        );
       }
     }
 
@@ -86,7 +92,7 @@ export class CuponService {
       cuponId: cupon.id,
       cuit: usarCuponDto.cuit,
       pedidoId: usarCuponDto.pedido_id,
-      usadoEn: new Date()
+      usadoEn: new Date(),
     });
 
     return await this.cuponUsoRepository.save(cuponUso);
@@ -96,7 +102,7 @@ export class CuponService {
   async listarActivos(): Promise<Cupon[]> {
     return await this.cuponRepository.find({
       where: { activo: true },
-      order: { fechaDesde: 'DESC' }
+      order: { fechaDesde: 'DESC' },
     });
   }
 
@@ -110,16 +116,16 @@ export class CuponService {
   // Obtener estadísticas de uso
   async obtenerEstadisticas(id: string): Promise<any> {
     const cupon = await this.buscarPorId(id);
-    
+
     const usos = await this.cuponUsoRepository.find({
-      where: { cuponId: id }
+      where: { cuponId: id },
     });
 
     return {
       cupon,
       totalUsos: usos.length,
       usosPorCuit: this.contarUsosPorCuit(usos),
-      ultimosUsos: usos.slice(-5).reverse()
+      ultimosUsos: usos.slice(-5).reverse(),
     };
   }
 

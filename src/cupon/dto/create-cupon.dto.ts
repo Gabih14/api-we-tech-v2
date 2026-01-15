@@ -3,8 +3,11 @@ import {
   IsBoolean,
   IsDate,
   IsInt,
+  IsNumber,
   IsOptional,
   IsString,
+  Max,
+  Min,
 } from 'class-validator';
 
 export class CreateCuponDto {
@@ -23,6 +26,12 @@ export class CreateCuponDto {
   @IsOptional()
   @IsInt()
   maxUsosPorCuit?: number;
+
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0.01)
+  @Max(100)
+  porcentajeDescuento?: number;
 
   @IsOptional()
   @IsDate()
