@@ -1,6 +1,7 @@
 // src/vta-comprobante/entities/vta-comprobante.entity.ts
+import { Entity, Column, PrimaryColumn, OneToMany, ManyToMany, JoinTable } from 'typeorm';
 import { VtaComprobanteItem } from 'src/vta-comprobante-item/entities/vta-comprobante-item.entity';
-import { Entity, Column, PrimaryColumn, OneToMany } from 'typeorm';
+import { CntAsiento } from 'src/cnt-asiento/entities/cnt-asiento.entity';
 
 @Entity({ name: 'vta_comprobante' })
 export class VtaComprobante {
@@ -52,4 +53,22 @@ export class VtaComprobante {
   @OneToMany(() => VtaComprobanteItem, (item) => item.comprobanteRef, { cascade: true })
   items: VtaComprobanteItem[];
 
+  /**
+   * Join table: vta_comprobante_asiento
+   * PK en tabla: (tipo, comprobante, ejercicio, asiento)
+   * FK hacia cnt_asiento: (ejercicio, asiento)->(ejercicio, id)
+   */
+  @ManyToMany(() => CntAsiento, (a) => a.vtaComprobantes)
+  @JoinTable({
+    name: 'vta_comprobante_asiento',
+    joinColumns: [
+      { name: 'tipo', referencedColumnName: 'tipo' },
+      { name: 'comprobante', referencedColumnName: 'comprobante' },
+    ],
+    inverseJoinColumns: [
+      { name: 'ejercicio', referencedColumnName: 'ejercicio' },
+      { name: 'asiento', referencedColumnName: 'id' },
+    ],
+  })
+  cntAsientos: CntAsiento[];
 }

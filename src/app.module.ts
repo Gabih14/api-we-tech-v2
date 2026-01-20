@@ -18,6 +18,8 @@ import { MailerModule } from './mailer/mailer.module';
 import { VtaClienteModule } from './vta_cliente/vta_cliente.module';
 import { CuponModule } from './cupon/cupon.module';
 import { CuponUsoModule } from './cupon_uso/cupon_uso.module';
+import { CntAsientoModule } from './cnt-asiento/cnt-asiento.module';
+import { CntMovimientoModule } from './cnt-movimiento/cnt-movimiento.module';
 
 @Module({
   imports: [
@@ -75,6 +77,8 @@ import { CuponUsoModule } from './cupon_uso/cupon_uso.module';
     ScheduleModule.forRoot(),
     CuponModule,
     CuponUsoModule,
+    CntAsientoModule,
+    CntMovimientoModule,
   ],
 })
 export class AppModule {}
