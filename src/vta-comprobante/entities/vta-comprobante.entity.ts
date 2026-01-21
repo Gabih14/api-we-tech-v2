@@ -1,7 +1,8 @@
 // src/vta-comprobante/entities/vta-comprobante.entity.ts
-import { Entity, Column, PrimaryColumn, OneToMany, ManyToMany, JoinTable } from 'typeorm';
+import { Entity, Column, PrimaryColumn, OneToMany } from 'typeorm';
 import { VtaComprobanteItem } from 'src/vta-comprobante-item/entities/vta-comprobante-item.entity';
-import { CntAsiento } from 'src/cnt-asiento/entities/cnt-asiento.entity';
+import { VtaComprobanteAsiento } from 'src/vta_comprobante_asiento/entities/vta_comprobante_asiento.entity';
+import { bitToBoolTransformer } from 'src/common/transformers/bit-to-bool.transformer';
 
 @Entity({ name: 'vta_comprobante' })
 export class VtaComprobante {
@@ -44,31 +45,16 @@ export class VtaComprobante {
   @Column({ type: 'varchar', length: 20, nullable: true })
   estado: string;
 
-  @Column({ type: 'bit', nullable: true })
+  @Column({ type: 'bit', width: 1, nullable: true, transformer: bitToBoolTransformer })
   mail: boolean;
 
-  @Column({ type: 'bit', nullable: true })
+  @Column({ type: 'bit', width: 1, nullable: true, transformer: bitToBoolTransformer })
   visible: boolean;
 
   @OneToMany(() => VtaComprobanteItem, (item) => item.comprobanteRef, { cascade: true })
   items: VtaComprobanteItem[];
 
-  /**
-   * Join table: vta_comprobante_asiento
-   * PK en tabla: (tipo, comprobante, ejercicio, asiento)
-   * FK hacia cnt_asiento: (ejercicio, asiento)->(ejercicio, id)
-   */
-  @ManyToMany(() => CntAsiento, (a) => a.vtaComprobantes)
-  @JoinTable({
-    name: 'vta_comprobante_asiento',
-    joinColumns: [
-      { name: 'tipo', referencedColumnName: 'tipo' },
-      { name: 'comprobante', referencedColumnName: 'comprobante' },
-    ],
-    inverseJoinColumns: [
-      { name: 'ejercicio', referencedColumnName: 'ejercicio' },
-      { name: 'asiento', referencedColumnName: 'id' },
-    ],
-  })
-  cntAsientos: CntAsiento[];
+  // ✅ Link a asientos contables (tabla puente)
+  @OneToMany(() => VtaComprobanteAsiento, (vca) => vca.comprobanteRef)
+  asientosLink: VtaComprobanteAsiento[];
 }

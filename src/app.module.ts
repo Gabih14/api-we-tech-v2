@@ -20,6 +20,7 @@ import { CuponModule } from './cupon/cupon.module';
 import { CuponUsoModule } from './cupon_uso/cupon_uso.module';
 import { CntAsientoModule } from './cnt-asiento/cnt-asiento.module';
 import { CntMovimientoModule } from './cnt-movimiento/cnt-movimiento.module';
+import { VtaComprobanteAsientoModule } from './vta_comprobante_asiento/vta_comprobante_asiento.module';
 
 @Module({
   imports: [
@@ -79,6 +80,7 @@ import { CntMovimientoModule } from './cnt-movimiento/cnt-movimiento.module';
     CuponUsoModule,
     CntAsientoModule,
     CntMovimientoModule,
+    VtaComprobanteAsientoModule,
   ],
 })
 export class AppModule {}

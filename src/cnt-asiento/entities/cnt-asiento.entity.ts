@@ -1,8 +1,8 @@
 // src/cnt-asiento/entities/cnt-asiento.entity.ts
-import { Entity, Column, PrimaryColumn, OneToMany, ManyToMany } from 'typeorm';
+import { Entity, Column, PrimaryColumn, OneToMany } from 'typeorm';
 import { bitToBoolTransformer } from 'src/common/transformers/bit-to-bool.transformer';
 import { CntMovimiento } from 'src/cnt-movimiento/entities/cnt-movimiento.entity';
-import { VtaComprobante } from 'src/vta-comprobante/entities/vta-comprobante.entity';
+import { VtaComprobanteAsiento } from 'src/vta_comprobante_asiento/entities/vta_comprobante_asiento.entity';
 
 @Entity({ name: 'cnt_asiento' })
 export class CntAsiento {
@@ -15,7 +15,6 @@ export class CntAsiento {
   @Column({ type: 'int' })
   numero: number;
 
-  // en DB es DATE (no datetime)
   @Column({ type: 'date' })
   fecha: string;
 
@@ -49,12 +48,7 @@ export class CntAsiento {
   @Column({ type: 'varchar', length: 5, nullable: true })
   moneda: string | null;
 
-  @Column({
-    type: 'decimal',
-    precision: 10,
-    scale: 4,
-    default: () => "'1.0000'",
-  })
+  @Column({ type: 'decimal', precision: 10, scale: 4, default: () => "'1.0000'" })
   cotizacion: string;
 
   @Column({ type: 'varchar', length: 20, nullable: true })
@@ -69,30 +63,16 @@ export class CntAsiento {
   @Column({ type: 'int', nullable: true })
   asiento_union: number | null;
 
-  @Column({
-    type: 'bit',
-    width: 1,
-    default: () => "b'0'",
-    transformer: bitToBoolTransformer,
-  })
+  @Column({ type: 'bit', width: 1, default: () => "b'0'", transformer: bitToBoolTransformer })
   union_asiento: boolean;
 
-  @Column({
-    type: 'bit',
-    width: 1,
-    default: () => "b'1'",
-    transformer: bitToBoolTransformer,
-  })
+  @Column({ type: 'bit', width: 1, default: () => "b'1'", transformer: bitToBoolTransformer })
   visible: boolean;
 
-  // FK: cnt_movimiento (ejercicio, asiento) -> cnt_asiento (ejercicio, id)
   @OneToMany(() => CntMovimiento, (m) => m.asientoRef)
   movimientos: CntMovimiento[];
 
-  /**
-   * Relación inversa del JoinTable "vta_comprobante_asiento".
-   * El JoinTable está definido del lado de VtaComprobante (como en tu export).
-   */
-  @ManyToMany(() => VtaComprobante, (vc) => vc.cntAsientos)
-  vtaComprobantes: VtaComprobante[];
+  // ✅ relación con la tabla puente
+  @OneToMany(() => VtaComprobanteAsiento, (vca) => vca.asientoRef)
+  vtaLinks: VtaComprobanteAsiento[];
 }
