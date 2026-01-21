@@ -14,5 +14,6 @@ import { TypeOrmModule } from '@nestjs/typeorm';
     ),],
   controllers: [VtaComprobanteAsientoController],
   providers: [VtaComprobanteAsientoService],
+  exports: [VtaComprobanteAsientoService, TypeOrmModule],
 })
 export class VtaComprobanteAsientoModule { }
