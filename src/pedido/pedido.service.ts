@@ -140,11 +140,34 @@ export class PedidoService {
     const paymentUrl = this.configService.get<string>('NAVE_PAYMENT_URL');
     const callbackBase = this.configService.get<string>('CALLBACK_URL');
 
+    console.log('💳 Generando intención de pago...');
+    console.log('POS ID:', pos_id);
+    console.log('Payment URL:', paymentUrl);
+
     if (!pos_id || !paymentUrl) {
       throw new InternalServerErrorException(
         'Faltan variables de entorno para Nave',
       );
     }
+
+    // 🔧 Limpiar y validar DNI
+    const rawCuit = dto.cliente_cuit.replace(/\D/g, ''); // Solo números
+    const docNumber = rawCuit.length === 11 ? rawCuit.slice(2, -1) : rawCuit.slice(0, 8);
+    
+    console.log('📋 CUIT original:', dto.cliente_cuit);
+    console.log('📋 DNI extraído:', docNumber);
+
+    // 🔧 Validar billing_address y usar valores por defecto si están vacíos
+    const billingAddress = {
+      street_1: dto.billing_address?.street || 'N/A',
+      street_2: dto.billing_address?.number || 'N/A',
+      city: dto.billing_address?.city || 'N/A',
+      region: dto.billing_address?.region || dto.region || 'N/A',
+      country: dto.billing_address?.country || dto.pais || 'AR',
+      zipcode: dto.billing_address?.postal_code || dto.codigo_postal || '0000',
+    };
+
+    console.log('📍 Billing address procesado:', billingAddress);
 
     const body = {
       external_payment_id: dto.external_id,
@@ -165,23 +188,19 @@ export class PedidoService {
       ],
       buyer: {
         doc_type: 'DNI',
-        doc_number: dto.cliente_cuit.slice(2, -1), // Quita los primeros 2 y el último dígito
+        doc_number: docNumber,
         name: dto.cliente_nombre,
         user_email: dto.email,
-        billing_address: {
-          street_1: dto.billing_address.street,
-          street_2: dto.billing_address.number,
-          city: dto.billing_address.city,
-          region: dto.billing_address.region,
-          country: dto.billing_address.country,
-          zipcode: dto.billing_address.postal_code,
-        },
+        user_id: docNumber, // ÚLTIMO AGREGADO
+        billing_address: billingAddress,
       },
       additional_info: {
         callback_url: `${callbackBase}?order_id=${dto.external_id}`,
       },
       duration_time: 3000,
     };
+
+    console.log('📦 Body completo a enviar:', JSON.stringify(body, null, 2));
 
     let response: Response;
     try {
@@ -193,9 +212,8 @@ export class PedidoService {
         },
         body: JSON.stringify(body),
       });
-      console.log('📡 Respuesta de Nave(intención de pago):', response.status, response.statusText, response);
+      console.log('📡 Respuesta de Nave (intención de pago):', response.status, response.statusText);
     } catch (error: any) {
-      // Fallo de red / Nave caído
       console.error('❌ Error de red al conectar con Nave:', error.message);
       throw new HttpException(
         {
@@ -210,7 +228,9 @@ export class PedidoService {
     let result: any;
     try {
       result = await response.json();
+      console.log('📦 Respuesta completa de Nave:', JSON.stringify(result, null, 2));
     } catch {
+      console.error('❌ Respuesta no es JSON válido');
       throw new HttpException(
         {
           code: 'ERR_NAVE_INVALID_RESPONSE',
@@ -222,6 +242,11 @@ export class PedidoService {
     }
 
     if (!response.ok) {
+      console.error('❌ Error de Nave:', {
+        status: response.status,
+        body: result
+      });
+      
       throw new HttpException(
         {
           code: 'ERR_NAVE_BAD_RESPONSE',
@@ -235,6 +260,7 @@ export class PedidoService {
 
     const url = result?.redirect_to || result?.checkout_url;
     if (!url) {
+      console.error('❌ No se encontró URL de redirección en:', result);
       throw new HttpException(
         {
           code: 'ERR_NAVE_NO_URL',
@@ -245,6 +271,7 @@ export class PedidoService {
       );
     }
 
+    console.log('✅ URL de pago generada exitosamente');
     return url;
   }
 
