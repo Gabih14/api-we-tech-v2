@@ -193,8 +193,10 @@ export class PedidoService {
         },
         body: JSON.stringify(body),
       });
+      console.log('📡 Respuesta de Nave(intención de pago):', response.status, response.statusText);
     } catch (error: any) {
       // Fallo de red / Nave caído
+      console.error('❌ Error de red al conectar con Nave:', error.message);
       throw new HttpException(
         {
           code: 'ERR_NAVE_UNAVAILABLE',
