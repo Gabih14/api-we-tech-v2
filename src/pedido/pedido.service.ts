@@ -266,7 +266,9 @@ export class PedidoService {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ client_id, client_secret, audience }),
       });
+      console.log('📡 Respuesta de Nave Auth:', response.status, response.statusText);
     } catch (error: any) {
+      console.error('❌ Error de red al autenticar:', error.message);
       throw new HttpException(
         {
           code: 'ERR_NAVE_AUTH_UNAVAILABLE',
@@ -311,7 +313,7 @@ export class PedidoService {
     const { payment_check_url, external_payment_id } = data;
     const token = await this.obtenerTokenDeNave();
 
-    console.log(token);
+    console.log('📡 Token de Nave obtenido:', token);
 
     const pedido = await this.pedidoRepo.findOne({
       where: { external_id: external_payment_id },

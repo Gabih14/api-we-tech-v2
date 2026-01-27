@@ -1,6 +1,8 @@
 // src/vta-comprobante/entities/vta-comprobante.entity.ts
-import { VtaComprobanteItem } from 'src/vta-comprobante-item/entities/vta-comprobante-item.entity';
 import { Entity, Column, PrimaryColumn, OneToMany } from 'typeorm';
+import { VtaComprobanteItem } from 'src/vta-comprobante-item/entities/vta-comprobante-item.entity';
+import { VtaComprobanteAsiento } from 'src/vta_comprobante_asiento/entities/vta_comprobante_asiento.entity';
+import { bitToBoolTransformer } from 'src/common/transformers/bit-to-bool.transformer';
 
 @Entity({ name: 'vta_comprobante' })
 export class VtaComprobante {
@@ -43,13 +45,16 @@ export class VtaComprobante {
   @Column({ type: 'varchar', length: 20, nullable: true })
   estado: string;
 
-  @Column({ type: 'bit', nullable: true })
+  @Column({ type: 'bit', width: 1, nullable: true, transformer: bitToBoolTransformer })
   mail: boolean;
 
-  @Column({ type: 'bit', nullable: true })
+  @Column({ type: 'bit', width: 1, nullable: true, transformer: bitToBoolTransformer })
   visible: boolean;
 
   @OneToMany(() => VtaComprobanteItem, (item) => item.comprobanteRef, { cascade: true })
   items: VtaComprobanteItem[];
 
+  // ✅ Link a asientos contables (tabla puente)
+  @OneToMany(() => VtaComprobanteAsiento, (vca) => vca.comprobanteRef)
+  asientosLink: VtaComprobanteAsiento[];
 }

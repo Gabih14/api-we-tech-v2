@@ -7,6 +7,7 @@ import { Pedido } from 'src/pedido/entities/pedido.entity';
 import { VtaComprobanteItemService } from 'src/vta-comprobante-item/vta-comprobante-item.service';
 import { VtaClienteService } from 'src/vta_cliente/vta_cliente.service';
 import { CreateVtaClienteDto } from 'src/vta_cliente/dto/create-vta_cliente.dto';
+import { VtaComprobanteAsientoService } from 'src/vta_comprobante_asiento/vta_comprobante_asiento.service';
 
 @Injectable()
 export class VtaComprobanteService {
@@ -16,6 +17,7 @@ export class VtaComprobanteService {
 
     private readonly comprobanteItemService: VtaComprobanteItemService,
     private readonly clienteService: VtaClienteService,
+    private readonly vtaComprobanteAsientoService: VtaComprobanteAsientoService,
   ) {}
 
   // 🧾 Crear comprobante a partir de un pedido aprobado
@@ -68,6 +70,12 @@ export class VtaComprobanteService {
       } as any);
       linea++;
     }
+
+    // 📝 Generar asiento contable y vínculo
+    await this.vtaComprobanteAsientoService.createAsientoForComprobante(
+      comprobanteGuardado.tipo,
+      comprobanteGuardado.comprobante,
+    );
 
     return comprobanteGuardado;
   }
