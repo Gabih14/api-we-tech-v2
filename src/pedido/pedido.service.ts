@@ -370,7 +370,38 @@ export class PedidoService {
       headers: { Authorization: `Bearer ${token}` },
     });
     console.log('Respuesta de verificación de pago Nave: ', resp);
-    const pago = await resp.json();
+    const contentType = resp.headers.get('content-type') || '';
+    let pago: any = null;
+    if (contentType.includes('application/json')) {
+      try {
+        pago = await resp.json();
+      } catch (error: any) {
+        console.error('❌ Error parseando JSON de verificación de pago:', error?.message || error);
+        throw new HttpException(
+          {
+            code: 'ERR_NAVE_PAYMENT_CHECK_INVALID_JSON',
+            message: 'La verificación del pago no respondió correctamente. Intenta nuevamente.',
+            retryable: true,
+          },
+          HttpStatus.BAD_GATEWAY,
+        );
+      }
+    } else {
+      const raw = await resp.text();
+      console.error('❌ Verificación de pago no retornó JSON:', {
+        status: resp.status,
+        contentType,
+        body: raw?.slice(0, 500),
+      });
+      throw new HttpException(
+        {
+          code: 'ERR_NAVE_PAYMENT_CHECK_NOT_JSON',
+          message: 'La verificación del pago no respondió correctamente. Intenta nuevamente.',
+          retryable: true,
+        },
+        HttpStatus.BAD_GATEWAY,
+      );
+    }
     console.log('Datos de pago obtenidos: ', pago);
     const estado = pago.status?.name ?? 'PENDING';
 
