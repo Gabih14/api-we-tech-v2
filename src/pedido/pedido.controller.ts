@@ -5,6 +5,7 @@ import {
   Body,
   UseGuards,
   HttpCode,
+  HttpStatus,
   Get,
   Param,
   NotFoundException,
@@ -15,34 +16,42 @@ import { ApiTokenGuard } from '../common/guards/api-token.guard';
 import { AuthType } from '../common/decorators/auth-type.decorator';
 
 @Controller('pedido')
-@UseGuards(ApiTokenGuard) // 👈 Todos los endpoints usan API_TOKEN por defecto
+@UseGuards(ApiTokenGuard)
 export class PedidoController {
   constructor(private readonly pedidoService: PedidoService) {}
 
   @Post()
   async crear(@Body() dto: CreatePedidoDto) {
-    return this.pedidoService.crear(dto); // retorna la URL de Nave
+    return this.pedidoService.crear(dto);
   }
 
   @Post('nave-webhook')
   @AuthType('public')
+  @HttpCode(HttpStatus.OK)
   async recibirWebhook(@Body() body: any) {
     console.log('📩 Webhook Nave recibido:', body);
 
-    const resultado = await this.pedidoService.procesarNotificacionDeNave(body);
-    return resultado || { message: 'Notificación recibida y procesada correctamente.' };
+    // ✅ Responder 200 inmediatamente
+    // Procesar en background sin bloquear
+    this.pedidoService.procesarNotificacionDeNave(body).catch((err) => {
+      console.error('❌ Error procesando webhook Nave:', err);
+    });
+
+    return { message: 'Notificación recibida correctamente.' };
   }
 
   @Post('nave-webhook/test')
   @AuthType('public')
+  @HttpCode(HttpStatus.OK)
   async testWebhook(@Body() body: any) {
     console.log('🧪 Webhook Nave TEST recibido:', body);
 
-    const resultado = await this.pedidoService.procesarNotificacionDeNave(body);
-    return {
-      ...resultado,
-      test: true
-    };
+    // ✅ Responder 200 inmediatamente
+    this.pedidoService.procesarNotificacionDeNave(body).catch((err) => {
+      console.error('❌ Error procesando webhook TEST:', err);
+    });
+
+    return { message: 'Notificación recibida correctamente.', test: true };
   }
 
   @Get(':externalId')

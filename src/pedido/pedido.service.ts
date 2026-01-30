@@ -369,6 +369,7 @@ export class PedidoService {
     const resp = await fetch(`${payment_check_url}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
+    console.log('📡 Verificando estado de pago en Nave...',payment_check_url,token);
     console.log('Respuesta de verificación de pago Nave: ', resp);
     const contentType = resp.headers.get('content-type') || '';
     let pago: any = null;
