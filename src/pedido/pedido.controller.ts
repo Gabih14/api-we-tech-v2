@@ -31,13 +31,12 @@ export class PedidoController {
   async recibirWebhook(@Body() body: any) {
     console.log('📩 Webhook Nave recibido:', body);
 
-    // ✅ Responder 200 inmediatamente
-    // Procesar en background sin bloquear
-    this.pedidoService.procesarNotificacionDeNave(body).catch((err) => {
-      console.error('❌ Error procesando webhook Nave:', err);
-    });
+    // ✅ Procesar sincrónico
+    // Si hay error, lanza excepción y NestJS retorna 4xx/5xx
+    // Si éxito, retorna 200 OK
+    const resultado = await this.pedidoService.procesarNotificacionDeNave(body);
 
-    return { message: 'Notificación recibida correctamente.' };
+    return { message: 'Notificación procesada correctamente.', estado: resultado.estado };
   }
 
   @Post('nave-webhook/test')
@@ -46,12 +45,9 @@ export class PedidoController {
   async testWebhook(@Body() body: any) {
     console.log('🧪 Webhook Nave TEST recibido:', body);
 
-    // ✅ Responder 200 inmediatamente
-    this.pedidoService.procesarNotificacionDeNave(body).catch((err) => {
-      console.error('❌ Error procesando webhook TEST:', err);
-    });
+    const resultado = await this.pedidoService.procesarNotificacionDeNave(body);
 
-    return { message: 'Notificación recibida correctamente.', test: true };
+    return { message: 'Notificación procesada correctamente.', estado: resultado.estado, test: true };
   }
 
   @Get(':externalId')
