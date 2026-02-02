@@ -556,6 +556,7 @@ export class PedidoService {
         <div><strong>Cliente:</strong> ${pedido.cliente_nombre}</div>
         <div><strong>CUIT:</strong> ${pedido.cliente_cuit}</div>
         <div><strong>Ubicación:</strong> ${pedido.cliente_ubicacion || 'No especificada'}</div>
+        <div><strong>Observaciones:</strong> ${pedido.observaciones_direccion || 'Ninguna'}</div>
         <div><strong>Tipo de envío:</strong> ${pedido.delivery_method || 'pickup'}</div>
         <div><strong>Costo de envío:</strong> $${pedido.costo_envio != null ? Number(pedido.costo_envio).toFixed(2) : '0.00'}</div>
       </div>
