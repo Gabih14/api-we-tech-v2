@@ -37,6 +37,11 @@ export class VtaComprobanteService {
     const numero = await this.generarNumeroComprobante();
 
     // 🧱 Crear el comprobante base
+    const cantidadTotal = pedido.productos?.reduce(
+      (acc, p) => acc + (p.cantidad ?? 0),
+      0,
+    );
+
     const nuevoComprobante = this.comprobanteRepository.create({
       tipo: 'FX',
       comprobante: numero,
@@ -46,10 +51,34 @@ export class VtaComprobanteService {
       periodo: this.obtenerPeriodoActual(),
       tipo_documento: 'CUIT',
       numero_documento: pedido.cliente_cuit,
+      moneda: 'PES',
+      cotizacion: 1,
+      lista: 'MINORISTA', // Hacerlo variable cuando se implemente esa funcionalidad de mayorista/minorista
+      ivainc: true,
+      anclar_precio: true,
+      anulado: false,
+      comisionliq: false,
       subtotal: pedido.total,
-      nogravado: 0,
+      neto: 0,
+      exento: 0,
+      nogravado: pedido.total,
+      iva: 0,
+      impuesto_1: 0,
+      impuesto_2: 0,
+      impuesto_3: 0,
+      impuesto_4: 0,
+      impuesto_5: 0,
+      impuesto_6: 0,
+      impuesto_7: 0,
+      impuesto_8: 0,
+      impuesto_9: 0,
       total: pedido.total,
+      cantidad: cantidadTotal ?? 0,
+      entregado: 0,
+      entregado$: 0,
       cobrado: pedido.total,
+      adjuntos: false,
+      adjuntado: false,
       mail: false,
       visible: true,
     });
