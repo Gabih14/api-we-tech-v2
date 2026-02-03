@@ -21,6 +21,9 @@ import { CuponUsoModule } from './cupon_uso/cupon_uso.module';
 import { CntAsientoModule } from './cnt-asiento/cnt-asiento.module';
 import { CntMovimientoModule } from './cnt-movimiento/cnt-movimiento.module';
 import { VtaComprobanteAsientoModule } from './vta_comprobante_asiento/vta_comprobante_asiento.module';
+import { VtaCobroModule } from './vta-cobro/vta-cobro.module';
+import { VtaCobroFacturaModule } from './vta-cobro-factura/vta-cobro-factura.module';
+import { VtaCobroMedioModule } from './vta-cobro-medio/vta-cobro-medio.module';
 
 @Module({
   imports: [
@@ -81,6 +84,9 @@ import { VtaComprobanteAsientoModule } from './vta_comprobante_asiento/vta_compr
     CntAsientoModule,
     CntMovimientoModule,
     VtaComprobanteAsientoModule,
+    VtaCobroModule,
+    VtaCobroFacturaModule,
+    VtaCobroMedioModule,
   ],
 })
 export class AppModule {}
