@@ -22,6 +22,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { ConfigService } from '@nestjs/config';
 import { MailerService } from 'src/mailer/mailer.service';
 import { WhatsappService } from 'src/whatsapp/whatsapp.service';
+import { CobrosService } from 'src/vta-comprobante/cobros.service';
 
 @Injectable()
 export class PedidoService {
@@ -43,6 +44,8 @@ export class PedidoService {
     private readonly mailerService: MailerService,
 
     private readonly whatsappService: WhatsappService,
+
+    private readonly cobrosService: CobrosService
   ) { }
 
   // 🧾 Crear pedido e intención de pago
@@ -153,7 +156,7 @@ export class PedidoService {
     // 🔧 Limpiar y validar DNI
     const rawCuit = dto.cliente_cuit.replace(/\D/g, ''); // Solo números
     const docNumber = rawCuit.length === 11 ? rawCuit.slice(2, -1) : rawCuit.slice(0, 8);
-    
+
     console.log('📋 CUIT original:', dto.cliente_cuit);
     console.log('📋 DNI extraído:', docNumber);
 
@@ -246,7 +249,7 @@ export class PedidoService {
         status: response.status,
         body: result
       });
-      
+
       throw new HttpException(
         {
           code: 'ERR_NAVE_BAD_RESPONSE',
@@ -348,7 +351,7 @@ export class PedidoService {
       where: { external_id: external_payment_id },
       relations: ['productos'],
     });
-    
+
     // ✅ VALIDACIÓN: Si no existe el pedido, rechazar la notificación
     if (!pedido) {
       console.error(`❌ Pedido con ID ${external_payment_id} no encontrado en esta base de datos.`);
@@ -367,14 +370,14 @@ export class PedidoService {
 
     // Consultar estado real del pago en Nave
     const resp = await fetch(payment_check_url, {
-      headers: { 
+      headers: {
         'Authorization': `Bearer ${token}`,
         'User-Agent': 'axios', // ✅ Header requerido por Nave
         'Content-Type': 'application/json',
         'Accept': 'application/json'
       },
     });
-    console.log('📡 Verificando estado de pago en Nave...',payment_check_url,token);
+    console.log('📡 Verificando estado de pago en Nave...', payment_check_url, token);
     console.log('Respuesta de verificación de pago Nave: ', resp);
     const contentType = resp.headers.get('content-type') || '';
     let pago: any = null;
@@ -412,21 +415,18 @@ export class PedidoService {
     const estado = pago.status?.name ?? 'PENDING';
 
     switch (estado) {
-      case 'APPROVED':
+      case 'APPROVED': {
         // Si el pedido estaba cancelado, intentamos reservar stock nuevamente
         if (pedido.estado === 'CANCELADO') {
-             console.log(`🔄 Pedido ${pedido.external_id} estaba CANCELADO. Re-reservando stock...`);
-             for (const p of pedido.productos) {
-                try {
-                   await this.stockService.reservarStock(p.nombre, p.cantidad);
-                } catch (error) {
-                   console.error(`❌ Error re-reservando stock para ${p.nombre}:`, error);
-                   // Si falla la reserva, no podemos aprobar el pedido. 
-                   // Dejamos el estado como CANCELADO o lanzamos error para reintentar?
-                   // Al lanzar error, Nave reintentará la notificación.
-                    throw new ConflictException(`No hay stock disponible para reactivar el pedido ${pedido.external_id}`);
-                }
-             }
+          console.log(`🔄 Pedido ${pedido.external_id} estaba CANCELADO. Re-reservando stock...`);
+          for (const p of pedido.productos) {
+            try {
+              await this.stockService.reservarStock(p.nombre, p.cantidad);
+            } catch (error) {
+              console.error(`❌ Error re-reservando stock para ${p.nombre}:`, error);
+              throw new ConflictException(`No hay stock disponible para reactivar el pedido ${pedido.external_id}`);
+            }
+          }
         }
 
         pedido.estado = 'APROBADO';
@@ -436,11 +436,42 @@ export class PedidoService {
           await this.stockService.confirmarStock(p.nombre, p.cantidad);
         }
 
+        // 1) Generar comprobante
+        let comprobanteCreado: { tipo: string; comprobante: string } | null = null;
+
         try {
-          await this.vtaComprobanteService.crearDesdePedido(pedido);
-          console.log(`🧾 Comprobante generado para pedido ${pedido.external_id}`);
+          const comp = await this.vtaComprobanteService.crearDesdePedido(pedido);
+          comprobanteCreado = { tipo: comp.tipo, comprobante: comp.comprobante };
+          console.log(`🧾 Comprobante generado para pedido ${pedido.external_id}:`, comprobanteCreado);
         } catch (err) {
           console.error(`❌ Error al generar comprobante:`, err);
+          // Si falla acá, conviene tirar error para que Nave reintente y no quede el pedido aprobado sin comprobante
+          throw err;
+        }
+
+        // 2) Cobrar automáticamente (Nave => Banco Galicia)
+        try {
+          const cuentaNave = this.configService.get<string>('NAVE_CUENTA_ID') ?? 'BANCO GALICIA';
+
+          await this.cobrosService.cobrarFactura(
+            comprobanteCreado.tipo,
+            comprobanteCreado.comprobante,
+            {
+              modalidad: 'CUENTA',
+              medioId: cuentaNave,     // ej: "BANCO GALICIA"
+/*               trabajador: 'MARTINA',   // o desde env/config
+              user: 'martina',         // o desde env/config */
+              puntoVenta: '00001',     // o desde env/config
+            },
+          );
+
+          console.log(`💰 Cobro generado OK para comprobante:`, comprobanteCreado);
+        } catch (err) {
+          console.error(`❌ Error al generar cobro automático:`, err);
+          // IMPORTANTÍSIMO:
+          // Tirar error hace que Nave reintente la notificación.
+          // Como cobrarFactura es idempotente (chequea vta_cobro_factura), no duplica cobros.
+          throw err;
         }
 
         // ✅ Notificar a la secretaría por correo
@@ -452,15 +483,15 @@ export class PedidoService {
           await this.whatsappService.enviarMensaje(mensaje);
         } catch (err) {
           console.error(`❌ Error al enviar WhatsApp:`, err);
-          // No lanzar error para que no afecte el flujo principal
         }
 
-        // ✅ Notificar al servicio de delivery (teléfono y apiKey desde env)
+        // ✅ Notificar al servicio de delivery
         if (pedido.delivery_method === 'shipping') {
           try {
             const mensajeDelivery = this.whatsappService.formatearMensajeParaDelivery(pedido);
             const deliveryPhone = this.configService.get<string>('DELIVERY_WHATSAPP_PHONE');
             const deliveryApiKey = this.configService.get<string>('DELIVERY_WHATSAPP_API_KEY');
+
             if (deliveryPhone && deliveryApiKey) {
               await this.whatsappService.enviarMensaje(mensajeDelivery, deliveryPhone, deliveryApiKey);
             } else {
@@ -470,7 +501,11 @@ export class PedidoService {
             console.error(`❌ Error al enviar WhatsApp a delivery:`, err);
           }
         }
+
         break;
+      }
+
+
 
       case 'REJECTED':
       case 'CANCELLED':
@@ -490,7 +525,7 @@ export class PedidoService {
     }
 
     await this.pedidoRepo.save(pedido);
-    
+
     return {
       message: `Pedido ${pedido.external_id} procesado correctamente`,
       estado: pedido.estado
