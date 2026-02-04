@@ -416,15 +416,16 @@ export class PedidoService {
 
     switch (estado) {
       case 'APPROVED': {
-        // Si el pedido estaba cancelado, intentamos reservar stock nuevamente
         if (pedido.estado === 'CANCELADO') {
           console.log(`🔄 Pedido ${pedido.external_id} estaba CANCELADO. Re-reservando stock...`);
           for (const p of pedido.productos) {
             try {
               await this.stockService.reservarStock(p.nombre, p.cantidad);
-            } catch (error) {
-              console.error(`❌ Error re-reservando stock para ${p.nombre}:`, error);
-              throw new ConflictException(`No hay stock disponible para reactivar el pedido ${pedido.external_id}`);
+            } catch (err) {
+              console.error(`❌ No se pudo re-reservar stock para ${p.nombre}`, err);
+              throw new ConflictException(
+                `No se pudo reactivar el pedido ${pedido.external_id}: stock insuficiente para ${p.nombre}`,
+              );
             }
           }
         }
@@ -436,74 +437,49 @@ export class PedidoService {
           await this.stockService.confirmarStock(p.nombre, p.cantidad);
         }
 
-        // 1) Generar comprobante
-        let comprobanteCreado: { tipo: string; comprobante: string } | null = null;
+        let comprobanteCreado: { tipo: string; comprobante: string };
 
         try {
           const comp = await this.vtaComprobanteService.crearDesdePedido(pedido);
           comprobanteCreado = { tipo: comp.tipo, comprobante: comp.comprobante };
           console.log(`🧾 Comprobante generado para pedido ${pedido.external_id}:`, comprobanteCreado);
         } catch (err) {
-          console.error(`❌ Error al generar comprobante:`, err);
-          // Si falla acá, conviene tirar error para que Nave reintente y no quede el pedido aprobado sin comprobante
-          throw err;
+          console.error(`❌ Error al generar comprobante para pedido ${pedido.external_id}:`, err);
+          throw err; // crítico => reintento Nave
         }
 
-        // 2) Cobrar automáticamente (Nave => Banco Galicia)
         try {
           const cuentaNave = this.configService.get<string>('NAVE_CUENTA_ID') ?? 'BANCO GALICIA';
-
           await this.cobrosService.cobrarFactura(
             comprobanteCreado.tipo,
             comprobanteCreado.comprobante,
-            {
-              modalidad: 'CUENTA',
-              medioId: cuentaNave,     // ej: "BANCO GALICIA"
-/*               trabajador: 'MARTINA',   // o desde env/config
-              user: 'martina',         // o desde env/config */
-              puntoVenta: '00001',     // o desde env/config
-            },
+            { modalidad: 'CUENTA', medioId: cuentaNave, puntoVenta: '00001' },
           );
-
           console.log(`💰 Cobro generado OK para comprobante:`, comprobanteCreado);
         } catch (err) {
-          console.error(`❌ Error al generar cobro automático:`, err);
-          // IMPORTANTÍSIMO:
-          // Tirar error hace que Nave reintente la notificación.
-          // Como cobrarFactura es idempotente (chequea vta_cobro_factura), no duplica cobros.
-          throw err;
+          console.error(`❌ Error al generar cobro automático para pedido ${pedido.external_id}:`, err);
+          throw err; // crítico => reintento Nave
         }
 
-        // ✅ Notificar a la secretaría por correo
-        await this.notificarSecretaria(pedido);
-
-        // ✅ Notificar por WhatsApp
+        // No críticos
+        try { await this.notificarSecretaria(pedido); } catch (e) { console.error('mail', e); }
         try {
-          const mensaje = this.whatsappService.formatearMensajePedido(pedido);
-          await this.whatsappService.enviarMensaje(mensaje);
-        } catch (err) {
-          console.error(`❌ Error al enviar WhatsApp:`, err);
-        }
+          const msg = this.whatsappService.formatearMensajePedido(pedido);
+          await this.whatsappService.enviarMensaje(msg);
+        } catch (e) { console.error('whatsapp', e); }
 
-        // ✅ Notificar al servicio de delivery
         if (pedido.delivery_method === 'shipping') {
           try {
-            const mensajeDelivery = this.whatsappService.formatearMensajeParaDelivery(pedido);
-            const deliveryPhone = this.configService.get<string>('DELIVERY_WHATSAPP_PHONE');
-            const deliveryApiKey = this.configService.get<string>('DELIVERY_WHATSAPP_API_KEY');
-
-            if (deliveryPhone && deliveryApiKey) {
-              await this.whatsappService.enviarMensaje(mensajeDelivery, deliveryPhone, deliveryApiKey);
-            } else {
-              console.warn('No se enviará WhatsApp a delivery: faltan DELIVERY_WHATSAPP_PHONE o DELIVERY_WHATSAPP_API_KEY');
-            }
-          } catch (err) {
-            console.error(`❌ Error al enviar WhatsApp a delivery:`, err);
-          }
+            const msg = this.whatsappService.formatearMensajeParaDelivery(pedido);
+            const phone = this.configService.get<string>('DELIVERY_WHATSAPP_PHONE');
+            const apiKey = this.configService.get<string>('DELIVERY_WHATSAPP_API_KEY');
+            if (phone && apiKey) await this.whatsappService.enviarMensaje(msg, phone, apiKey);
+          } catch (e) { console.error('delivery whatsapp', e); }
         }
 
         break;
       }
+
 
 
 

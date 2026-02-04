@@ -23,46 +23,69 @@ export class VtaComprobanteAsientoService {
   ) {}
 
   // Genera cnt_asiento + cnt_movimiento y vincula en vta_comprobante_asiento
-  async createAsientoForComprobante(
-    tipo: string,
-    comprobante: string,
-  ): Promise<{ ejercicio: string; asientoId: number }> {
-    const comp = await this.compRepo.findOne({
-      where: { tipo, comprobante },
-    });
-    if (!comp)
+  // Genera cnt_asiento + cnt_movimiento y vincula en vta_comprobante_asiento
+async createAsientoForComprobante(
+  tipo: string,
+  comprobante: string,
+): Promise<{ ejercicio: string; asientoId: number }> {
+  const comp = await this.compRepo.findOne({
+    where: { tipo, comprobante },
+  });
+
+  if (!comp) {
+    throw new NotFoundException(`Comprobante ${tipo} ${comprobante} no encontrado`);
+  }
+
+  const total = Number(comp.total ?? 0);
+
+  const fechaStr = comp.fecha
+    ? new Date(comp.fecha).toISOString().slice(0, 10)
+    : new Date().toISOString().slice(0, 10);
+
+  const qr = this.dataSource.createQueryRunner();
+  await qr.connect();
+  await qr.startTransaction();
+
+  try {
+    // 1) Resolver ejercicio contable real por fecha (Opción B)
+    const rows: Array<{ id: string }> = await qr.query(
+      `SELECT id
+       FROM cnt_ejercicio
+       WHERE ? BETWEEN fecha_desde AND fecha_hasta
+       LIMIT 1`,
+      [fechaStr],
+    );
+
+    const ejercicio = rows?.[0]?.id;
+    if (!ejercicio) {
       throw new NotFoundException(
-        `Comprobante ${tipo} ${comprobante} no encontrado`,
+        `No existe ejercicio contable para fecha ${fechaStr} (cnt_ejercicio)`,
       );
+    }
 
-    const ejercicio =
-      comp.periodo?.split('/')[1] ??
-      comp.fecha?.getFullYear().toString() ??
-      new Date().getFullYear().toString();
-
-    const result = (await this.asientoRepo
-      .createQueryBuilder('a')
+    // 2) Calcular próximo id/numero de asiento para ese ejercicio (misma TX)
+    const result = (await qr.manager
+      .createQueryBuilder(CntAsiento, 'a')
       .select('COALESCE(MAX(a.id), 0) + 1', 'next')
       .where('a.ejercicio = :ejercicio', { ejercicio })
       .getRawOne()) as { next: number } | undefined;
 
-    const next = result?.next ?? 1;
-    const total = Number(comp.total ?? 0);
-    const fechaStr = comp.fecha
-      ? new Date(comp.fecha).toISOString().slice(0, 10)
-      : new Date().toISOString().slice(0, 10);
+    const next = Number(result?.next ?? 1);
 
+    // 3) Crear asiento
     const asiento: CntAsiento = this.asientoRepo.create({
       ejercicio,
       id: next,
       numero: next,
       fecha: fechaStr,
       imputacion: null,
-      leyenda: `${comp.periodo ?? `${new Date().getMonth() + 1}`.padStart(2, '0')}/${ejercicio} Venta N° ${comp.comprobante}`,
+      leyenda: `${
+        comp.periodo ?? `${String(new Date().getMonth() + 1).padStart(2, '0')}/${ejercicio}`
+      } Venta N° ${comp.comprobante}`,
       saldo_debe: total.toFixed(2) as any,
       saldo_haber: total.toFixed(2) as any,
       tipo: null,
-      moneda: comp['moneda'] ?? null,
+      moneda: (comp as any)['moneda'] ?? null,
       cotizacion: '1.0000' as any,
       proyecto: null,
       empresa: null,
@@ -72,56 +95,54 @@ export class VtaComprobanteAsientoService {
       visible: true,
     });
 
-    const qr = this.dataSource.createQueryRunner();
-    await qr.connect();
-    await qr.startTransaction();
-    try {
-      // Crea asiento
-      await qr.manager.save(CntAsiento, asiento);
+    await qr.manager.save(CntAsiento, asiento);
 
-      // Crea movimientos mínimos (ajustar cuentas según parametrización)
-      const movs: Partial<CntMovimiento>[] = [
-        {
-          ejercicio,
-          asiento: asiento.id,
-          numero: 1,
-          cuenta: '1.1.05.001.0000', // Haber
-          debe: null,
-          haber: total as any,
-          leyenda: null,
-          proyecto: null,
-        },
-        {
-          ejercicio,
-          asiento: asiento.id,
-          numero: 2,
-          cuenta: '1.1.01.001.0000', // Debe
-          debe: total as any,
-          haber: null,
-          leyenda: null,
-          proyecto: null,
-        },
-      ];
-      await qr.manager.save(CntMovimiento, movs as any);
-
-      // Vincula en vta_comprobante_asiento
-      const link = this.linkRepo.create({
-        tipo,
-        comprobante,
+    // 4) Movimientos mínimos
+    const movs: Partial<CntMovimiento>[] = [
+      {
         ejercicio,
         asiento: asiento.id,
-      });
-      await qr.manager.save(VtaComprobanteAsiento, link);
+        numero: 1,
+        cuenta: '1.1.05.001.0000', // Haber
+        debe: null,
+        haber: total as any,
+        leyenda: null,
+        proyecto: null,
+      },
+      {
+        ejercicio,
+        asiento: asiento.id,
+        numero: 2,
+        cuenta: '1.1.01.001.0000', // Debe
+        debe: total as any,
+        haber: null,
+        leyenda: null,
+        proyecto: null,
+      },
+    ];
 
-      await qr.commitTransaction();
-      return { ejercicio, asientoId: asiento.id };
-    } catch (e) {
-      await qr.rollbackTransaction();
-      throw e;
-    } finally {
-      await qr.release();
-    }
+    await qr.manager.save(CntMovimiento, movs as any);
+
+    // 5) Link vta_comprobante_asiento
+    const link = this.linkRepo.create({
+      tipo,
+      comprobante,
+      ejercicio,
+      asiento: asiento.id,
+    });
+
+    await qr.manager.save(VtaComprobanteAsiento, link);
+
+    await qr.commitTransaction();
+    return { ejercicio, asientoId: asiento.id };
+  } catch (e) {
+    await qr.rollbackTransaction();
+    throw e;
+  } finally {
+    await qr.release();
   }
+}
+
 
   create(createVtaComprobanteAsientoDto: CreateVtaComprobanteAsientoDto) {
     return 'This action adds a new vtaComprobanteAsiento';
