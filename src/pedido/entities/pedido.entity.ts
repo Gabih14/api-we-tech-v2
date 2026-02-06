@@ -57,4 +57,12 @@ export class Pedido {
 
   @Column({ type: 'text', nullable: true })
   observaciones_direccion: string | null;
+
+  @Column({
+    type: 'enum',
+    enum: ['online', 'transfer'],
+    nullable: true,
+    default: 'online',
+  })
+  metodo_pago: 'online' | 'transfer';
 }

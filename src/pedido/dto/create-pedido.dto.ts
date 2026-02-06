@@ -105,4 +105,9 @@ export class CreatePedidoDto {
   @IsOptional()
   @IsString()
   codigo_cupon?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(['online', 'transfer'])
+  metodo_pago?: 'online' | 'transfer';
 }

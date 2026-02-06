@@ -107,10 +107,18 @@ export class PedidoService {
       observaciones_direccion: dto.observaciones || null,
       estado: 'PENDIENTE',
       productos: productosValidados,
+      metodo_pago: dto.metodo_pago ?? 'online',
     });
 
     const pedidoGuardado = await this.pedidoRepo.save(pedido);
 
+    // Para transferencias, retornar callback URL directamente
+    if (pedidoGuardado.metodo_pago === 'transfer') {
+      const callbackUrl = `https://shop.wetech.ar/checkout/callback?payment_id=${externalId}`;
+      return { pedido: pedidoGuardado, naveUrl: callbackUrl };
+    }
+
+    // Para pagos online, continuar con Nave
     try {
       const naveUrl = await this.generarIntencionDePago({
         ...dto,
@@ -362,6 +370,15 @@ export class PedidoService {
 
     console.log('Pedido encontrado para notificación: ', pedido);
 
+    // 🚫 Bloquear webhooks para pagos por transferencia
+    if (pedido.metodo_pago === 'transfer') {
+      console.warn(`⚠️ Webhook recibido para pedido de transferencia ${pedido.external_id}. Las transferencias no deben procesarse por webhook.`);
+      return {
+        message: `Pedido ${pedido.external_id} es de tipo transferencia y no se procesa por webhook`,
+        estado: pedido.estado,
+      };
+    }
+
     // Idempotencia: si ya fue procesado, no repetir
     if (pedido.estado !== 'PENDIENTE' && pedido.estado !== 'CANCELADO') {
       console.log(`ℹ Pedido ${pedido.external_id} ya procesado (${pedido.estado}).`);
@@ -513,6 +530,113 @@ export class PedidoService {
       where: { external_id: externalId },
       relations: ['productos'],
     });
+  }
+
+  // 💳 Aprobar pedido por transferencia
+  async aprobarTransferencia(externalId: string): Promise<{ pedido: Pedido; comprobante: any }> {
+    const pedido = await this.pedidoRepo.findOne({
+      where: { external_id: externalId },
+      relations: ['productos'],
+    });
+
+    if (!pedido) {
+      throw new NotFoundException(`Pedido ${externalId} no encontrado`);
+    }
+
+    if (pedido.metodo_pago !== 'transfer') {
+      throw new BadRequestException(`Pedido ${externalId} no es de tipo transferencia`);
+    }
+
+    if (pedido.estado !== 'PENDIENTE') {
+      throw new ConflictException(`Pedido ${externalId} ya fue procesado (estado: ${pedido.estado})`);
+    }
+
+    // Verificar y confirmar stock
+    for (const p of pedido.productos) {
+      try {
+        await this.stockService.confirmarStock(p.nombre, p.cantidad);
+      } catch (err) {
+        console.error(`❌ No se pudo confirmar stock para ${p.nombre}`, err);
+        throw new ConflictException(
+          `Stock insuficiente para ${p.nombre}. El pedido no puede ser aprobado.`,
+        );
+      }
+    }
+
+    // Actualizar estado
+    pedido.estado = 'APROBADO';
+    pedido.aprobado = new Date();
+
+    // Crear comprobante con método de pago 'transfer'
+    let comprobanteCreado: any;
+    try {
+      const comp = await this.vtaComprobanteService.crearDesdePedido(pedido);
+      comprobanteCreado = { tipo: comp.tipo, comprobante: comp.comprobante };
+      console.log(`🧾 Comprobante generado para pedido transferencia ${pedido.external_id}:`, comprobanteCreado);
+    } catch (err) {
+      console.error(`❌ Error al generar comprobante para pedido ${pedido.external_id}:`, err);
+      throw err;
+    }
+
+    // NO generar cobro para transferencias
+
+    // Guardar pedido actualizado
+    await this.pedidoRepo.save(pedido);
+
+    // Notificaciones no críticas
+    try { await this.notificarSecretaria(pedido); } catch (e) { console.error('mail', e); }
+    try {
+      const msg = this.whatsappService.formatearMensajePedido(pedido);
+      await this.whatsappService.enviarMensaje(msg);
+    } catch (e) { console.error('whatsapp', e); }
+
+    if (pedido.delivery_method === 'shipping') {
+      try {
+        const msg = this.whatsappService.formatearMensajeParaDelivery(pedido);
+        const phone = this.configService.get<string>('DELIVERY_WHATSAPP_PHONE');
+        const apiKey = this.configService.get<string>('DELIVERY_WHATSAPP_API_KEY');
+        if (phone && apiKey) await this.whatsappService.enviarMensaje(msg, phone, apiKey);
+      } catch (e) { console.error('delivery whatsapp', e); }
+    }
+
+    return { pedido, comprobante: comprobanteCreado };
+  }
+
+  // ❌ Rechazar pedido por transferencia
+  async rechazarTransferencia(externalId: string): Promise<Pedido> {
+    const pedido = await this.pedidoRepo.findOne({
+      where: { external_id: externalId },
+      relations: ['productos'],
+    });
+
+    if (!pedido) {
+      throw new NotFoundException(`Pedido ${externalId} no encontrado`);
+    }
+
+    if (pedido.metodo_pago !== 'transfer') {
+      throw new BadRequestException(`Pedido ${externalId} no es de tipo transferencia`);
+    }
+
+    if (pedido.estado !== 'PENDIENTE') {
+      throw new ConflictException(`Pedido ${externalId} ya fue procesado (estado: ${pedido.estado})`);
+    }
+
+    // Liberar stock
+    for (const p of pedido.productos) {
+      try {
+        await this.stockService.liberarStock(p.nombre, p.cantidad);
+      } catch (err) {
+        console.error(`❌ Error liberando stock de ${p.nombre}:`, err);
+      }
+    }
+
+    // Actualizar estado
+    pedido.estado = 'CANCELADO';
+    await this.pedidoRepo.save(pedido);
+
+    console.log(`✅ Pedido transferencia ${externalId} rechazado manualmente`);
+
+    return pedido;
   }
 
   private async notificarSecretaria(pedido: Pedido) {

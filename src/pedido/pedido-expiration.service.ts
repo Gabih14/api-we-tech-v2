@@ -16,12 +16,31 @@ export class PedidoExpirationService {
   ) {}
 
   async run(ttlMin = Number(process.env.PEDIDO_TTL_MIN || 30)) {
-    const cutoff = new Date(Date.now() - ttlMin * 60_000);
+    const ttlTransferMin = Number(process.env.PEDIDO_TRANSFER_TTL_MIN || 2880); // 48 horas por defecto
 
-    const pendientes = await this.pedidoRepo.find({
-      where: { estado: 'PENDIENTE', creado: LessThan(cutoff) },
+    const cutoffOnline = new Date(Date.now() - ttlMin * 60_000);
+    const cutoffTransfer = new Date(Date.now() - ttlTransferMin * 60_000);
+
+    // Buscar pedidos PENDIENTES expirados según tipo de pago
+    const pendientesOnline = await this.pedidoRepo.find({
+      where: {
+        estado: 'PENDIENTE',
+        metodo_pago: 'online',
+        creado: LessThan(cutoffOnline),
+      },
       relations: ['productos'],
     });
+
+    const pendientesTransfer = await this.pedidoRepo.find({
+      where: {
+        estado: 'PENDIENTE',
+        metodo_pago: 'transfer',
+        creado: LessThan(cutoffTransfer),
+      },
+      relations: ['productos'],
+    });
+
+    const pendientes = [...pendientesOnline, ...pendientesTransfer];
 
     if (!pendientes.length) return { expirados: 0 };
 

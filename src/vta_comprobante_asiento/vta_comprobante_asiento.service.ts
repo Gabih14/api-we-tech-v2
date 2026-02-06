@@ -27,6 +27,7 @@ export class VtaComprobanteAsientoService {
 async createAsientoForComprobante(
   tipo: string,
   comprobante: string,
+  metodoPago?: string,
 ): Promise<{ ejercicio: string; asientoId: number }> {
   const comp = await this.compRepo.findOne({
     where: { tipo, comprobante },
@@ -97,13 +98,17 @@ async createAsientoForComprobante(
 
     await qr.manager.save(CntAsiento, asiento);
 
-    // 4) Movimientos mínimos
+    // 4) Movimientos: usar cuenta diferente según método de pago
+    // Para transferencias: 1.1.03.001.0000 (deudores por venta)
+    // Para online (Nave): 1.1.01.001.0000 (caja/banco)
+    const cuentaDebe = metodoPago === 'transfer' ? '1.1.03.001.0000' : '1.1.01.001.0000';
+
     const movs: Partial<CntMovimiento>[] = [
       {
         ejercicio,
         asiento: asiento.id,
         numero: 1,
-        cuenta: '1.1.05.001.0000', // Haber
+        cuenta: '1.1.05.001.0000', // Haber - Ventas
         debe: null,
         haber: total as any,
         leyenda: null,
@@ -113,7 +118,7 @@ async createAsientoForComprobante(
         ejercicio,
         asiento: asiento.id,
         numero: 2,
-        cuenta: '1.1.01.001.0000', // Debe
+        cuenta: cuentaDebe, // Debe - Deudores por venta o Caja/Banco
         debe: total as any,
         haber: null,
         leyenda: null,

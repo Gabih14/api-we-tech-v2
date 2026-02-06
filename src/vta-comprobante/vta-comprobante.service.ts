@@ -104,6 +104,7 @@ export class VtaComprobanteService {
     await this.vtaComprobanteAsientoService.createAsientoForComprobante(
       comprobanteGuardado.tipo,
       comprobanteGuardado.comprobante,
+      pedido.metodo_pago ?? 'online', // Pasar método de pago para seleccionar cuenta correcta
     );
 
     return comprobanteGuardado;
