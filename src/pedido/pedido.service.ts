@@ -112,8 +112,36 @@ export class PedidoService {
 
     const pedidoGuardado = await this.pedidoRepo.save(pedido);
 
-    // Para transferencias, retornar callback URL directamente
+    // Para transferencias, generar comprobante pendiente sin cobro
     if (pedidoGuardado.metodo_pago === 'transfer') {
+      try {
+        await this.vtaComprobanteService.crearDesdePedido(pedidoGuardado);
+      } catch (err) {
+        for (const p of productosValidados) {
+          try {
+            await this.stockService.liberarStock(p.nombre, p.cantidad);
+          } catch (e) {
+            console.error(`Error liberando stock de ${p.nombre}:`, e?.message || e);
+          }
+        }
+        pedidoGuardado.estado = 'CANCELADO';
+        await this.pedidoRepo.save(pedidoGuardado);
+        throw err;
+      }
+
+      try {
+        await this.notificarTransferenciaPendiente(pedidoGuardado);
+      } catch (e) {
+        console.error('mail transferencia pendiente', e);
+      }
+
+      try {
+        const msg = this.whatsappService.formatearMensajeTransferenciaPendiente(pedidoGuardado);
+        await this.whatsappService.enviarMensaje(msg);
+      } catch (e) {
+        console.error('whatsapp transferencia pendiente', e);
+      }
+
       const callbackUrl = `https://shop.wetech.ar/checkout/callback?payment_id=${externalId}`;
       return { pedido: pedidoGuardado, naveUrl: callbackUrl };
     }
@@ -639,16 +667,8 @@ export class PedidoService {
     return pedido;
   }
 
-  private async notificarSecretaria(pedido: Pedido) {
-    const secretariaEmail = this.configService.get<string>('SECRETARIA_EMAIL');
-    const destinatarios = `${secretariaEmail}, ${pedido.cliente_mail}`;
-
-    if (!secretariaEmail) {
-      throw new InternalServerErrorException('Falta el email de secretaria');
-    }
-
-    // Lista de productos en HTML
-    const productosHtml = pedido.productos
+  private buildProductosHtml(pedido: Pedido): string {
+    return pedido.productos
       .map(
         (p) => `
       <table style="width: 100%; border-collapse: collapse;">
@@ -667,6 +687,171 @@ export class PedidoService {
     `,
       )
       .join('');
+  }
+
+  private async notificarTransferenciaPendiente(pedido: Pedido) {
+    const secretariaEmail = this.configService.get<string>('SECRETARIA_EMAIL');
+    const clienteEmail = pedido.cliente_mail;
+    const productosHtml = this.buildProductosHtml(pedido);
+    const callbackUrl = `https://shop.wetech.ar/checkout/callback?payment_id=${pedido.external_id}`;
+
+    const datosTransferencia = `
+      <div style="margin: 12px 0; padding: 12px; background-color: #f5f5f5; border-radius: 6px;">
+        <div style="font-weight: 600; margin-bottom: 6px;">Te envio los datos de mi cuenta ICBC:</div>
+        <div>Nombre: FEDERICO ERNESTO POLIZZI</div>
+        <div>CBU: 0150516001000141430202</div>
+        <div>Alias: WE.TECH</div>
+        <div>CUIT/CUIL: 20244864121</div>
+        <div>Cuenta: CA $ 00150516000114143020</div>
+      </div>
+    `;
+
+    const htmlCliente = `
+<div style="font-family: system-ui, sans-serif, Arial; font-size: 14px; color: #333; padding: 14px 8px; background-color: #f5f5f5;">
+  <div style="max-width: 600px; margin: auto; background-color: #fff;">
+    <div style="border-top: 6px solid #458500; padding: 16px;">
+      <a style="text-decoration: none; outline: none; margin-right: 8px; vertical-align: middle;" href="https://shop.wetech.ar" target="_blank" rel="noopener">
+        <img src="https://shop.wetech.ar/assets/Logo%20WeTECH%20Negro%20PNG-CPBuO7yQ.png" width="103" height="41" alt="WeTECH Logo">
+      </a>
+      <span style="font-size: 16px; vertical-align: middle; border-left: 1px solid #333; padding-left: 8px;">
+        <strong>Pedido recibido - Transferencia pendiente</strong>
+      </span>
+    </div>
+
+    <div style="padding: 0 16px;">
+      <p>Estimado/a <strong>${pedido.cliente_nombre}</strong>,<br>
+      recibimos tu pedido y quedo pendiente de transferencia. Para completar el pago, realiza la transferencia a:</p>
+
+      ${datosTransferencia}
+
+      <div style="margin: 12px 0; font-size: 14px; color: #555;">
+        <div><strong>Pedido:</strong> ${pedido.external_id}</div>
+        <div><strong>Estado del pedido:</strong> <a href="${callbackUrl}" target="_blank" rel="noopener">Ver estado</a></div>
+        <div><strong>CUIT:</strong> ${pedido.cliente_cuit}</div>
+        <div><strong>Tipo de envio:</strong> ${pedido.delivery_method || 'pickup'}</div>
+        <div><strong>Costo de envio:</strong> $${pedido.costo_envio != null ? Number(pedido.costo_envio).toFixed(2) : '0.00'}</div>
+      </div>
+
+      <div style="text-align: left; font-size: 14px; padding-bottom: 4px; border-bottom: 2px solid #333;">
+        <strong>Detalles del Pedido</strong>
+      </div>
+
+      ${productosHtml}
+
+      <div style="padding: 24px 0;">
+        <div style="border-top: 2px solid #333;">&nbsp;</div>
+      </div>
+      <table style="border-collapse: collapse; width: 100%; text-align: right;">
+        <tbody>
+          <tr>
+            <td style="width: 60%;">&nbsp;</td>
+            <td style="border-top: 2px solid #333;">
+              <strong style="white-space: nowrap;">Total del Pedido</strong>
+            </td>
+            <td style="padding: 16px 8px; border-top: 2px solid #333; white-space: nowrap;">
+              <strong>$${pedido.total.toFixed(2)}</strong>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div style="max-width: 600px; margin: auto; padding: 12px; text-align: center;">
+    <p style="color: #999; font-size: 12px;">
+      Este correo fue enviado a ${pedido.cliente_mail}<br>
+      Usted recibio este correo porque realizo un pedido en WeTECH
+    </p>
+  </div>
+</div>
+    `;
+
+    if (clienteEmail) {
+      await this.mailerService.enviarCorreo(
+        clienteEmail,
+        'Pedido recibido - Transferencia pendiente',
+        htmlCliente,
+      );
+    } else {
+      console.warn(`No se encontro email de cliente para pedido ${pedido.external_id}`);
+    }
+
+    if (!secretariaEmail) {
+      console.warn('Falta el email de secretaria');
+      return;
+    }
+
+    const htmlSecretaria = `
+<div style="font-family: system-ui, sans-serif, Arial; font-size: 14px; color: #333; padding: 14px 8px; background-color: #f5f5f5;">
+  <div style="max-width: 600px; margin: auto; background-color: #fff;">
+    <div style="border-top: 6px solid #458500; padding: 16px;">
+      <a style="text-decoration: none; outline: none; margin-right: 8px; vertical-align: middle;" href="https://shop.wetech.ar" target="_blank" rel="noopener">
+        <img src="https://shop.wetech.ar/assets/Logo%20WeTECH%20Negro%20PNG-CPBuO7yQ.png" width="103" height="41" alt="WeTECH Logo">
+      </a>
+      <span style="font-size: 16px; vertical-align: middle; border-left: 1px solid #333; padding-left: 8px;">
+        <strong>Pedido recibido - Transferencia pendiente</strong>
+      </span>
+    </div>
+
+    <div style="padding: 0 16px;">
+      <p>Se recibio un pedido con metodo de pago por transferencia pendiente.</p>
+
+      <div style="margin: 12px 0; font-size: 14px; color: #555;">
+        <div><strong>Cliente:</strong> ${pedido.cliente_nombre}</div>
+        <div><strong>Email:</strong> ${pedido.cliente_mail || 'No informado'}</div>
+        <div><strong>CUIT:</strong> ${pedido.cliente_cuit}</div>
+        <div><strong>Ubicacion:</strong> ${pedido.cliente_ubicacion || 'No especificada'}</div>
+        <div><strong>Observaciones:</strong> ${pedido.observaciones_direccion || 'Ninguna'}</div>
+        <div><strong>Pedido:</strong> ${pedido.external_id}</div>
+        <div><strong>Estado del pedido:</strong> <a href="${callbackUrl}" target="_blank" rel="noopener">Ver estado</a></div>
+        <div><strong>Tipo de envio:</strong> ${pedido.delivery_method || 'pickup'}</div>
+        <div><strong>Costo de envio:</strong> $${pedido.costo_envio != null ? Number(pedido.costo_envio).toFixed(2) : '0.00'}</div>
+      </div>
+
+      <div style="text-align: left; font-size: 14px; padding-bottom: 4px; border-bottom: 2px solid #333;">
+        <strong>Detalles del Pedido</strong>
+      </div>
+
+      ${productosHtml}
+
+      <div style="padding: 24px 0;">
+        <div style="border-top: 2px solid #333;">&nbsp;</div>
+      </div>
+      <table style="border-collapse: collapse; width: 100%; text-align: right;">
+        <tbody>
+          <tr>
+            <td style="width: 60%;">&nbsp;</td>
+            <td style="border-top: 2px solid #333;">
+              <strong style="white-space: nowrap;">Total del Pedido</strong>
+            </td>
+            <td style="padding: 16px 8px; border-top: 2px solid #333; white-space: nowrap;">
+              <strong>$${pedido.total.toFixed(2)}</strong>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+    `;
+
+    await this.mailerService.enviarCorreo(
+      secretariaEmail,
+      'Pedido recibido - Transferencia pendiente',
+      htmlSecretaria,
+    );
+  }
+
+  private async notificarSecretaria(pedido: Pedido) {
+    const secretariaEmail = this.configService.get<string>('SECRETARIA_EMAIL');
+    const destinatarios = `${secretariaEmail}, ${pedido.cliente_mail}`;
+
+    if (!secretariaEmail) {
+      throw new InternalServerErrorException('Falta el email de secretaria');
+    }
+
+    // Lista de productos en HTML
+    const productosHtml = this.buildProductosHtml(pedido);
 
     const htmlMensaje = `
 <div style="font-family: system-ui, sans-serif, Arial; font-size: 14px; color: #333; padding: 14px 8px; background-color: #f5f5f5;">

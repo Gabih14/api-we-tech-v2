@@ -61,17 +61,6 @@ export class PedidoController {
     return pedido;
   }
 
-  @Post(':externalId/aprobar')
-  @HttpCode(HttpStatus.OK)
-  async aprobarTransferencia(@Param('externalId') externalId: string) {
-    const resultado = await this.pedidoService.aprobarTransferencia(externalId);
-    return {
-      message: 'Pedido aprobado correctamente',
-      pedido: resultado.pedido,
-      comprobante: resultado.comprobante,
-    };
-  }
-
   @Post(':externalId/rechazar')
   @HttpCode(HttpStatus.OK)
   async rechazarTransferencia(@Param('externalId') externalId: string) {
