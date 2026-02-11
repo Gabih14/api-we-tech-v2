@@ -52,6 +52,20 @@ export class WhatsappService {
 
       return `🛒 *Nuevo Pedido Aprobado*\n\n📋 *Cliente:* ${pedido.cliente_nombre}\n🆔 *CUIT:* ${pedido.cliente_cuit}\n📧 *Email:* ${pedido.cliente_mail}\n\n📍 *Ubicación:* ${ubicacion}${observaciones}\n🚚 *Tipo envío:* ${tipoEnvio}\n💰 *Costo envío:* ${costoEnvio}\n\n*Productos:*\n${productos}\n\n💰 *Total:* $${pedido.total.toFixed(2)}\n\nID: ${pedido.external_id}`;
   }
+
+  formatearMensajeTransferenciaPendiente(pedido: any): string {
+    const productos = pedido.productos
+      .map((p) => `• ${p.nombre} x${p.cantidad} - $${p.precio_unitario.toFixed(2)}`)
+      .join('\n');
+
+    const ubicacion = pedido.cliente_ubicacion || 'No especificada';
+    const costoEnvio = (pedido.costo_envio != null) ? `$${Number(pedido.costo_envio).toFixed(2)}` : '$0.00';
+    const tipoEnvio = pedido.delivery_method || 'pickup';
+    const observaciones = pedido.observaciones_direccion ? `\n📝 *Observaciones:* ${pedido.observaciones_direccion}` : '';
+    const callbackUrl = `https://shop.wetech.ar/checkout/callback?payment_id=${pedido.external_id}`;
+
+    return `⏳ *Pedido Transferencia Pendiente*\n\n📋 *Cliente:* ${pedido.cliente_nombre}\n🆔 *CUIT:* ${pedido.cliente_cuit}\n📧 *Email:* ${pedido.cliente_mail}\n\n📍 *Ubicación:* ${ubicacion}${observaciones}\n🚚 *Tipo envío:* ${tipoEnvio}\n💰 *Costo envío:* ${costoEnvio}\n\n*Productos:*\n${productos}\n\n💰 *Total:* $${pedido.total.toFixed(2)}\n\n🔗 Estado: ${callbackUrl}\n\nID: ${pedido.external_id}`;
+  }
   
     formatearMensajeParaDelivery(pedido: any): string {
       const productos = pedido.productos
