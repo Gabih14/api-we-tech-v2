@@ -42,6 +42,11 @@ export class VtaComprobanteService {
       0,
     );
 
+    const cobroFields: Partial<VtaComprobante> =
+      (pedido.metodo_pago ?? 'online') === 'transfer'
+        ? { cobrado: 0, fecha_cobro: undefined }
+        : { cobrado: pedido.total };
+
     const nuevoComprobante = this.comprobanteRepository.create({
       tipo: 'FX',
       comprobante: numero,
@@ -76,7 +81,7 @@ export class VtaComprobanteService {
       cantidad: cantidadTotal ?? 0,
       entregado: 0,
       entregado$: 0,
-      cobrado: pedido.total,
+      ...cobroFields,
       adjuntos: false,
       adjuntado: false,
       mail: false,
@@ -104,6 +109,7 @@ export class VtaComprobanteService {
     await this.vtaComprobanteAsientoService.createAsientoForComprobante(
       comprobanteGuardado.tipo,
       comprobanteGuardado.comprobante,
+      pedido.metodo_pago ?? 'online', // Pasar método de pago para seleccionar cuenta correcta
     );
 
     return comprobanteGuardado;

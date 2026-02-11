@@ -60,4 +60,14 @@ export class PedidoController {
     }
     return pedido;
   }
+
+  @Post(':externalId/rechazar')
+  @HttpCode(HttpStatus.OK)
+  async rechazarTransferencia(@Param('externalId') externalId: string) {
+    const pedido = await this.pedidoService.rechazarTransferencia(externalId);
+    return {
+      message: 'Pedido rechazado correctamente',
+      pedido,
+    };
+  }
 }
