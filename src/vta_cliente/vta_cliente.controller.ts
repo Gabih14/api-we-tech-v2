@@ -21,6 +21,11 @@ export class VtaClienteController {
     return this.vtaClienteService.create(dto);
   }
 
+  @Post('sync')
+  async findOrCreateOrUpdate(@Body() dto: CreateVtaClienteDto) {
+    return this.vtaClienteService.findOrCreateOrUpdate(dto);
+  }
+
   @Get()
   async findAll() {
     return this.vtaClienteService.findAll();

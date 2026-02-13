@@ -25,11 +25,19 @@ export class VtaComprobanteService {
     if (!pedido) throw new NotFoundException('Pedido no encontrado');
 
     // 👤 Asegurar que el cliente exista (crear/actualizar según corresponda)
+    const ubicacionParsed = this.parseUbicacion(pedido.cliente_ubicacion);
+    
     const clientePayload: CreateVtaClienteDto = {
       id: pedido.cliente_cuit,
       razonSocial: pedido.cliente_nombre,
       tipoDocumento: 'CUIT',
       numeroDocumento: pedido.cliente_cuit,
+      email: pedido.cliente_mail,
+      telefono: pedido.telefono,
+      direccion: ubicacionParsed.direccion,
+      localidad: ubicacionParsed.localidad,
+      provincia: ubicacionParsed.provincia,
+      condicionIva: 'CF',
       visible: true,
     };
     await this.clienteService.findOrCreateOrUpdate(clientePayload);
@@ -143,6 +151,24 @@ export class VtaComprobanteService {
   private obtenerPeriodoActual(): string {
     const now = new Date();
     return `${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;
+  }
+
+  // 🏠 Parsea string de ubicación y extrae dirección, localidad, provincia
+  private parseUbicacion(ubicacionString: string): { 
+    direccion?: string; 
+    localidad?: string; 
+    provincia?: string; 
+  } {
+    if (!ubicacionString) return {};
+
+    // Formato esperado: "calle numero, ciudad, region, pais, postal_code"
+    const partes = ubicacionString.split(',').map(p => p.trim());
+    
+    return {
+      direccion: partes[0] || undefined,      // Calle y número
+      localidad: partes[1] || undefined,      // Ciudad
+      provincia: partes[2] || undefined,      // Región/Provincia
+    };
   }
 
   // 🔍 Métodos básicos opcionales

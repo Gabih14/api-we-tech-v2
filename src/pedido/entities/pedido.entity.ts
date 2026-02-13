@@ -34,6 +34,9 @@ export class Pedido {
   @Column()
   cliente_mail: string;
 
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  telefono?: string;
+
   @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
   costo_envio: number;
 
