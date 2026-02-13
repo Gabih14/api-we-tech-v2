@@ -1,9 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
-import { LessThan, Repository } from 'typeorm';
+import { IsNull, LessThan, Not, Repository } from 'typeorm';
 import { Pedido } from './entities/pedido.entity';
 import { StkExistenciaService } from 'src/stk-existencia/stk-existencia.service';
+import { CobrosService } from 'src/vta-comprobante/cobros.service';
+import { PedidoService } from './pedido.service';
 
 @Injectable()
 export class PedidoExpirationService {
@@ -13,6 +15,8 @@ export class PedidoExpirationService {
     @InjectRepository(Pedido, 'back')
     private readonly pedidoRepo: Repository<Pedido>,
     private readonly existenciaService: StkExistenciaService,
+    private readonly cobrosService: CobrosService,
+    private readonly pedidoService: PedidoService,
   ) {}
 
   async run(ttlMin = Number(process.env.PEDIDO_TTL_MIN || 30)) {
@@ -98,6 +102,40 @@ export class PedidoExpirationService {
       this.logger.log(
         `Expiración completada: ${resultado.expirados}/${resultado.total} cancelados, ${resultado.fallos} errores críticos`,
       );
+    }
+  }
+
+  @Cron(process.env.PEDIDO_TRANSFER_APPROVAL_CRON || '*/10 * * * *')
+  async scheduledTransferApproval() {
+    const pendientes = await this.pedidoRepo.find({
+      where: {
+        estado: 'PENDIENTE',
+        metodo_pago: 'transfer',
+        comprobante_tipo: Not(IsNull()),
+        comprobante_numero: Not(IsNull()),
+      },
+      relations: ['productos'],
+    });
+
+    if (!pendientes.length) return;
+
+    for (const pedido of pendientes) {
+      const tipo = pedido.comprobante_tipo;
+      const comprobante = pedido.comprobante_numero;
+
+      if (!tipo || !comprobante) continue;
+
+      try {
+        const tieneCobro = await this.cobrosService.tieneCobroFactura(tipo, comprobante);
+        if (!tieneCobro) continue;
+
+        await this.pedidoService.aprobarTransferencia(pedido.external_id);
+        this.logger.log(`[${pedido.external_id}] Pedido transferencia aprobado por cobro registrado`);
+      } catch (e) {
+        this.logger.error(
+          `[${pedido.external_id}] Error en aprobación automática: ${e?.message || e}`,
+        );
+      }
     }
   }
 }

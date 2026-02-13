@@ -151,6 +151,13 @@ export class CobrosService {
     });
   }
 
+  async tieneCobroFactura(tipo: string, comprobante: string): Promise<boolean> {
+    const cobro = await this.cobroFacturaRepo.findOne({
+      where: { tipo, factura: comprobante },
+    });
+    return !!cobro;
+  }
+
   private buildBuckets(modalidad: Modalidad, total: number) {
     const v = total.toFixed(2);
 

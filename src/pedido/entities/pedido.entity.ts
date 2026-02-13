@@ -65,4 +65,10 @@ export class Pedido {
     default: 'online',
   })
   metodo_pago: 'online' | 'transfer';
+
+  @Column({ type: 'varchar', length: 4, nullable: true })
+  comprobante_tipo: string | null;
+
+  @Column({ type: 'varchar', length: 16, nullable: true })
+  comprobante_numero: string | null;
 }

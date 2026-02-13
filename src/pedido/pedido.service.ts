@@ -115,7 +115,10 @@ export class PedidoService {
     // Para transferencias, generar comprobante pendiente sin cobro
     if (pedidoGuardado.metodo_pago === 'transfer') {
       try {
-        await this.vtaComprobanteService.crearDesdePedido(pedidoGuardado);
+        const comp = await this.vtaComprobanteService.crearDesdePedido(pedidoGuardado);
+        pedidoGuardado.comprobante_tipo = comp.tipo;
+        pedidoGuardado.comprobante_numero = comp.comprobante;
+        await this.pedidoRepo.save(pedidoGuardado);
       } catch (err) {
         for (const p of productosValidados) {
           try {
@@ -487,6 +490,8 @@ export class PedidoService {
         try {
           const comp = await this.vtaComprobanteService.crearDesdePedido(pedido);
           comprobanteCreado = { tipo: comp.tipo, comprobante: comp.comprobante };
+          pedido.comprobante_tipo = comp.tipo;
+          pedido.comprobante_numero = comp.comprobante;
           console.log(`🧾 Comprobante generado para pedido ${pedido.external_id}:`, comprobanteCreado);
         } catch (err) {
           console.error(`❌ Error al generar comprobante para pedido ${pedido.external_id}:`, err);
@@ -596,14 +601,23 @@ export class PedidoService {
     pedido.aprobado = new Date();
 
     // Crear comprobante con método de pago 'transfer'
-    let comprobanteCreado: any;
-    try {
-      const comp = await this.vtaComprobanteService.crearDesdePedido(pedido);
-      comprobanteCreado = { tipo: comp.tipo, comprobante: comp.comprobante };
-      console.log(`🧾 Comprobante generado para pedido transferencia ${pedido.external_id}:`, comprobanteCreado);
-    } catch (err) {
-      console.error(`❌ Error al generar comprobante para pedido ${pedido.external_id}:`, err);
-      throw err;
+    let comprobanteCreado: { tipo: string; comprobante: string };
+    if (pedido.comprobante_tipo && pedido.comprobante_numero) {
+      comprobanteCreado = {
+        tipo: pedido.comprobante_tipo,
+        comprobante: pedido.comprobante_numero,
+      };
+    } else {
+      try {
+        const comp = await this.vtaComprobanteService.crearDesdePedido(pedido);
+        comprobanteCreado = { tipo: comp.tipo, comprobante: comp.comprobante };
+        pedido.comprobante_tipo = comp.tipo;
+        pedido.comprobante_numero = comp.comprobante;
+        console.log(`🧾 Comprobante generado para pedido transferencia ${pedido.external_id}:`, comprobanteCreado);
+      } catch (err) {
+        console.error(`❌ Error al generar comprobante para pedido ${pedido.external_id}:`, err);
+        throw err;
+      }
     }
 
     // NO generar cobro para transferencias
