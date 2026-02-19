@@ -26,7 +26,7 @@ export class VtaComprobanteService {
 
     // 👤 Asegurar que el cliente exista (crear/actualizar según corresponda)
     const ubicacionParsed = this.parseUbicacion(pedido.cliente_ubicacion);
-    
+
     const clientePayload: CreateVtaClienteDto = {
       id: pedido.cliente_cuit,
       razonSocial: pedido.cliente_nombre,
@@ -89,6 +89,7 @@ export class VtaComprobanteService {
       cantidad: cantidadTotal ?? 0,
       entregado: 0,
       entregado$: 0,
+      trabajador: 'WEB',
       ...cobroFields,
       adjuntos: false,
       adjuntado: false,
@@ -96,7 +97,8 @@ export class VtaComprobanteService {
       visible: true,
     });
 
-    const comprobanteGuardado = await this.comprobanteRepository.save(nuevoComprobante);
+    const comprobanteGuardado =
+      await this.comprobanteRepository.save(nuevoComprobante);
 
     // 🧮 Crear ítems asociados
     let linea = 1;
@@ -131,7 +133,9 @@ export class VtaComprobanteService {
     const ultimo = await this.comprobanteRepository
       .createQueryBuilder('c')
       .where('c.tipo = :tipo', { tipo: 'FX' })
-      .andWhere('c.comprobante LIKE :prefix', { prefix: `${letra} ${puntoDeVenta} %` })
+      .andWhere('c.comprobante LIKE :prefix', {
+        prefix: `${letra} ${puntoDeVenta} %`,
+      })
       .orderBy('c.comprobante', 'DESC')
       .getOne();
 
@@ -154,20 +158,20 @@ export class VtaComprobanteService {
   }
 
   // 🏠 Parsea string de ubicación y extrae dirección, localidad, provincia
-  private parseUbicacion(ubicacionString: string): { 
-    direccion?: string; 
-    localidad?: string; 
-    provincia?: string; 
+  private parseUbicacion(ubicacionString: string): {
+    direccion?: string;
+    localidad?: string;
+    provincia?: string;
   } {
     if (!ubicacionString) return {};
 
     // Formato esperado: "calle numero, ciudad, region, pais, postal_code"
-    const partes = ubicacionString.split(',').map(p => p.trim());
-    
+    const partes = ubicacionString.split(',').map((p) => p.trim());
+
     return {
-      direccion: partes[0] || undefined,      // Calle y número
-      localidad: partes[1] || undefined,      // Ciudad
-      provincia: partes[2] || undefined,      // Región/Provincia
+      direccion: partes[0] || undefined, // Calle y número
+      localidad: partes[1] || undefined, // Ciudad
+      provincia: partes[2] || undefined, // Región/Provincia
     };
   }
 
