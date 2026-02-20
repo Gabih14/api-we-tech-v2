@@ -19,6 +19,9 @@ export class PedidoItem {
     @Column()
     precio_unitario: number;
 
+    @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true })
+    ajuste_porcentaje: number | null;
+
     @ManyToOne(() => Pedido, pedido => pedido.productos)
     pedido: Pedido;
 }

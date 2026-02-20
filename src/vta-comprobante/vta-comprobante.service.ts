@@ -1,7 +1,7 @@
 // src/vta-comprobante/vta-comprobante.service.ts
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DeepPartial, Repository } from 'typeorm';
 import { VtaComprobante } from './entities/vta-comprobante.entity';
 import { Pedido } from 'src/pedido/entities/pedido.entity';
 import { VtaComprobanteItemService } from 'src/vta-comprobante-item/vta-comprobante-item.service';
@@ -44,18 +44,60 @@ export class VtaComprobanteService {
 
     const numero = await this.generarNumeroComprobante();
 
-    // 🧱 Crear el comprobante base
     const cantidadTotal = pedido.productos?.reduce(
       (acc, p) => acc + (p.cantidad ?? 0),
       0,
     );
 
+    const itemsCalculo = (pedido.productos ?? []).map((producto) => {
+      const cantidad = producto.cantidad ?? 0;
+      const precioFinal = producto.precio_unitario ?? 0;
+      const importe = this.redondear2(cantidad * precioFinal);
+      const ajustePct = producto.ajuste_porcentaje;
+
+      if (ajustePct === null || ajustePct === undefined) {
+        return {
+          producto,
+          base: importe,
+          importe,
+          ajuste: null,
+          ajusteNeto: null,
+        };
+      }
+
+      const factor = 1 + ajustePct / 100;
+      const base = factor === 0 ? 0 : this.redondear2(importe / factor);
+      const ajusteNeto = this.redondear2(importe - base);
+
+      return {
+        producto,
+        base,
+        importe,
+        ajuste: this.redondear2(ajustePct),
+        ajusteNeto,
+      };
+    });
+
+    const baseTotal = this.redondear2(
+      itemsCalculo.reduce((acc, item) => acc + item.base, 0),
+    );
+    const totalImporte = this.redondear2(
+      itemsCalculo.reduce((acc, item) => acc + item.importe, 0),
+    );
+    const totalAjusteNeto = this.redondear2(
+      itemsCalculo.reduce((acc, item) => acc + (item.ajusteNeto ?? 0), 0),
+    );
+    const ajusteCabecera =
+      baseTotal !== 0 && totalAjusteNeto !== 0
+        ? this.redondear2((totalAjusteNeto / baseTotal) * 100)
+        : null;
+
     const cobroFields: Partial<VtaComprobante> =
       (pedido.metodo_pago ?? 'online') === 'transfer'
         ? { cobrado: 0, fecha_cobro: undefined }
-        : { cobrado: pedido.total };
+        : { cobrado: totalImporte };
 
-    const nuevoComprobante = this.comprobanteRepository.create({
+    const nuevoComprobanteData: DeepPartial<VtaComprobante> = {
       tipo: 'FX',
       comprobante: numero,
       cliente: pedido.cliente_cuit,
@@ -71,10 +113,10 @@ export class VtaComprobanteService {
       anclar_precio: true,
       anulado: false,
       comisionliq: false,
-      subtotal: pedido.total,
+      subtotal: totalImporte,
       neto: 0,
       exento: 0,
-      nogravado: pedido.total,
+      nogravado: totalImporte,
       iva: 0,
       impuesto_1: 0,
       impuesto_2: 0,
@@ -85,7 +127,10 @@ export class VtaComprobanteService {
       impuesto_7: 0,
       impuesto_8: 0,
       impuesto_9: 0,
-      total: pedido.total,
+      total: totalImporte,
+      ajuste: ajusteCabecera ?? undefined,
+      ajuste_neto: totalAjusteNeto === 0 ? undefined : totalAjusteNeto,
+      ajuste_iva: undefined,
       cantidad: cantidadTotal ?? 0,
       entregado: 0,
       entregado$: 0,
@@ -95,21 +140,29 @@ export class VtaComprobanteService {
       adjuntado: false,
       mail: false,
       visible: true,
-    });
+    };
+
+    const nuevoComprobante = this.comprobanteRepository.create(
+      nuevoComprobanteData,
+    );
 
     const comprobanteGuardado =
       await this.comprobanteRepository.save(nuevoComprobante);
 
     // 🧮 Crear ítems asociados
     let linea = 1;
-    for (const producto of pedido.productos) {
+    for (const item of itemsCalculo) {
+      const producto = item.producto;
       await this.comprobanteItemService.create({
         tipo: comprobanteGuardado.tipo,
         comprobante: comprobanteGuardado.comprobante,
         linea,
         cantidad: producto.cantidad,
         precio: producto.precio_unitario,
-        importe: producto.cantidad * producto.precio_unitario,
+        importe: item.importe,
+        ajuste: item.ajuste ?? undefined,
+        ajuste_neto: item.ajusteNeto ?? undefined,
+        ajuste_iva: undefined,
         itemId: producto.nombre, // el ID del producto
       } as any);
       linea++;
@@ -173,6 +226,10 @@ export class VtaComprobanteService {
       localidad: partes[1] || undefined, // Ciudad
       provincia: partes[2] || undefined, // Región/Provincia
     };
+  }
+
+  private redondear2(valor: number): number {
+    return Math.round(valor * 100) / 100;
   }
 
   // 🔍 Métodos básicos opcionales
