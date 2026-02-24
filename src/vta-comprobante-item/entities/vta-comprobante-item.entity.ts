@@ -28,6 +28,15 @@ export class VtaComprobanteItem {
   @Column('decimal', { name: 'importe', precision: 12, scale: 2 })
   importe: number;
 
+  @Column('decimal', { name: 'ajuste', precision: 5, scale: 2, nullable: true })
+  ajuste: number | null;
+
+  @Column('decimal', { name: 'ajuste_neto', precision: 12, scale: 2, nullable: true })
+  ajuste_neto: number | null;
+
+  @Column('decimal', { name: 'ajuste_iva', precision: 12, scale: 2, nullable: true })
+  ajuste_iva: number | null;
+
   @ManyToOne(() => VtaComprobante, (comprobante) => comprobante.items)
   @JoinColumn([
     { name: 'tipo', referencedColumnName: 'tipo' },

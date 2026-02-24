@@ -85,6 +85,7 @@ export class PedidoService {
         descripcion: item.descripcion,
         cantidad: producto.cantidad,
         precio_unitario: producto.precio_unitario,
+        ajuste_porcentaje: producto.ajuste_porcentaje ?? null,
       } as PedidoItem);
     }
 

@@ -1,4 +1,4 @@
-import { IsInt, IsNumber, IsNotEmpty, IsString } from 'class-validator';
+import { IsInt, IsNumber, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 
 export class CreateVtaComprobanteItemDto {
   @IsString()
@@ -24,6 +24,18 @@ export class CreateVtaComprobanteItemDto {
   @IsNumber({ maxDecimalPlaces: 2 })
   @IsNotEmpty()
   importe: number;
+
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  ajuste?: number;
+
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  ajuste_neto?: number;
+
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  ajuste_iva?: number;
 
   @IsString()
   @IsNotEmpty()
