@@ -50,31 +50,43 @@ export class VtaComprobanteService {
     );
 
     const itemsCalculo = (pedido.productos ?? []).map((producto) => {
-      const cantidad = producto.cantidad ?? 0;
-      const precioFinal = producto.precio_unitario ?? 0;
-      const importe = this.redondear2(cantidad * precioFinal);
-      const ajustePct = producto.ajuste_porcentaje;
+      const cantidad = Number(producto.cantidad ?? 0);
+      const precioFinalUnitario = Number(producto.precio_unitario ?? 0);
+      const importeFinal = this.redondear2(cantidad * precioFinalUnitario);
+      const ajustePctRaw = producto.ajuste_porcentaje;
 
-      if (ajustePct === null || ajustePct === undefined) {
+      if (
+        ajustePctRaw === null ||
+        ajustePctRaw === undefined ||
+        Number(ajustePctRaw) === 0
+      ) {
         return {
           producto,
-          base: importe,
-          importe,
+          base: importeFinal,
+          importe: importeFinal,
           ajuste: null,
           ajusteNeto: null,
+          precioBaseUnitario: this.redondear2(precioFinalUnitario),
         };
       }
 
-      const factor = 1 + ajustePct / 100;
-      const base = factor === 0 ? 0 : this.redondear2(importe / factor);
-      const ajusteNeto = this.redondear2(importe - base);
+      const descuentoPct = Math.abs(Number(ajustePctRaw));
+      const factor = 1 - descuentoPct / 100;
+      const base =
+        factor > 0 ? this.redondear2(importeFinal / factor) : importeFinal;
+      const ajusteNeto = this.redondear2(importeFinal - base);
+      const precioBaseUnitario =
+        cantidad > 0
+          ? this.redondear2(base / cantidad)
+          : this.redondear2(precioFinalUnitario);
 
       return {
         producto,
         base,
-        importe,
-        ajuste: this.redondear2(ajustePct),
+        importe: importeFinal,
+        ajuste: this.redondear2(-descuentoPct),
         ajusteNeto,
+        precioBaseUnitario,
       };
     });
 
@@ -158,7 +170,7 @@ export class VtaComprobanteService {
         comprobante: comprobanteGuardado.comprobante,
         linea,
         cantidad: producto.cantidad,
-        precio: producto.precio_unitario,
+        precio: item.precioBaseUnitario,
         importe: item.importe,
         ajuste: item.ajuste ?? undefined,
         ajuste_neto: item.ajusteNeto ?? undefined,
