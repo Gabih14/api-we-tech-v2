@@ -35,6 +35,9 @@ export class VtaComprobanteItemService {
       cantidad: dto.cantidad,
       precio: dto.precio,
       importe: dto.importe,
+      ajuste: dto.ajuste ?? null,
+      ajuste_neto: dto.ajuste_neto ?? null,
+      ajuste_iva: dto.ajuste_iva ?? null,
       comprobanteRef: comprobante,
       item,
     });

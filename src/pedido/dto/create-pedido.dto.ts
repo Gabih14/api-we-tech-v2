@@ -19,6 +19,10 @@ export class ProductoDto {
 
   @IsNumber()
   precio_unitario: number;
+
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  ajuste_porcentaje?: number;
 }
 
 export class BillingAddressDto {
