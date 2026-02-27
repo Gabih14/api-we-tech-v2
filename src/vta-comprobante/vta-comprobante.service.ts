@@ -9,6 +9,24 @@ import { VtaClienteService } from 'src/vta_cliente/vta_cliente.service';
 import { CreateVtaClienteDto } from 'src/vta_cliente/dto/create-vta_cliente.dto';
 import { VtaComprobanteAsientoService } from 'src/vta_comprobante_asiento/vta_comprobante_asiento.service';
 
+type RawResumenMetricas = {
+  totalVentas: string | null;
+  cantidadComprobantes: string | null;
+  ticketPromedio: string | null;
+};
+
+type RawVentasMensuales = {
+  mes: string;
+  totalVentas: string | null;
+  cantidadComprobantes: string | null;
+};
+
+type RawVentasPorVendedor = {
+  vendedor: string;
+  totalVentas: string | null;
+  cantidadComprobantes: string | null;
+};
+
 @Injectable()
 export class VtaComprobanteService {
   constructor(
@@ -93,9 +111,8 @@ export class VtaComprobanteService {
     const baseTotal = this.redondear2(
       itemsCalculo.reduce((acc, item) => acc + item.base, 0),
     );
-    const totalImporte = this.redondear2(
-      itemsCalculo.reduce((acc, item) => acc + item.importe, 0),
-    );
+    // ✅ Usar el total del pedido para evitar discrepancias por redondeo
+    const totalImporte = this.redondear2(pedido.total);
     const totalAjusteNeto = this.redondear2(
       itemsCalculo.reduce((acc, item) => acc + (item.ajusteNeto ?? 0), 0),
     );
@@ -242,6 +259,128 @@ export class VtaComprobanteService {
 
   private redondear2(valor: number): number {
     return Math.round(valor * 100) / 100;
+  }
+
+  private parseDateRange(from?: string, to?: string): {
+    fromDate?: Date;
+    toDate?: Date;
+  } {
+    const fromDate = from ? new Date(`${from}T00:00:00`) : undefined;
+    const toDate = to ? new Date(`${to}T23:59:59.999`) : undefined;
+
+    return {
+      fromDate:
+        fromDate && !Number.isNaN(fromDate.getTime()) ? fromDate : undefined,
+      toDate: toDate && !Number.isNaN(toDate.getTime()) ? toDate : undefined,
+    };
+  }
+
+  async getResumenMetricas(from?: string, to?: string): Promise<{
+    totalVentas: number;
+    cantidadComprobantes: number;
+    ticketPromedio: number;
+  }> {
+    const { fromDate, toDate } = this.parseDateRange(from, to);
+
+    const qb = this.comprobanteRepository.createQueryBuilder('c');
+
+    qb.select('COALESCE(SUM(c.total), 0)', 'totalVentas')
+      .addSelect('COUNT(*)', 'cantidadComprobantes')
+      .addSelect('COALESCE(AVG(c.total), 0)', 'ticketPromedio')
+      .where('(c.anulado IS NULL OR c.anulado = :anulado)', { anulado: false })
+      .andWhere('c.fecha IS NOT NULL');
+
+    if (fromDate) {
+      qb.andWhere('c.fecha >= :fromDate', { fromDate });
+    }
+
+    if (toDate) {
+      qb.andWhere('c.fecha <= :toDate', { toDate });
+    }
+
+    const raw = await qb.getRawOne<RawResumenMetricas>();
+
+    return {
+      totalVentas: Number(raw?.totalVentas ?? 0),
+      cantidadComprobantes: Number(raw?.cantidadComprobantes ?? 0),
+      ticketPromedio: Number(raw?.ticketPromedio ?? 0),
+    };
+  }
+
+  async getVentasMensuales(
+    from?: string,
+    to?: string,
+  ): Promise<
+    Array<{ mes: string; totalVentas: number; cantidadComprobantes: number }>
+  > {
+    const { fromDate, toDate } = this.parseDateRange(from, to);
+
+    const qb = this.comprobanteRepository.createQueryBuilder('c');
+
+    qb.select("DATE_FORMAT(c.fecha, '%Y-%m')", 'mes')
+      .addSelect('COALESCE(SUM(c.total), 0)', 'totalVentas')
+      .addSelect('COUNT(*)', 'cantidadComprobantes')
+      .where('(c.anulado IS NULL OR c.anulado = :anulado)', { anulado: false })
+      .andWhere('c.fecha IS NOT NULL');
+
+    if (fromDate) {
+      qb.andWhere('c.fecha >= :fromDate', { fromDate });
+    }
+
+    if (toDate) {
+      qb.andWhere('c.fecha <= :toDate', { toDate });
+    }
+
+    const rows = await qb
+      .groupBy("DATE_FORMAT(c.fecha, '%Y-%m')")
+      .orderBy('mes', 'ASC')
+      .getRawMany<RawVentasMensuales>();
+
+    return rows.map((row) => ({
+      mes: row.mes,
+      totalVentas: Number(row.totalVentas ?? 0),
+      cantidadComprobantes: Number(row.cantidadComprobantes ?? 0),
+    }));
+  }
+
+  async getVentasPorVendedor(
+    from?: string,
+    to?: string,
+  ): Promise<
+    Array<{
+      vendedor: string;
+      totalVentas: number;
+      cantidadComprobantes: number;
+    }>
+  > {
+    const { fromDate, toDate } = this.parseDateRange(from, to);
+
+    const qb = this.comprobanteRepository.createQueryBuilder('c');
+
+    qb.select("COALESCE(NULLIF(TRIM(c.trabajador), ''), 'SIN_VENDEDOR')", 'vendedor')
+      .addSelect('COALESCE(SUM(c.total), 0)', 'totalVentas')
+      .addSelect('COUNT(*)', 'cantidadComprobantes')
+      .where('(c.anulado IS NULL OR c.anulado = :anulado)', { anulado: false })
+      .andWhere('c.fecha IS NOT NULL');
+
+    if (fromDate) {
+      qb.andWhere('c.fecha >= :fromDate', { fromDate });
+    }
+
+    if (toDate) {
+      qb.andWhere('c.fecha <= :toDate', { toDate });
+    }
+
+    const rows = await qb
+      .groupBy("COALESCE(NULLIF(TRIM(c.trabajador), ''), 'SIN_VENDEDOR')")
+      .orderBy('totalVentas', 'DESC')
+      .getRawMany<RawVentasPorVendedor>();
+
+    return rows.map((row) => ({
+      vendedor: row.vendedor,
+      totalVentas: Number(row.totalVentas ?? 0),
+      cantidadComprobantes: Number(row.cantidadComprobantes ?? 0),
+    }));
   }
 
   // 🔍 Métodos básicos opcionales

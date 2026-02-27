@@ -1,9 +1,36 @@
-import { Controller, Get, Param } from '@nestjs/common';
+import { Controller, Get, Param, Query } from '@nestjs/common';
 import { VtaComprobanteService } from './vta-comprobante.service';
 
 @Controller('vta-comprobante')
 export class VtaComprobanteController {
   constructor(private readonly vtaComprobanteService: VtaComprobanteService) {}
+
+  // 📊 Resumen para dashboard
+  @Get('metrics/resumen')
+  getResumen(
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.vtaComprobanteService.getResumenMetricas(from, to);
+  }
+
+  // 📈 Ventas agrupadas por mes
+  @Get('metrics/ventas-mensuales')
+  getVentasMensuales(
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.vtaComprobanteService.getVentasMensuales(from, to);
+  }
+
+  // 👤 Ventas agrupadas por vendedor
+  @Get('metrics/ventas-por-vendedor')
+  getVentasPorVendedor(
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.vtaComprobanteService.getVentasPorVendedor(from, to);
+  }
 
   // 📋 Listar todos los comprobantes
   @Get()
