@@ -2,6 +2,6 @@
 import { SetMetadata } from '@nestjs/common';
 
 export const AUTH_TYPE_KEY = 'authType';
-export type AuthType = 'default' | 'nave' | 'public';
+export type AuthType = 'default' | 'nave' | 'public' | 'dashboard';
 
 export const AuthType = (type: AuthType) => SetMetadata(AUTH_TYPE_KEY, type);
