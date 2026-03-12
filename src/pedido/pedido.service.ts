@@ -12,7 +12,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Pedido } from './entities/pedido.entity';
-import { Repository } from 'typeorm';
+import { Brackets, Repository } from 'typeorm';
 import { CreatePedidoDto } from './dto/create-pedido.dto';
 import { StkExistenciaService } from 'src/stk-existencia/stk-existencia.service';
 import { StkItem } from 'src/stk-item/entities/stk-item.entity';
@@ -23,6 +23,7 @@ import { ConfigService } from '@nestjs/config';
 import { MailerService } from 'src/mailer/mailer.service';
 import { WhatsappService } from 'src/whatsapp/whatsapp.service';
 import { CobrosService } from 'src/vta-comprobante/cobros.service';
+import { GetPedidosDashboardDto } from './dto/get-pedidos-dashboard.dto';
 
 @Injectable()
 export class PedidoService {
@@ -567,6 +568,112 @@ export class PedidoService {
     });
   }
 
+  async listarParaDashboard(query: GetPedidosDashboardDto): Promise<{
+    items: Pedido[];
+    total: number;
+    page: number;
+    limit: number;
+  }> {
+    const page = this.normalizePage(query.page);
+    const limit = this.normalizeLimit(query.limit);
+    const offset = (page - 1) * limit;
+
+    const qb = this.pedidoRepo.createQueryBuilder('pedido');
+
+    if (query.estado) {
+      if (!['PENDIENTE', 'APROBADO', 'CANCELADO'].includes(query.estado)) {
+        throw new BadRequestException('Estado inválido');
+      }
+      qb.andWhere('pedido.estado = :estado', { estado: query.estado });
+    }
+
+    if (query.metodo_pago) {
+      if (!['online', 'transfer'].includes(query.metodo_pago)) {
+        throw new BadRequestException('Método de pago inválido');
+      }
+      qb.andWhere('pedido.metodo_pago = :metodoPago', {
+        metodoPago: query.metodo_pago,
+      });
+    }
+
+    if (query.delivery_method) {
+      if (!['pickup', 'shipping'].includes(query.delivery_method)) {
+        throw new BadRequestException('Tipo de envío inválido');
+      }
+      qb.andWhere('pedido.delivery_method = :deliveryMethod', {
+        deliveryMethod: query.delivery_method,
+      });
+    }
+
+    const fromDate = this.parseDateStart(query.from);
+    const toDate = this.parseDateEnd(query.to);
+
+    if (fromDate) {
+      qb.andWhere('pedido.creado >= :fromDate', { fromDate });
+    }
+
+    if (toDate) {
+      qb.andWhere('pedido.creado <= :toDate', { toDate });
+    }
+
+    const search = query.q?.trim();
+    if (search) {
+      qb.andWhere(
+        new Brackets((subQb) => {
+          subQb
+            .where('pedido.cliente_nombre LIKE :search', {
+              search: `%${search}%`,
+            })
+            .orWhere('pedido.cliente_cuit LIKE :search', {
+              search: `%${search}%`,
+            })
+            .orWhere('pedido.external_id LIKE :search', {
+              search: `%${search}%`,
+            });
+        }),
+      );
+    }
+
+    qb.orderBy('pedido.creado', 'DESC').skip(offset).take(limit);
+
+    const [items, total] = await qb.getManyAndCount();
+
+    return {
+      items,
+      total,
+      page,
+      limit,
+    };
+  }
+
+  async cancelarPedidoPendiente(externalId: string): Promise<Pedido> {
+    const pedido = await this.pedidoRepo.findOne({
+      where: { external_id: externalId },
+      relations: ['productos'],
+    });
+
+    if (!pedido) {
+      throw new NotFoundException(`Pedido ${externalId} no encontrado`);
+    }
+
+    if (pedido.estado !== 'PENDIENTE') {
+      throw new ConflictException(
+        `Pedido ${externalId} no puede cancelarse (estado: ${pedido.estado})`,
+      );
+    }
+
+    for (const producto of pedido.productos) {
+      try {
+        await this.stockService.liberarStock(producto.nombre, producto.cantidad);
+      } catch (err) {
+        console.error(`❌ Error liberando stock de ${producto.nombre}:`, err);
+      }
+    }
+
+    pedido.estado = 'CANCELADO';
+    return this.pedidoRepo.save(pedido);
+  }
+
   // 💳 Aprobar pedido por transferencia
   async aprobarTransferencia(externalId: string): Promise<{ pedido: Pedido; comprobante: any }> {
     const pedido = await this.pedidoRepo.findOne({
@@ -650,7 +757,6 @@ export class PedidoService {
   async rechazarTransferencia(externalId: string): Promise<Pedido> {
     const pedido = await this.pedidoRepo.findOne({
       where: { external_id: externalId },
-      relations: ['productos'],
     });
 
     if (!pedido) {
@@ -661,26 +767,43 @@ export class PedidoService {
       throw new BadRequestException(`Pedido ${externalId} no es de tipo transferencia`);
     }
 
-    if (pedido.estado !== 'PENDIENTE') {
-      throw new ConflictException(`Pedido ${externalId} ya fue procesado (estado: ${pedido.estado})`);
-    }
-
-    // Liberar stock
-    for (const p of pedido.productos) {
-      try {
-        await this.stockService.liberarStock(p.nombre, p.cantidad);
-      } catch (err) {
-        console.error(`❌ Error liberando stock de ${p.nombre}:`, err);
-      }
-    }
-
-    // Actualizar estado
-    pedido.estado = 'CANCELADO';
-    await this.pedidoRepo.save(pedido);
+    const cancelado = await this.cancelarPedidoPendiente(externalId);
 
     console.log(`✅ Pedido transferencia ${externalId} rechazado manualmente`);
 
-    return pedido;
+    return cancelado;
+  }
+
+  private normalizePage(page?: number | string): number {
+    const value = Number(page ?? 1);
+    if (!Number.isFinite(value) || value < 1) {
+      return 1;
+    }
+    return Math.floor(value);
+  }
+
+  private normalizeLimit(limit?: number | string): number {
+    const value = Number(limit ?? 20);
+    if (!Number.isFinite(value) || value < 1) {
+      return 20;
+    }
+    return Math.min(Math.floor(value), 100);
+  }
+
+  private parseDateStart(value?: string): Date | undefined {
+    if (!value) {
+      return undefined;
+    }
+    const parsed = new Date(`${value}T00:00:00`);
+    return Number.isNaN(parsed.getTime()) ? undefined : parsed;
+  }
+
+  private parseDateEnd(value?: string): Date | undefined {
+    if (!value) {
+      return undefined;
+    }
+    const parsed = new Date(`${value}T23:59:59.999`);
+    return Number.isNaN(parsed.getTime()) ? undefined : parsed;
   }
 
   private buildProductosHtml(pedido: Pedido): string {

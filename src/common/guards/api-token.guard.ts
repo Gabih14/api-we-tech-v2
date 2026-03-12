@@ -37,6 +37,8 @@ export class ApiTokenGuard implements CanActivate {
     // Tokens desde variables de entorno
     const defaultToken = this.configService.get<string>('API_TOKEN');
     const naveToken = this.configService.get<string>('NAVE_WEBHOOK_TOKEN');
+    const dashboardToken =
+      this.configService.get<string>('DASHBOARD_API_TOKEN') ?? defaultToken;
 
     if (requiredAuthType === 'default' && token !== defaultToken) {
       throw new UnauthorizedException('Token inválido para API general');
@@ -44,6 +46,10 @@ export class ApiTokenGuard implements CanActivate {
 
     if (requiredAuthType === 'nave' && token !== naveToken) {
       throw new UnauthorizedException('Token inválido para Nave');
+    }
+
+    if (requiredAuthType === 'dashboard' && token !== dashboardToken) {
+      throw new UnauthorizedException('Token inválido para Dashboard');
     }
 
     return true;

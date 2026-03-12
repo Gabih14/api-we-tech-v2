@@ -9,11 +9,13 @@ import {
   Get,
   Param,
   NotFoundException,
+  Query,
 } from '@nestjs/common';
 import { PedidoService } from './pedido.service';
 import { CreatePedidoDto } from './dto/create-pedido.dto';
 import { ApiTokenGuard } from '../common/guards/api-token.guard';
 import { AuthType } from '../common/decorators/auth-type.decorator';
+import { GetPedidosDashboardDto } from './dto/get-pedidos-dashboard.dto';
 
 @Controller('pedido')
 @UseGuards(ApiTokenGuard)
@@ -50,7 +52,14 @@ export class PedidoController {
     return { message: 'Notificación procesada correctamente.', estado: resultado.estado, test: true };
   }
 
+  @Get()
+  @AuthType('dashboard')
+  async listarDashboard(@Query() query: GetPedidosDashboardDto) {
+    return this.pedidoService.listarParaDashboard(query);
+  }
+
   @Get(':externalId')
+  @AuthType('dashboard')
   async getByExternalId(@Param('externalId') externalId: string) {
     const pedido = await this.pedidoService.encontrarPorExternalId(externalId);
     if (!pedido) {
@@ -61,7 +70,19 @@ export class PedidoController {
     return pedido;
   }
 
+  @Post(':externalId/cancelar')
+  @AuthType('dashboard')
+  @HttpCode(HttpStatus.OK)
+  async cancelarPedido(@Param('externalId') externalId: string) {
+    const pedido = await this.pedidoService.cancelarPedidoPendiente(externalId);
+    return {
+      message: 'Pedido cancelado correctamente',
+      pedido,
+    };
+  }
+
   @Post(':externalId/rechazar')
+  @AuthType('dashboard')
   @HttpCode(HttpStatus.OK)
   async rechazarTransferencia(@Param('externalId') externalId: string) {
     const pedido = await this.pedidoService.rechazarTransferencia(externalId);
