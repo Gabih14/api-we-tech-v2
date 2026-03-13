@@ -546,6 +546,12 @@ export class PedidoService {
             p.cantidad,
           );
         }
+        await this.eliminarComprobanteSiExiste(pedido);
+        try {
+          await this.notificarCancelacionCliente(pedido, 'Pago rechazado o cancelado');
+        } catch (e) {
+          console.error('mail cancelacion cliente', e);
+        }
         break;
 
       default:
@@ -671,7 +677,16 @@ export class PedidoService {
     }
 
     pedido.estado = 'CANCELADO';
-    return this.pedidoRepo.save(pedido);
+    await this.eliminarComprobanteSiExiste(pedido);
+    const pedidoCancelado = await this.pedidoRepo.save(pedido);
+
+    try {
+      await this.notificarCancelacionCliente(pedidoCancelado, 'Pedido cancelado por administracion');
+    } catch (e) {
+      console.error('mail cancelacion cliente', e);
+    }
+
+    return pedidoCancelado;
   }
 
   // 💳 Aprobar pedido por transferencia
@@ -772,6 +787,20 @@ export class PedidoService {
     console.log(`✅ Pedido transferencia ${externalId} rechazado manualmente`);
 
     return cancelado;
+  }
+
+  private async eliminarComprobanteSiExiste(pedido: Pedido): Promise<void> {
+    if (!pedido.comprobante_tipo || !pedido.comprobante_numero) {
+      return;
+    }
+
+    const tipo = pedido.comprobante_tipo;
+    const comprobante = pedido.comprobante_numero;
+
+    await this.vtaComprobanteService.eliminarComprobantePorPedido(tipo, comprobante);
+
+    pedido.comprobante_tipo = null;
+    pedido.comprobante_numero = null;
   }
 
   private normalizePage(page?: number | string): number {
@@ -1061,6 +1090,78 @@ export class PedidoService {
       destinatarios,
       '📦 Pedido Aprobado en WeTech',
       htmlMensaje,
+    );
+  }
+
+  private async notificarCancelacionCliente(pedido: Pedido, motivo: string) {
+    const clienteEmail = pedido.cliente_mail;
+    if (!clienteEmail) {
+      console.warn(`No se encontro email de cliente para pedido cancelado ${pedido.external_id}`);
+      return;
+    }
+
+    const productosHtml = this.buildProductosHtml(pedido);
+
+    const htmlCliente = `
+<div style="font-family: system-ui, sans-serif, Arial; font-size: 14px; color: #333; padding: 14px 8px; background-color: #f5f5f5;">
+  <div style="max-width: 600px; margin: auto; background-color: #fff;">
+    <div style="border-top: 6px solid #cc0000; padding: 16px;">
+      <a style="text-decoration: none; outline: none; margin-right: 8px; vertical-align: middle;" href="https://shop.wetech.ar" target="_blank" rel="noopener">
+        <img src="https://shop.wetech.ar/assets/Logo%20WeTECH%20Negro%20PNG-CPBuO7yQ.png" width="103" height="41" alt="WeTECH Logo">
+      </a>
+      <span style="font-size: 16px; vertical-align: middle; border-left: 1px solid #333; padding-left: 8px;">
+        <strong>Pedido cancelado</strong>
+      </span>
+    </div>
+
+    <div style="padding: 0 16px;">
+      <p>Estimado/a <strong>${pedido.cliente_nombre}</strong>,<br>
+      te informamos que tu pedido fue cancelado.</p>
+
+      <div style="margin: 12px 0; font-size: 14px; color: #555;">
+        <div><strong>Pedido:</strong> ${pedido.external_id}</div>
+        <div><strong>Motivo:</strong> ${motivo}</div>
+        <div><strong>Estado:</strong> ${pedido.estado}</div>
+      </div>
+
+      <div style="text-align: left; font-size: 14px; padding-bottom: 4px; border-bottom: 2px solid #333;">
+        <strong>Detalles del Pedido</strong>
+      </div>
+
+      ${productosHtml}
+
+      <div style="padding: 24px 0;">
+        <div style="border-top: 2px solid #333;">&nbsp;</div>
+      </div>
+      <table style="border-collapse: collapse; width: 100%; text-align: right;">
+        <tbody>
+          <tr>
+            <td style="width: 60%;">&nbsp;</td>
+            <td style="border-top: 2px solid #333;">
+              <strong style="white-space: nowrap;">Total del Pedido</strong>
+            </td>
+            <td style="padding: 16px 8px; border-top: 2px solid #333; white-space: nowrap;">
+              <strong>$${pedido.total.toFixed(2)}</strong>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div style="max-width: 600px; margin: auto; padding: 12px; text-align: center;">
+    <p style="color: #999; font-size: 12px;">
+      Este correo fue enviado a ${pedido.cliente_mail}<br>
+      Si tenes dudas, comunicate con nuestro equipo.
+    </p>
+  </div>
+</div>
+    `;
+
+    await this.mailerService.enviarCorreo(
+      clienteEmail,
+      'Pedido cancelado - WeTECH',
+      htmlCliente,
     );
   }
 }

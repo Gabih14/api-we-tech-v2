@@ -1,13 +1,19 @@
 // src/vta-comprobante/vta-comprobante.service.ts
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DeepPartial, Repository } from 'typeorm';
+import { DataSource, DeepPartial, Repository } from 'typeorm';
 import { VtaComprobante } from './entities/vta-comprobante.entity';
 import { Pedido } from 'src/pedido/entities/pedido.entity';
 import { VtaComprobanteItemService } from 'src/vta-comprobante-item/vta-comprobante-item.service';
 import { VtaClienteService } from 'src/vta_cliente/vta_cliente.service';
 import { CreateVtaClienteDto } from 'src/vta_cliente/dto/create-vta_cliente.dto';
 import { VtaComprobanteAsientoService } from 'src/vta_comprobante_asiento/vta_comprobante_asiento.service';
+import { VtaCobro } from 'src/vta-cobro/entities/vta-cobro.entity';
+import { VtaCobroMedio } from 'src/vta-cobro-medio/entities/vta-cobro-medio.entity';
+import { VtaCobroFactura } from 'src/vta-cobro-factura/entities/vta-cobro-factura.entity';
+import { VtaComprobanteAsiento } from 'src/vta_comprobante_asiento/entities/vta_comprobante_asiento.entity';
+import { VtaComprobanteItem } from 'src/vta-comprobante-item/entities/vta-comprobante-item.entity';
+import { CntAsiento } from 'src/cnt-asiento/entities/cnt-asiento.entity';
 
 type RawResumenMetricas = {
   totalVentas: string | null;
@@ -30,6 +36,8 @@ type RawVentasPorVendedor = {
 @Injectable()
 export class VtaComprobanteService {
   constructor(
+    private readonly dataSource: DataSource,
+
     @InjectRepository(VtaComprobante)
     private readonly comprobanteRepository: Repository<VtaComprobante>,
 
@@ -37,6 +45,122 @@ export class VtaComprobanteService {
     private readonly clienteService: VtaClienteService,
     private readonly vtaComprobanteAsientoService: VtaComprobanteAsientoService,
   ) {}
+
+  async eliminarComprobantePorPedido(
+    tipo: string,
+    comprobante: string,
+  ): Promise<{ eliminado: boolean }> {
+    return this.dataSource.transaction(async (manager) => {
+      const comprobanteRepo = manager.getRepository(VtaComprobante);
+      const comprobanteEntity = await comprobanteRepo.findOne({
+        where: { tipo, comprobante },
+      });
+
+      if (!comprobanteEntity) {
+        return { eliminado: false };
+      }
+
+      const cobroFacturaRepo = manager.getRepository(VtaCobroFactura);
+      const cobroMedioRepo = manager.getRepository(VtaCobroMedio);
+      const cobroRepo = manager.getRepository(VtaCobro);
+      const asientoLinkRepo = manager.getRepository(VtaComprobanteAsiento);
+      const asientoRepo = manager.getRepository(CntAsiento);
+      const comprobanteItemRepo = manager.getRepository(VtaComprobanteItem);
+
+      const asientosLink = await asientoLinkRepo.find({
+        where: { tipo, comprobante },
+      });
+
+      const cobrosVinculados = await cobroFacturaRepo.find({
+        where: { tipo, factura: comprobante },
+      });
+      const cobroIds = Array.from(
+        new Set(cobrosVinculados.map((row) => row.cobro).filter(Boolean)),
+      );
+
+      if (cobroIds.length > 0) {
+        await cobroMedioRepo
+          .createQueryBuilder()
+          .delete()
+          .where('cobro IN (:...cobroIds)', { cobroIds })
+          .execute();
+
+        await cobroFacturaRepo
+          .createQueryBuilder()
+          .delete()
+          .where('cobro IN (:...cobroIds)', { cobroIds })
+          .execute();
+
+        await cobroRepo
+          .createQueryBuilder()
+          .delete()
+          .where('numero IN (:...cobroIds)', { cobroIds })
+          .execute();
+      } else {
+        await cobroFacturaRepo.delete({ tipo, factura: comprobante });
+      }
+
+      let asientosEliminados = 0;
+      let asientosPreservados = 0;
+
+      for (const link of asientosLink) {
+        const usoExterno = await manager.query(
+          `
+          SELECT
+            EXISTS(SELECT 1 FROM cmp_comprobante_asiento WHERE ejercicio = ? AND asiento = ?) AS in_cmp_comp,
+            EXISTS(SELECT 1 FROM cmp_pago_asiento WHERE ejercicio = ? AND asiento = ?) AS in_cmp_pago,
+            EXISTS(SELECT 1 FROM fnd_movimiento_asiento WHERE ejercicio = ? AND asiento = ?) AS in_fnd,
+            EXISTS(SELECT 1 FROM vta_cobro_asiento WHERE ejercicio = ? AND asiento = ?) AS in_vta_cobro
+          `,
+          [
+            link.ejercicio,
+            link.asiento,
+            link.ejercicio,
+            link.asiento,
+            link.ejercicio,
+            link.asiento,
+            link.ejercicio,
+            link.asiento,
+          ],
+        );
+
+        const row = usoExterno?.[0] ?? {};
+        const usadoEnOtrosModulos =
+          Number(row.in_cmp_comp) > 0 ||
+          Number(row.in_cmp_pago) > 0 ||
+          Number(row.in_fnd) > 0 ||
+          Number(row.in_vta_cobro) > 0;
+
+        if (!usadoEnOtrosModulos) {
+          await asientoRepo.delete({
+            ejercicio: link.ejercicio,
+            id: link.asiento,
+          });
+          asientosEliminados += 1;
+        } else {
+          asientosPreservados += 1;
+        }
+
+        await asientoLinkRepo.delete({
+          tipo: link.tipo,
+          comprobante: link.comprobante,
+          ejercicio: link.ejercicio,
+          asiento: link.asiento,
+        });
+      }
+
+      if (asientosPreservados > 0) {
+        console.warn(
+          `Comprobante ${tipo} ${comprobante}: ${asientosPreservados} asiento(s) preservado(s) por uso externo y ${asientosEliminados} eliminado(s).`,
+        );
+      }
+
+      await comprobanteItemRepo.delete({ tipo, comprobante });
+      await comprobanteRepo.delete({ tipo, comprobante });
+
+      return { eliminado: true };
+    });
+  }
 
   // 🧾 Crear comprobante a partir de un pedido aprobado
   async crearDesdePedido(pedido: Pedido): Promise<VtaComprobante> {
