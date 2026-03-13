@@ -546,6 +546,7 @@ export class PedidoService {
             p.cantidad,
           );
         }
+        await this.eliminarComprobanteSiExiste(pedido);
         try {
           await this.notificarCancelacionCliente(pedido, 'Pago rechazado o cancelado');
         } catch (e) {
@@ -676,6 +677,7 @@ export class PedidoService {
     }
 
     pedido.estado = 'CANCELADO';
+    await this.eliminarComprobanteSiExiste(pedido);
     const pedidoCancelado = await this.pedidoRepo.save(pedido);
 
     try {
@@ -785,6 +787,20 @@ export class PedidoService {
     console.log(`✅ Pedido transferencia ${externalId} rechazado manualmente`);
 
     return cancelado;
+  }
+
+  private async eliminarComprobanteSiExiste(pedido: Pedido): Promise<void> {
+    if (!pedido.comprobante_tipo || !pedido.comprobante_numero) {
+      return;
+    }
+
+    const tipo = pedido.comprobante_tipo;
+    const comprobante = pedido.comprobante_numero;
+
+    await this.vtaComprobanteService.eliminarComprobantePorPedido(tipo, comprobante);
+
+    pedido.comprobante_tipo = null;
+    pedido.comprobante_numero = null;
   }
 
   private normalizePage(page?: number | string): number {
