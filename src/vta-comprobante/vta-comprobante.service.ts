@@ -13,6 +13,7 @@ import { VtaCobroMedio } from 'src/vta-cobro-medio/entities/vta-cobro-medio.enti
 import { VtaCobroFactura } from 'src/vta-cobro-factura/entities/vta-cobro-factura.entity';
 import { VtaComprobanteAsiento } from 'src/vta_comprobante_asiento/entities/vta_comprobante_asiento.entity';
 import { VtaComprobanteItem } from 'src/vta-comprobante-item/entities/vta-comprobante-item.entity';
+import { CntAsiento } from 'src/cnt-asiento/entities/cnt-asiento.entity';
 
 type RawResumenMetricas = {
   totalVentas: string | null;
@@ -63,7 +64,12 @@ export class VtaComprobanteService {
       const cobroMedioRepo = manager.getRepository(VtaCobroMedio);
       const cobroRepo = manager.getRepository(VtaCobro);
       const asientoLinkRepo = manager.getRepository(VtaComprobanteAsiento);
+      const asientoRepo = manager.getRepository(CntAsiento);
       const comprobanteItemRepo = manager.getRepository(VtaComprobanteItem);
+
+      const asientosLink = await asientoLinkRepo.find({
+        where: { tipo, comprobante },
+      });
 
       const cobrosVinculados = await cobroFacturaRepo.find({
         where: { tipo, factura: comprobante },
@@ -94,7 +100,61 @@ export class VtaComprobanteService {
         await cobroFacturaRepo.delete({ tipo, factura: comprobante });
       }
 
-      await asientoLinkRepo.delete({ tipo, comprobante });
+      let asientosEliminados = 0;
+      let asientosPreservados = 0;
+
+      for (const link of asientosLink) {
+        const usoExterno = await manager.query(
+          `
+          SELECT
+            EXISTS(SELECT 1 FROM cmp_comprobante_asiento WHERE ejercicio = ? AND asiento = ?) AS in_cmp_comp,
+            EXISTS(SELECT 1 FROM cmp_pago_asiento WHERE ejercicio = ? AND asiento = ?) AS in_cmp_pago,
+            EXISTS(SELECT 1 FROM fnd_movimiento_asiento WHERE ejercicio = ? AND asiento = ?) AS in_fnd,
+            EXISTS(SELECT 1 FROM vta_cobro_asiento WHERE ejercicio = ? AND asiento = ?) AS in_vta_cobro
+          `,
+          [
+            link.ejercicio,
+            link.asiento,
+            link.ejercicio,
+            link.asiento,
+            link.ejercicio,
+            link.asiento,
+            link.ejercicio,
+            link.asiento,
+          ],
+        );
+
+        const row = usoExterno?.[0] ?? {};
+        const usadoEnOtrosModulos =
+          Number(row.in_cmp_comp) > 0 ||
+          Number(row.in_cmp_pago) > 0 ||
+          Number(row.in_fnd) > 0 ||
+          Number(row.in_vta_cobro) > 0;
+
+        if (!usadoEnOtrosModulos) {
+          await asientoRepo.delete({
+            ejercicio: link.ejercicio,
+            id: link.asiento,
+          });
+          asientosEliminados += 1;
+        } else {
+          asientosPreservados += 1;
+        }
+
+        await asientoLinkRepo.delete({
+          tipo: link.tipo,
+          comprobante: link.comprobante,
+          ejercicio: link.ejercicio,
+          asiento: link.asiento,
+        });
+      }
+
+      if (asientosPreservados > 0) {
+        console.warn(
+          `Comprobante ${tipo} ${comprobante}: ${asientosPreservados} asiento(s) preservado(s) por uso externo y ${asientosEliminados} eliminado(s).`,
+        );
+      }
+
       await comprobanteItemRepo.delete({ tipo, comprobante });
       await comprobanteRepo.delete({ tipo, comprobante });
 
