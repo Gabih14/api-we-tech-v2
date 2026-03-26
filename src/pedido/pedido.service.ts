@@ -76,6 +76,8 @@ export class PedidoService {
         );
       }
 
+      this.validarSubtotalProducto(producto);
+
       await this.stockService.reservarStock(
         item.id,
         producto.cantidad,
@@ -86,6 +88,7 @@ export class PedidoService {
         descripcion: item.descripcion,
         cantidad: producto.cantidad,
         precio_unitario: producto.precio_unitario,
+        subtotal: this.redondear2(Number(producto.subtotal)),
         ajuste_porcentaje: producto.ajuste_porcentaje ?? null,
       } as PedidoItem);
     }
@@ -835,6 +838,71 @@ export class PedidoService {
     return Number.isNaN(parsed.getTime()) ? undefined : parsed;
   }
 
+  private redondear2(valor: number): number {
+    return Math.round((Number(valor) + Number.EPSILON) * 100) / 100;
+  }
+
+  private validarSubtotalProducto(producto: CreatePedidoDto['productos'][number]): void {
+    const cantidad = Number(producto.cantidad ?? 0);
+    const precioUnitarioNeto = Number(producto.precio_unitario ?? 0);
+    const subtotalBruto = this.redondear2(Number(producto.subtotal ?? 0));
+    const ajustePorcentaje = Number(producto.ajuste_porcentaje ?? 0);
+
+    if (!Number.isFinite(cantidad) || !Number.isFinite(precioUnitarioNeto) || !Number.isFinite(subtotalBruto)) {
+      throw new BadRequestException(
+        `Producto '${producto.nombre}': cantidad, precio_unitario y subtotal deben ser valores numéricos válidos.`,
+      );
+    }
+
+    const factorDescuento = 1 - (Math.abs(ajustePorcentaje) / 100);
+    if (factorDescuento <= 0) {
+      throw new BadRequestException(
+        `Producto '${producto.nombre}': ajuste_porcentaje debe ser menor a 100.`,
+      );
+    }
+
+    const netoCalculado = this.redondear2(cantidad * precioUnitarioNeto);
+    const netoEsperadoDesdeSubtotal = this.redondear2(
+      subtotalBruto * factorDescuento,
+    );
+    const precisionPrecio = this.obtenerPrecisionDecimal(precioUnitarioNeto);
+    const brutoUnitario = cantidad > 0 ? subtotalBruto / cantidad : 0;
+    const netoUnitarioEsperado = this.redondearConPrecision(
+      brutoUnitario * factorDescuento,
+      precisionPrecio,
+    );
+    const netoEsperadoPorUnidad = this.redondear2(
+      netoUnitarioEsperado * cantidad,
+    );
+
+    const tolerancia = 0.01;
+    const coincideCalculoLinea =
+      Math.abs(netoCalculado - netoEsperadoDesdeSubtotal) <= tolerancia;
+    const coincideCalculoUnitario =
+      Math.abs(netoCalculado - netoEsperadoPorUnidad) <= tolerancia;
+
+    if (!coincideCalculoLinea && !coincideCalculoUnitario) {
+      throw new BadRequestException(
+        `Producto '${producto.nombre}': subtotal inconsistente con cantidad/precio_unitario/ajuste_porcentaje.`,
+      );
+    }
+  }
+
+  private obtenerPrecisionDecimal(valor: number): number {
+    if (!Number.isFinite(valor)) {
+      return 2;
+    }
+
+    const texto = valor.toString();
+    const decimales = texto.includes('.') ? texto.split('.')[1].length : 0;
+    return Math.min(decimales, 2);
+  }
+
+  private redondearConPrecision(valor: number, precision: number): number {
+    const factor = 10 ** precision;
+    return Math.round((valor + Number.EPSILON) * factor) / factor;
+  }
+
   private buildProductosHtml(pedido: Pedido): string {
     return pedido.productos
       .map(
@@ -845,9 +913,10 @@ export class PedidoService {
             <td style="padding: 16px 8px 0 0; width: 100%;">
               <div>${p.nombre}</div>
               <div style="font-size: 14px; color: #888; padding-top: 4px;">Cantidad: ${p.cantidad}</div>
+              <div style="font-size: 14px; color: #888; padding-top: 2px;">Unitario neto: $${Number(p.precio_unitario).toFixed(2)}</div>
             </td>
             <td style="padding: 16px 4px 0 0; white-space: nowrap; text-align: right;">
-              <strong>$${p.precio_unitario.toFixed(2)}</strong>
+              <strong>$${Number(p.subtotal).toFixed(2)}</strong>
             </td>
           </tr>
         </tbody>

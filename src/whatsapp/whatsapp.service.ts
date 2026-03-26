@@ -37,7 +37,7 @@ export class WhatsappService {
 
   formatearMensajePedido(pedido: any): string {
     const productos = pedido.productos
-      .map((p) => `• ${p.nombre} x${p.cantidad} - $${p.precio_unitario.toFixed(2)}`)
+      .map((p) => `• ${p.nombre} x${p.cantidad} - Bruto $${Number(p.subtotal ?? (p.cantidad * p.precio_unitario)).toFixed(2)} (Neto u. $${Number(p.precio_unitario).toFixed(2)})`)
       .join('\n');
 
 
@@ -55,7 +55,7 @@ export class WhatsappService {
 
   formatearMensajeTransferenciaPendiente(pedido: any): string {
     const productos = pedido.productos
-      .map((p) => `• ${p.nombre} x${p.cantidad} - $${p.precio_unitario.toFixed(2)}`)
+      .map((p) => `• ${p.nombre} x${p.cantidad} - Bruto $${Number(p.subtotal ?? (p.cantidad * p.precio_unitario)).toFixed(2)} (Neto u. $${Number(p.precio_unitario).toFixed(2)})`)
       .join('\n');
 
     const ubicacion = pedido.cliente_ubicacion || 'No especificada';
@@ -69,7 +69,7 @@ export class WhatsappService {
   
     formatearMensajeParaDelivery(pedido: any): string {
       const productos = pedido.productos
-      .map((p) => `• ${p.nombre} x${p.cantidad} - $${p.precio_unitario.toFixed(2)}`)
+      .map((p) => `• ${p.nombre} x${p.cantidad} - Bruto $${Number(p.subtotal ?? (p.cantidad * p.precio_unitario)).toFixed(2)} (Neto u. $${Number(p.precio_unitario).toFixed(2)})`)
       .join('\n');
       const ubicacion = pedido.cliente_ubicacion || 'Sin ubicación proporcionada';
       const costoEnvio = (pedido.costo_envio != null) ? `$${Number(pedido.costo_envio).toFixed(2)}` : 'No especificado';

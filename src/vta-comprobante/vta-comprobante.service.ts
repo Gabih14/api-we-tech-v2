@@ -195,38 +195,22 @@ export class VtaComprobanteService {
       const cantidad = Number(producto.cantidad ?? 0);
       const precioFinalUnitario = Number(producto.precio_unitario ?? 0);
       const importeFinal = this.redondear2(cantidad * precioFinalUnitario);
-      const ajustePctRaw = producto.ajuste_porcentaje;
-
-      if (
-        ajustePctRaw === null ||
-        ajustePctRaw === undefined ||
-        Number(ajustePctRaw) === 0
-      ) {
-        return {
-          producto,
-          base: importeFinal,
-          importe: importeFinal,
-          ajuste: null,
-          ajusteNeto: null,
-          precioBaseUnitario: this.redondear2(precioFinalUnitario),
-        };
-      }
-
-      const descuentoPct = Math.abs(Number(ajustePctRaw));
-      const factor = 1 - descuentoPct / 100;
-      const base =
-        factor > 0 ? this.redondear2(importeFinal / factor) : importeFinal;
+      const base = this.redondear2(Number(producto.subtotal ?? importeFinal));
       const ajusteNeto = this.redondear2(importeFinal - base);
       const precioBaseUnitario =
         cantidad > 0
           ? this.redondear2(base / cantidad)
           : this.redondear2(precioFinalUnitario);
+      const ajuste =
+        base !== 0 && ajusteNeto !== 0
+          ? this.redondear2((ajusteNeto / base) * 100)
+          : null;
 
       return {
         producto,
         base,
         importe: importeFinal,
-        ajuste: this.redondear2(-descuentoPct),
+        ajuste,
         ajusteNeto,
         precioBaseUnitario,
       };
