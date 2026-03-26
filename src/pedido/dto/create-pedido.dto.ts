@@ -6,6 +6,8 @@ import {
   IsString,
   IsIn,
   IsOptional,
+  Min,
+  Max,
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -15,13 +17,21 @@ export class ProductoDto {
   nombre: string;
 
   @IsNumber()
+  @Min(1)
   cantidad: number;
 
   @IsNumber()
+  @Min(0)
   precio_unitario: number;
+
+  @IsNumber()
+  @Min(0)
+  subtotal: number;
 
   @IsOptional()
   @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(100)
   ajuste_porcentaje?: number;
 }
 
