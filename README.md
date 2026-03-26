@@ -79,6 +79,8 @@ No es necesario enviar `external_id`; se genera internamente.
 
 #### ✅ Body de ejemplo
 
+`subtotal` en cada producto es obligatorio y representa el importe bruto de la línea (sin descuento), mientras que `precio_unitario` representa el valor neto por unidad (con descuento aplicado).
+
 ```json
 {
   "cliente_nombre": "Juan Pérez",
@@ -96,12 +98,15 @@ No es necesario enviar `external_id`; se genera internamente.
     {
       "nombre": "123",
       "cantidad": 2,
-      "precio_unitario": 1000
+      "precio_unitario": 850,
+      "subtotal": 2000,
+      "ajuste_porcentaje": 15
     },
     {
       "nombre": "456",
       "cantidad": 1,
-      "precio_unitario": 1000
+      "precio_unitario": 1000,
+      "subtotal": 1000
     }
   ]
 }

@@ -24,6 +24,26 @@ export class Cupon {
   })
   porcentajeDescuento: number;
 
+  @Column({
+    name: 'porcentaje_descuento_tarjeta',
+    type: 'decimal',
+    precision: 5,
+    scale: 2,
+    nullable: false,
+    default: 0.0,
+  })
+  porcentajeDescuentoTarjeta: number;
+
+  @Column({
+    name: 'porcentaje_descuento_transferencia',
+    type: 'decimal',
+    precision: 5,
+    scale: 2,
+    nullable: false,
+    default: 0.0,
+  })
+  porcentajeDescuentoTransferencia: number;
+
   @Column({ name: 'fecha_desde', type: 'datetime', nullable: true })
   fechaDesde: Date;
 

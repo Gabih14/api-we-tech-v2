@@ -10,6 +10,13 @@ import { Repository } from 'typeorm';
 import { CuponUso } from 'src/cupon_uso/entities/cupon_uso.entity';
 import { CreateCuponUsoDto } from 'src/cupon_uso/dto/create-cupon_uso.dto';
 
+export interface CuponDescuentoResolucion {
+  codigoCupon: string;
+  modalidadSolicitada: string;
+  modalidadAplicada: 'TARJETA' | 'CUENTA' | 'FALLBACK_TARJETA';
+  porcentajeAplicado: number;
+}
+
 @Injectable()
 export class CuponService {
   constructor(
@@ -29,7 +36,12 @@ export class CuponService {
       throw new BadRequestException(`El cupón ${crearCuponDto.id} ya existe`);
     }
 
-    const cupon = this.cuponRepository.create(crearCuponDto);
+    const descuentosNormalizados = this.normalizarDescuentos(crearCuponDto);
+    const cupon = this.cuponRepository.create({
+      ...crearCuponDto,
+      ...descuentosNormalizados,
+    });
+
     return await this.cuponRepository.save(cupon);
   }
 
@@ -45,6 +57,49 @@ export class CuponService {
     }
 
     return cupon;
+  }
+
+  async resolverPorcentajePorModalidad(
+    codigoCupon: string,
+    modalidad: string,
+  ): Promise<CuponDescuentoResolucion> {
+    const cupon = await this.buscarPorId(codigoCupon);
+
+    const porcentajeTarjeta = this.resolverValorCupon(
+      cupon.porcentajeDescuentoTarjeta,
+      cupon.porcentajeDescuento,
+    );
+    const porcentajeTransferencia = this.resolverValorCupon(
+      cupon.porcentajeDescuentoTransferencia,
+      cupon.porcentajeDescuento,
+    );
+
+    const modalidadNormalizada = (modalidad ?? '').toUpperCase();
+
+    if (modalidadNormalizada === 'CUENTA') {
+      return {
+        codigoCupon,
+        modalidadSolicitada: modalidadNormalizada,
+        modalidadAplicada: 'CUENTA',
+        porcentajeAplicado: porcentajeTransferencia,
+      };
+    }
+
+    if (modalidadNormalizada === 'TARJETA') {
+      return {
+        codigoCupon,
+        modalidadSolicitada: modalidadNormalizada,
+        modalidadAplicada: 'TARJETA',
+        porcentajeAplicado: porcentajeTarjeta,
+      };
+    }
+
+    return {
+      codigoCupon,
+      modalidadSolicitada: modalidadNormalizada,
+      modalidadAplicada: 'FALLBACK_TARJETA',
+      porcentajeAplicado: porcentajeTarjeta,
+    };
   }
 
   // Validar y usar cupón
@@ -127,6 +182,81 @@ export class CuponService {
       usosPorCuit: this.contarUsosPorCuit(usos),
       ultimosUsos: usos.slice(-5).reverse(),
     };
+  }
+
+  private normalizarDescuentos(crearCuponDto: CreateCuponDto) {
+    const legacy = this.toNumber(crearCuponDto.porcentajeDescuento);
+    const tarjeta = this.toNumber(crearCuponDto.porcentajeDescuentoTarjeta);
+    const transferencia = this.toNumber(
+      crearCuponDto.porcentajeDescuentoTransferencia,
+    );
+
+    const porcentajeDescuentoTarjeta =
+      tarjeta ?? legacy ?? this.requerirValorDual();
+    const porcentajeDescuentoTransferencia =
+      transferencia ?? legacy ?? this.requerirValorDual();
+    const porcentajeDescuento = legacy ?? porcentajeDescuentoTarjeta;
+
+    this.validarRangoPorcentaje(
+      porcentajeDescuentoTarjeta,
+      'porcentajeDescuentoTarjeta',
+    );
+    this.validarRangoPorcentaje(
+      porcentajeDescuentoTransferencia,
+      'porcentajeDescuentoTransferencia',
+    );
+
+    return {
+      porcentajeDescuento,
+      porcentajeDescuentoTarjeta,
+      porcentajeDescuentoTransferencia,
+    };
+  }
+
+  private resolverValorCupon(
+    valorPrincipal: unknown,
+    valorLegacy: unknown,
+  ): number {
+    const principal = this.toNumber(valorPrincipal);
+    if (principal !== null && principal > 0) {
+      return principal;
+    }
+
+    const legacy = this.toNumber(valorLegacy);
+    if (legacy !== null && legacy > 0) {
+      return legacy;
+    }
+
+    throw new BadRequestException(
+      'El cupón no tiene un porcentaje de descuento válido configurado',
+    );
+  }
+
+  private toNumber(value: unknown): number | null {
+    if (value === null || value === undefined || value === '') {
+      return null;
+    }
+
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) {
+      return null;
+    }
+
+    return Number(parsed.toFixed(2));
+  }
+
+  private validarRangoPorcentaje(value: number, field: string): void {
+    if (value < 0.01 || value > 100) {
+      throw new BadRequestException(
+        `${field} debe estar entre 0.01 y 100`,
+      );
+    }
+  }
+
+  private requerirValorDual(): never {
+    throw new BadRequestException(
+      'Debes enviar porcentajeDescuentoTarjeta y porcentajeDescuentoTransferencia, o porcentajeDescuento legacy',
+    );
   }
 
   private contarUsosPorCuit(usos: CuponUso[]): Record<string, number> {
