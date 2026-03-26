@@ -1,7 +1,15 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UsePipes, ValidationPipe } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Post,
+  UsePipes,
+  ValidationPipe,
+} from '@nestjs/common';
 import { CuponService } from './cupon.service';
 import { CreateCuponDto } from './dto/create-cupon.dto';
-import { UpdateCuponDto } from './dto/update-cupon.dto';
 import { Cupon } from './entities/cupon.entity';
 import { CreateCuponUsoDto } from 'src/cupon_uso/dto/create-cupon_uso.dto';
 import { CuponUso } from 'src/cupon_uso/entities/cupon_uso.entity';
@@ -32,6 +40,14 @@ export class CuponController {
     return this.cuponService.usarCupon(usarCuponDto);
   }
 
+  @Get(':id/descuento/:modalidad')
+  async resolverDescuentoPorModalidad(
+    @Param('id') id: string,
+    @Param('modalidad') modalidad: string,
+  ) {
+    return this.cuponService.resolverPorcentajePorModalidad(id, modalidad);
+  }
+
   @Get(':id/estadisticas')
   async obtenerEstadisticas(@Param('id') id: string): Promise<any> {
     return this.cuponService.obtenerEstadisticas(id);
@@ -42,5 +58,3 @@ export class CuponController {
     return this.cuponService.desactivar(id);
   }
 }
-
-

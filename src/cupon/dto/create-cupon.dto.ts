@@ -28,10 +28,25 @@ export class CreateCuponDto {
   maxUsosPorCuit?: number;
 
   @IsOptional()
+  @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0.01)
   @Max(100)
   porcentajeDescuento?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0.01)
+  @Max(100)
+  porcentajeDescuentoTarjeta?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0.01)
+  @Max(100)
+  porcentajeDescuentoTransferencia?: number;
 
   @IsOptional()
   @IsDate()
