@@ -36,6 +36,19 @@ export class CobrosService {
     const puntoVenta = dto.puntoVenta ?? "00001";
 
     return this.dataSource.transaction(async (manager) => {
+      if (modalidad === "CUENTA") {
+        const cuentaExiste = await manager.query(
+          "SELECT 1 FROM fnd_cuenta WHERE id = ? LIMIT 1",
+          [medioId],
+        );
+
+        if (!Array.isArray(cuentaExiste) || cuentaExiste.length === 0) {
+          throw new NotFoundException(
+            `CUENTA '${medioId}' no existe en fnd_cuenta. Revisa NAVE_CUENTA_ID.`,
+          );
+        }
+      }
+
       // 1) Traer comprobante
       const factura = await manager.getRepository(VtaComprobante).findOne({
         where: { tipo, comprobante },
