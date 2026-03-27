@@ -24,6 +24,7 @@ import { VtaComprobanteAsientoModule } from './vta_comprobante_asiento/vta_compr
 import { VtaCobroModule } from './vta-cobro/vta-cobro.module';
 import { VtaCobroFacturaModule } from './vta-cobro-factura/vta-cobro-factura.module';
 import { VtaCobroMedioModule } from './vta-cobro-medio/vta-cobro-medio.module';
+import { DeliveryConfigModule } from './delivery_config/delivery_config.module';
 
 @Module({
   imports: [
@@ -87,6 +88,7 @@ import { VtaCobroMedioModule } from './vta-cobro-medio/vta-cobro-medio.module';
     VtaCobroModule,
     VtaCobroFacturaModule,
     VtaCobroMedioModule,
+    DeliveryConfigModule,
   ],
 })
 export class AppModule {}
