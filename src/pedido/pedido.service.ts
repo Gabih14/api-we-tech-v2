@@ -505,7 +505,7 @@ export class PedidoService {
         }
 
         try {
-          const cuentaNave = this.configService.get<string>('NAVE_CUENTA_ID') ?? 'BANCO GALICIA';
+          const cuentaNave = this.configService.get<string>('NAVE_CUENTA_ID') ?? 'BANCOGALICIA';
           await this.cobrosService.cobrarFactura(
             comprobanteCreado.tipo,
             comprobanteCreado.comprobante,
