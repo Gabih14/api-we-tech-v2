@@ -105,7 +105,7 @@ export class PedidoExpirationService {
     }
   }
 
-  @Cron(process.env.PEDIDO_TRANSFER_APPROVAL_CRON || '*/10 * * * *')
+  @Cron(process.env.PEDIDO_TRANSFER_APPROVAL_CRON || '*/5 * * * *')
   async scheduledTransferApproval() {
     const pendientes = await this.pedidoRepo.find({
       where: {
