@@ -12,6 +12,7 @@ import { MailerModule } from 'src/mailer/mailer.module';
 import { VtaComprobanteItemModule } from 'src/vta-comprobante-item/vta-comprobante-item.module';
 import { PedidoExpirationService } from './pedido-expiration.service';
 import { WhatsappModule } from '../whatsapp/whatsapp.module';
+import { TelegramModule } from 'src/telegram/telegram.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { WhatsappModule } from '../whatsapp/whatsapp.module';
     forwardRef(() => VtaComprobanteItemModule),
     MailerModule,
     WhatsappModule,
+    TelegramModule,
   ],
   controllers: [PedidoController],
   providers: [PedidoService, PedidoExpirationService],

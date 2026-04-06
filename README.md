@@ -28,6 +28,8 @@ Crear un archivo `.env` en la raíz del proyecto con las siguientes claves míni
 
 ```env
 GOOGLE_API_KEY=tu_google_api_key
+TELEGRAM_BOT_TOKEN=tu_telegram_bot_token
+TELEGRAM_CHAT_ID=tu_telegram_chat_id
 ```
 
 ⚠️ Otros tokens, como el de Nave, están embebidos por ahora.
