@@ -16,6 +16,7 @@ export class TelegramService {
     }
 
     const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
+    const textoNormalizado = this.normalizarMensaje(mensaje);
 
     try {
       const response = await fetch(url, {
@@ -25,8 +26,7 @@ export class TelegramService {
         },
         body: JSON.stringify({
           chat_id: chatIdToUse,
-          text: mensaje,
-          parse_mode: 'Markdown',
+          text: textoNormalizado,
           disable_web_page_preview: true,
         }),
       });
@@ -44,5 +44,12 @@ export class TelegramService {
         `Error al enviar mensaje de Telegram: ${errorMessage}`,
       );
     }
+  }
+
+  private normalizarMensaje(mensaje: string): string {
+    return mensaje
+      .replace(/\*(.*?)\*/g, '$1')
+      .replace(/_(.*?)_/g, '$1')
+      .replace(/`(.*?)`/g, '$1');
   }
 }
