@@ -22,6 +22,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { ConfigService } from '@nestjs/config';
 import { MailerService } from 'src/mailer/mailer.service';
 import { WhatsappService } from 'src/whatsapp/whatsapp.service';
+import { TelegramService } from 'src/telegram/telegram.service';
 import { CobrosService } from 'src/vta-comprobante/cobros.service';
 import { GetPedidosDashboardDto } from './dto/get-pedidos-dashboard.dto';
 
@@ -45,6 +46,8 @@ export class PedidoService {
     private readonly mailerService: MailerService,
 
     private readonly whatsappService: WhatsappService,
+
+    private readonly telegramService: TelegramService,
 
     private readonly cobrosService: CobrosService
   ) { }
@@ -130,7 +133,7 @@ export class PedidoService {
           try {
             await this.stockService.liberarStock(p.nombre, p.cantidad);
           } catch (e) {
-            console.error(`Error liberando stock de ${p.nombre}:`, e?.message || e);
+            console.error(`Error liberando stock de ${p.nombre}:`, e instanceof Error ? e.message : e);
           }
         }
         pedidoGuardado.estado = 'CANCELADO';
@@ -151,6 +154,13 @@ export class PedidoService {
         console.error('whatsapp transferencia pendiente', e);
       }
 
+      try {
+        const msg = this.whatsappService.formatearMensajeTransferenciaPendiente(pedidoGuardado);
+        await this.telegramService.enviarMensaje(msg);
+      } catch (e) {
+        console.error('telegram transferencia pendiente', e);
+      }
+
       const callbackUrl = `https://shop.wetech.ar/checkout/callback?payment_id=${externalId}`;
       return { pedido: pedidoGuardado, naveUrl: callbackUrl };
     }
@@ -169,7 +179,7 @@ export class PedidoService {
           await this.stockService.liberarStock(p.nombre, p.cantidad);
         } catch (e) {
           // log y continuar intentando liberar el resto
-          console.error(`Error liberando stock de ${p.nombre}:`, e?.message || e);
+          console.error(`Error liberando stock de ${p.nombre}:`, e instanceof Error ? e.message : e);
         }
       }
       pedidoGuardado.estado = 'CANCELADO';
@@ -524,6 +534,11 @@ export class PedidoService {
           await this.whatsappService.enviarMensaje(msg);
         } catch (e) { console.error('whatsapp', e); }
 
+        try {
+          const msg = this.whatsappService.formatearMensajePedido(pedido);
+          await this.telegramService.enviarMensaje(msg);
+        } catch (e) { console.error('telegram', e); }
+
         if (pedido.delivery_method === 'shipping') {
           try {
             const msg = this.whatsappService.formatearMensajeParaDelivery(pedido);
@@ -531,6 +546,11 @@ export class PedidoService {
             const apiKey = this.configService.get<string>('DELIVERY_WHATSAPP_API_KEY');
             if (phone && apiKey) await this.whatsappService.enviarMensaje(msg, phone, apiKey);
           } catch (e) { console.error('delivery whatsapp', e); }
+
+          try {
+            const msg = this.whatsappService.formatearMensajeParaDelivery(pedido);
+            await this.telegramService.enviarMensajeDelivery(msg);
+          } catch (e) { console.error('delivery telegram', e); }
         }
 
         break;
@@ -759,6 +779,11 @@ export class PedidoService {
       await this.whatsappService.enviarMensaje(msg);
     } catch (e) { console.error('whatsapp', e); }
 
+    try {
+      const msg = this.whatsappService.formatearMensajePedido(pedido);
+      await this.telegramService.enviarMensaje(msg);
+    } catch (e) { console.error('telegram', e); }
+
     if (pedido.delivery_method === 'shipping') {
       try {
         const msg = this.whatsappService.formatearMensajeParaDelivery(pedido);
@@ -766,6 +791,11 @@ export class PedidoService {
         const apiKey = this.configService.get<string>('DELIVERY_WHATSAPP_API_KEY');
         if (phone && apiKey) await this.whatsappService.enviarMensaje(msg, phone, apiKey);
       } catch (e) { console.error('delivery whatsapp', e); }
+
+      try {
+        const msg = this.whatsappService.formatearMensajeParaDelivery(pedido);
+        await this.telegramService.enviarMensajeDelivery(msg);
+      } catch (e) { console.error('delivery telegram', e); }
     }
 
     return { pedido, comprobante: comprobanteCreado };
