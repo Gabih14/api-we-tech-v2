@@ -6,8 +6,17 @@ export class TelegramService {
   constructor(private readonly configService: ConfigService) {}
 
   async enviarMensaje(mensaje: string, chatId?: string): Promise<void> {
-    const botToken = this.configService.get<string>('TELEGRAM_BOT_TOKEN');
     const chatIdToUse = chatId || this.configService.get<string>('TELEGRAM_CHAT_ID');
+    await this.enviarMensajeAChat(mensaje, chatIdToUse);
+  }
+
+  async enviarMensajeDelivery(mensaje: string): Promise<void> {
+    const chatIdToUse = this.configService.get<string>('DELIVERY_TELEGRAM_CHAT_ID');
+    await this.enviarMensajeAChat(mensaje, chatIdToUse);
+  }
+
+  private async enviarMensajeAChat(mensaje: string, chatIdToUse?: string): Promise<void> {
+    const botToken = this.configService.get<string>('TELEGRAM_BOT_TOKEN');
 
     if (!botToken || !chatIdToUse) {
       throw new InternalServerErrorException(
@@ -26,7 +35,6 @@ export class TelegramService {
         body: JSON.stringify({
           chat_id: chatIdToUse,
           text: mensaje,
-          parse_mode: 'Markdown',
           disable_web_page_preview: true,
         }),
       });

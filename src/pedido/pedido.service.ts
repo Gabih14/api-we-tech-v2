@@ -133,7 +133,7 @@ export class PedidoService {
           try {
             await this.stockService.liberarStock(p.nombre, p.cantidad);
           } catch (e) {
-            console.error(`Error liberando stock de ${p.nombre}:`, e?.message || e);
+            console.error(`Error liberando stock de ${p.nombre}:`, e instanceof Error ? e.message : e);
           }
         }
         pedidoGuardado.estado = 'CANCELADO';
@@ -179,7 +179,7 @@ export class PedidoService {
           await this.stockService.liberarStock(p.nombre, p.cantidad);
         } catch (e) {
           // log y continuar intentando liberar el resto
-          console.error(`Error liberando stock de ${p.nombre}:`, e?.message || e);
+          console.error(`Error liberando stock de ${p.nombre}:`, e instanceof Error ? e.message : e);
         }
       }
       pedidoGuardado.estado = 'CANCELADO';
@@ -549,7 +549,7 @@ export class PedidoService {
 
           try {
             const msg = this.whatsappService.formatearMensajeParaDelivery(pedido);
-            await this.telegramService.enviarMensaje(msg);
+            await this.telegramService.enviarMensajeDelivery(msg);
           } catch (e) { console.error('delivery telegram', e); }
         }
 
@@ -794,7 +794,7 @@ export class PedidoService {
 
       try {
         const msg = this.whatsappService.formatearMensajeParaDelivery(pedido);
-        await this.telegramService.enviarMensaje(msg);
+        await this.telegramService.enviarMensajeDelivery(msg);
       } catch (e) { console.error('delivery telegram', e); }
     }
 
