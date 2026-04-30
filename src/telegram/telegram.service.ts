@@ -35,7 +35,8 @@ export class TelegramService {
         },
         body: JSON.stringify({
           chat_id: chatIdToUse,
-          text: mensaje,
+          text: textoNormalizado,
+          parse_mode: 'HTML',
           disable_web_page_preview: true,
         }),
       });
@@ -56,9 +57,20 @@ export class TelegramService {
   }
 
   private normalizarMensaje(mensaje: string): string {
-    return mensaje
-      .replace(/\*(.*?)\*/g, '$1')
+    const mensajeSinEmojis = mensaje
+      .replace(/[\p{Extended_Pictographic}\uFE0F]/gu, '')
+      .replace(/\s+\n/g, '\n');
+
+    return this.escaparHtml(mensajeSinEmojis)
+      .replace(/\*(.*?)\*/g, '<b>$1</b>')
       .replace(/_(.*?)_/g, '$1')
       .replace(/`(.*?)`/g, '$1');
+  }
+
+  private escaparHtml(texto: string): string {
+    return texto
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
   }
 }
