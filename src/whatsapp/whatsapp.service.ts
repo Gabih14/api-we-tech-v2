@@ -37,7 +37,7 @@ export class WhatsappService {
 
   formatearMensajePedido(pedido: any): string {
     const productos = pedido.productos
-      .map((p) => `• ${p.nombre} x${p.cantidad} - Bruto $${Number(p.subtotal ?? (p.cantidad * p.precio_unitario)).toFixed(2)} (Neto u. $${Number(p.precio_unitario).toFixed(2)})`)
+      .map((p) => `• ${p.nombre} x${p.cantidad} - Neto u. $${Number(p.precio_unitario).toFixed(2)}`)
       .join('\n');
 
 
@@ -48,14 +48,15 @@ export class WhatsappService {
       const costoEnvio = (pedido.costo_envio != null) ? `$${Number(pedido.costo_envio).toFixed(2)}` : '$0.00';
       const tipoEnvio = pedido.delivery_method || 'pickup';
       const observaciones = pedido.observaciones_direccion ? `\n📝 *Observaciones:* ${pedido.observaciones_direccion}` : '';
+      const comprobante = this.formatearComprobante(pedido);
 
 
-      return `🛒 *Nuevo Pedido Aprobado*\n\n📋 *Cliente:* ${pedido.cliente_nombre}\n🆔 *CUIT:* ${pedido.cliente_cuit}\n📧 *Email:* ${pedido.cliente_mail}\n\n📍 *Ubicación:* ${ubicacion}${observaciones}\n🚚 *Tipo envío:* ${tipoEnvio}\n💰 *Costo envío:* ${costoEnvio}\n\n*Productos:*\n${productos}\n\n💰 *Total:* $${pedido.total.toFixed(2)}\n\nID: ${pedido.external_id}`;
+      return `🛒 *Nuevo Pedido Aprobado*\n\n📋 *Cliente:* ${pedido.cliente_nombre}\n🆔 *CUIT:* ${pedido.cliente_cuit}\n📧 *Email:* ${pedido.cliente_mail}\n\n📍 *Ubicación:* ${ubicacion}${observaciones}\n🚚 *Tipo envío:* ${tipoEnvio}\n💰 *Costo envío:* ${costoEnvio}\n\n*Productos:*\n${productos}\n\n💰 *Total:* $${pedido.total.toFixed(2)}${comprobante}\n\nID: ${pedido.external_id}`;
   }
 
   formatearMensajeTransferenciaPendiente(pedido: any): string {
     const productos = pedido.productos
-      .map((p) => `• ${p.nombre} x${p.cantidad} - Bruto $${Number(p.subtotal ?? (p.cantidad * p.precio_unitario)).toFixed(2)} (Neto u. $${Number(p.precio_unitario).toFixed(2)})`)
+      .map((p) => `• ${p.nombre} x${p.cantidad} - Neto u. $${Number(p.precio_unitario).toFixed(2)}`)
       .join('\n');
 
     const ubicacion = pedido.cliente_ubicacion || 'No especificada';
@@ -63,18 +64,29 @@ export class WhatsappService {
     const tipoEnvio = pedido.delivery_method || 'pickup';
     const observaciones = pedido.observaciones_direccion ? `\n📝 *Observaciones:* ${pedido.observaciones_direccion}` : '';
     const callbackUrl = `https://shop.wetech.ar/checkout/callback?payment_id=${pedido.external_id}`;
+    const comprobante = this.formatearComprobante(pedido);
 
-    return `⏳ *Pedido Transferencia Pendiente*\n\n📋 *Cliente:* ${pedido.cliente_nombre}\n🆔 *CUIT:* ${pedido.cliente_cuit}\n📧 *Email:* ${pedido.cliente_mail}\n\n📍 *Ubicación:* ${ubicacion}${observaciones}\n🚚 *Tipo envío:* ${tipoEnvio}\n💰 *Costo envío:* ${costoEnvio}\n\n*Productos:*\n${productos}\n\n💰 *Total:* $${pedido.total.toFixed(2)}\n\n🔗 Estado: ${callbackUrl}\n\nID: ${pedido.external_id}`;
+    return `⏳ *Pedido Transferencia Pendiente*\n\n📋 *Cliente:* ${pedido.cliente_nombre}\n🆔 *CUIT:* ${pedido.cliente_cuit}\n📧 *Email:* ${pedido.cliente_mail}\n\n📍 *Ubicación:* ${ubicacion}${observaciones}\n🚚 *Tipo envío:* ${tipoEnvio}\n💰 *Costo envío:* ${costoEnvio}\n\n*Productos:*\n${productos}\n\n💰 *Total:* $${pedido.total.toFixed(2)}${comprobante}\n\n🔗 Estado: ${callbackUrl}\n\nID: ${pedido.external_id}`;
   }
   
     formatearMensajeParaDelivery(pedido: any): string {
       const productos = pedido.productos
-      .map((p) => `• ${p.nombre} x${p.cantidad} - Bruto $${Number(p.subtotal ?? (p.cantidad * p.precio_unitario)).toFixed(2)} (Neto u. $${Number(p.precio_unitario).toFixed(2)})`)
+      .map((p) => `• ${p.nombre} x${p.cantidad} - Neto u. $${Number(p.precio_unitario).toFixed(2)}`)
       .join('\n');
       const ubicacion = pedido.cliente_ubicacion || 'Sin ubicación proporcionada';
       const costoEnvio = (pedido.costo_envio != null) ? `$${Number(pedido.costo_envio).toFixed(2)}` : 'No especificado';
       const observaciones = pedido.observaciones_direccion ? `\n📝 *Observaciones:* ${pedido.observaciones_direccion}` : '';
+      const comprobante = this.formatearComprobante(pedido);
 
-      return `🚚 *Nuevo Pedido para Delivery*\n\n📋 *Cliente:* ${pedido.cliente_nombre}\n📍 *Ubicación:* ${ubicacion}${observaciones}\n💰 *Costo envío:* ${costoEnvio}\n\nID: ${pedido.external_id}`;
+      return `🚚 *Nuevo Pedido para Delivery*\n\n📋 *Cliente:* ${pedido.cliente_nombre}\n📍 *Ubicación:* ${ubicacion}${observaciones}\n💰 *Costo envío:* ${costoEnvio}${comprobante}\n\nID: ${pedido.external_id}`;
     }
+
+  private formatearComprobante(pedido: any): string {
+    if (!pedido.comprobante_numero) {
+      return '';
+    }
+
+    const tipo = pedido.comprobante_tipo ? `${pedido.comprobante_tipo} ` : '';
+    return `\n🧾 *Comprobante:* ${tipo}${pedido.comprobante_numero}`;
+  }
 }
