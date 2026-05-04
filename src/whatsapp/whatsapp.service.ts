@@ -64,6 +64,11 @@ export class WhatsappService {
   }
 
   formatearMensajeParaDelivery(pedido: any): string {
+    const productos = Array.isArray(pedido.productos) && pedido.productos.length > 0
+      ? `\n\n*Productos:*\n${pedido.productos
+          .map((p) => `- ${p.nombre} x${p.cantidad} - Neto u. $${Number(p.precio_unitario).toFixed(2)}`)
+          .join('\n')}`
+      : '';
     const ubicacionLimpia = pedido.cliente_ubicacion?.trim();
     const ubicacion = ubicacionLimpia || 'Sin ubicación proporcionada';
     const costoEnvio = (pedido.costo_envio != null) ? `$${Number(pedido.costo_envio).toFixed(2)}` : 'No especificado';
@@ -71,7 +76,7 @@ export class WhatsappService {
     const comprobante = this.formatearComprobante(pedido);
     const mapsLink = this.formatearLinkMaps(ubicacionLimpia);
 
-    return `🚚 *Nuevo Pedido para Delivery*\n\n📋 *Cliente:* ${pedido.cliente_nombre}\n📍 *Ubicación:* ${ubicacion}${observaciones}${mapsLink}\n💰 *Costo envío:* ${costoEnvio}${comprobante}\n\nID: ${pedido.external_id}`;
+    return `🚚 *Nuevo Pedido para Delivery*\n\n📋 *Cliente:* ${pedido.cliente_nombre}\n📍 *Ubicación:* ${ubicacion}${observaciones}${mapsLink}\n💰 *Costo envío:* ${costoEnvio}${productos}${comprobante}\n\nID: ${pedido.external_id}`;
   }
 
   private formatearLinkMaps(ubicacion?: string | null): string {
