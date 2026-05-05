@@ -27,18 +27,17 @@ describe('TelegramService', () => {
     jest.restoreAllMocks();
   });
 
-  it('envia el mensaje normalizado como HTML para Telegram', async () => {
-    await service.enviarMensaje('🚚 *Cliente:* Juan\n📍 *Ubicación:* Calle 123');
+  it('envia el mensaje como HTML para Telegram preservando emojis y saltos de linea', async () => {
+    const mensaje = '\uD83D\uDE9A *Cliente:* Juan\n\n\uD83D\uDCCD *Ubicacion:* Calle 123';
+
+    await service.enviarMensaje(mensaje);
 
     const body = JSON.parse(fetchMock.mock.calls[0][1].body);
 
     expect(body.chat_id).toBe('chat-id');
     expect(body.parse_mode).toBe('HTML');
     expect(body.disable_web_page_preview).toBe(true);
-    expect(body.text).toContain('<b>Cliente:</b> Juan');
-    expect(body.text).toContain('<b>Ubicación:</b> Calle 123');
-    expect(body.text).not.toContain('🚚');
-    expect(body.text).not.toContain('📍');
+    expect(body.text).toBe('\uD83D\uDE9A <b>Cliente:</b> Juan\n\n\uD83D\uDCCD <b>Ubicacion:</b> Calle 123');
     expect(body.text).not.toContain('*Cliente:*');
   });
 

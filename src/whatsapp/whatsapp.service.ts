@@ -42,10 +42,11 @@ export class WhatsappService {
     const ubicacion = pedido.cliente_ubicacion || 'No especificada';
     const costoEnvio = (pedido.costo_envio != null) ? `$${Number(pedido.costo_envio).toFixed(2)}` : '$0.00';
     const tipoEnvio = pedido.delivery_method || 'pickup';
-    const observaciones = pedido.observaciones_direccion ? `\n📝 *Observaciones:* ${pedido.observaciones_direccion}` : '';
+    const observaciones = pedido.observaciones_direccion ? `\n *Observaciones:* ${pedido.observaciones_direccion}` : '';
     const comprobante = this.formatearComprobante(pedido);
+    const telefono = pedido.telefono || 'No informado';
 
-    return `🛒 *Nuevo Pedido Aprobado*\n\n📋 *Cliente:* ${pedido.cliente_nombre}\n🆔 *CUIT:* ${pedido.cliente_cuit}\n📧 *Email:* ${pedido.cliente_mail}\n\n📍 *Ubicación:* ${ubicacion}${observaciones}\n🚚 *Tipo envío:* ${tipoEnvio}\n💰 *Costo envío:* ${costoEnvio}\n\n*Productos:*\n${productos}\n\n💰 *Total:* $${pedido.total.toFixed(2)}${comprobante}\n\nID: ${pedido.external_id}`;
+    return `✅ *Pedido Aprobado ${comprobante}*\n\n *Cliente:* ${pedido.cliente_nombre}\n *CUIT:* ${pedido.cliente_cuit}\n *Telefono:* ${telefono}\n\n *Ubicación:* ${ubicacion}${observaciones}\n *Tipo envío:* ${tipoEnvio}\n *Costo envío:* ${costoEnvio}\n\n*Productos:*\n${productos}\n\n *Total:* $${pedido.total.toFixed(2)}\n\nID: ${pedido.external_id}`;
   }
 
   formatearMensajeTransferenciaPendiente(pedido: any): string {
@@ -56,11 +57,12 @@ export class WhatsappService {
     const ubicacion = pedido.cliente_ubicacion || 'No especificada';
     const costoEnvio = (pedido.costo_envio != null) ? `$${Number(pedido.costo_envio).toFixed(2)}` : '$0.00';
     const tipoEnvio = pedido.delivery_method || 'pickup';
-    const observaciones = pedido.observaciones_direccion ? `\n📝 *Observaciones:* ${pedido.observaciones_direccion}` : '';
+    const observaciones = pedido.observaciones_direccion ? `\n *Observaciones:* ${pedido.observaciones_direccion}` : '';
     const callbackUrl = `https://shop.wetech.ar/checkout/callback?payment_id=${pedido.external_id}`;
     const comprobante = this.formatearComprobante(pedido);
+    const telefono = pedido.telefono || 'No informado';
 
-    return `⏳ *Pedido Transferencia Pendiente*\n\n📋 *Cliente:* ${pedido.cliente_nombre}\n🆔 *CUIT:* ${pedido.cliente_cuit}\n📧 *Email:* ${pedido.cliente_mail}\n\n📍 *Ubicación:* ${ubicacion}${observaciones}\n🚚 *Tipo envío:* ${tipoEnvio}\n💰 *Costo envío:* ${costoEnvio}\n\n*Productos:*\n${productos}\n\n💰 *Total:* $${pedido.total.toFixed(2)}${comprobante}\n\n🔗 Estado: ${callbackUrl}\n\nID: ${pedido.external_id}`;
+    return `⚠️ *Pedido Transferencia Pendiente ${comprobante}*\n\n *Cliente:* ${pedido.cliente_nombre}\n *CUIT:* ${pedido.cliente_cuit}\n *Telefono:* ${telefono}\n\n *Tipo envío:* ${tipoEnvio}\n Estado: ${callbackUrl}\n\nID: ${pedido.external_id}`;
   }
 
   formatearMensajeParaDelivery(pedido: any): string {
@@ -72,11 +74,12 @@ export class WhatsappService {
     const ubicacionLimpia = pedido.cliente_ubicacion?.trim();
     const ubicacion = ubicacionLimpia || 'Sin ubicación proporcionada';
     const costoEnvio = (pedido.costo_envio != null) ? `$${Number(pedido.costo_envio).toFixed(2)}` : 'No especificado';
-    const observaciones = pedido.observaciones_direccion ? `\n📝 *Observaciones:* ${pedido.observaciones_direccion}` : '';
+    const observaciones = pedido.observaciones_direccion ? `\n *Observaciones:* ${pedido.observaciones_direccion}` : '';
     const comprobante = this.formatearComprobante(pedido);
     const mapsLink = this.formatearLinkMaps(ubicacionLimpia);
+    const telefono = pedido.telefono || 'No informado';
 
-    return `🚚 *Nuevo Pedido para Delivery*\n\n📋 *Cliente:* ${pedido.cliente_nombre}\n📍 *Ubicación:* ${ubicacion}${observaciones}${mapsLink}\n💰 *Costo envío:* ${costoEnvio}${productos}${comprobante}\n\nID: ${pedido.external_id}`;
+    return `*Pedido para Delivery ${comprobante}*\n\n *Cliente:* ${pedido.cliente_nombre}\n *Telefono:* ${telefono}\n *Ubicación:* ${ubicacion}${observaciones}${mapsLink}\n *Costo envío:* ${costoEnvio}${productos}\n\nID: ${pedido.external_id}`;
   }
 
   private formatearLinkMaps(ubicacion?: string | null): string {
@@ -87,7 +90,7 @@ export class WhatsappService {
     }
 
     const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(ubicacionLimpia)}`;
-    return `\n🗺️ *Maps:* ${url}`;
+    return `\n *Maps:* ${url}\n`;
   }
 
   private formatearComprobante(pedido: any): string {
@@ -96,6 +99,6 @@ export class WhatsappService {
     }
 
     const tipo = pedido.comprobante_tipo ? `${pedido.comprobante_tipo} ` : '';
-    return `\n🧾 *Comprobante:* ${tipo}${pedido.comprobante_numero}`;
+    return `${tipo}${pedido.comprobante_numero}`;
   }
 }
