@@ -52,6 +52,11 @@ export class CreateVtaClienteDto {
 
   @IsOptional()
   @IsString()
+  @Length(0, 20)
+  cpa?: string;
+
+  @IsOptional()
+  @IsString()
   @Length(0, 30)
   empresa?: string;
 

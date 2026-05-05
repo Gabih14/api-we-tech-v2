@@ -32,6 +32,9 @@ export class VtaCliente {
   @Column('varchar', { name: 'provincia', nullable: true, length: 20 })
   provincia: string | null;
 
+  @Column('varchar', { name: 'cpa', nullable: true, length: 20 })
+  cpa: string | null;
+
   @Column('varchar', { name: 'empresa', nullable: true, length: 30 })
   empresa: string | null;
 
