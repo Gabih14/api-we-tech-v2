@@ -147,12 +147,13 @@ export class PedidoService {
         console.error('mail transferencia pendiente', e);
       }
 
-      try {
-        const msg = this.whatsappService.formatearMensajeTransferenciaPendiente(pedidoGuardado);
-        await this.whatsappService.enviarMensaje(msg);
-      } catch (e) {
-        console.error('whatsapp transferencia pendiente', e);
-      }
+      // WhatsApp desactivado temporalmente. Reactivar si se quiere volver a notificar por este canal.
+      // try {
+      //   const msg = this.whatsappService.formatearMensajeTransferenciaPendiente(pedidoGuardado);
+      //   await this.whatsappService.enviarMensaje(msg);
+      // } catch (e) {
+      //   console.error('whatsapp transferencia pendiente', e);
+      // }
 
       try {
         const msg = this.whatsappService.formatearMensajeTransferenciaPendiente(pedidoGuardado);
@@ -529,10 +530,11 @@ export class PedidoService {
 
         // No críticos
         try { await this.notificarSecretaria(pedido); } catch (e) { console.error('mail', e); }
-        try {
-          const msg = this.whatsappService.formatearMensajePedido(pedido);
-          await this.whatsappService.enviarMensaje(msg);
-        } catch (e) { console.error('whatsapp', e); }
+        // WhatsApp desactivado temporalmente. Reactivar si se quiere volver a notificar por este canal.
+        // try {
+        //   const msg = this.whatsappService.formatearMensajePedido(pedido);
+        //   await this.whatsappService.enviarMensaje(msg);
+        // } catch (e) { console.error('whatsapp', e); }
 
         try {
           const msg = this.whatsappService.formatearMensajePedido(pedido);
@@ -540,12 +542,13 @@ export class PedidoService {
         } catch (e) { console.error('telegram', e); }
 
         if (pedido.delivery_method === 'shipping') {
-          try {
-            const msg = this.whatsappService.formatearMensajeParaDelivery(pedido);
-            const phone = this.configService.get<string>('DELIVERY_WHATSAPP_PHONE');
-            const apiKey = this.configService.get<string>('DELIVERY_WHATSAPP_API_KEY');
-            if (phone && apiKey) await this.whatsappService.enviarMensaje(msg, phone, apiKey);
-          } catch (e) { console.error('delivery whatsapp', e); }
+          // WhatsApp delivery desactivado temporalmente. Reactivar si se quiere volver a notificar por este canal.
+          // try {
+          //   const msg = this.whatsappService.formatearMensajeParaDelivery(pedido);
+          //   const phone = this.configService.get<string>('DELIVERY_WHATSAPP_PHONE');
+          //   const apiKey = this.configService.get<string>('DELIVERY_WHATSAPP_API_KEY');
+          //   if (phone && apiKey) await this.whatsappService.enviarMensaje(msg, phone, apiKey);
+          // } catch (e) { console.error('delivery whatsapp', e); }
 
           try {
             const msg = this.whatsappService.formatearMensajeParaDelivery(pedido);
@@ -774,10 +777,11 @@ export class PedidoService {
 
     // Notificaciones no críticas
     try { await this.notificarSecretaria(pedido); } catch (e) { console.error('mail', e); }
-    try {
-      const msg = this.whatsappService.formatearMensajePedido(pedido);
-      await this.whatsappService.enviarMensaje(msg);
-    } catch (e) { console.error('whatsapp', e); }
+    // WhatsApp desactivado temporalmente. Reactivar si se quiere volver a notificar por este canal.
+    // try {
+    //   const msg = this.whatsappService.formatearMensajePedido(pedido);
+    //   await this.whatsappService.enviarMensaje(msg);
+    // } catch (e) { console.error('whatsapp', e); }
 
     try {
       const msg = this.whatsappService.formatearMensajePedido(pedido);
@@ -785,12 +789,13 @@ export class PedidoService {
     } catch (e) { console.error('telegram', e); }
 
     if (pedido.delivery_method === 'shipping') {
-      try {
-        const msg = this.whatsappService.formatearMensajeParaDelivery(pedido);
-        const phone = this.configService.get<string>('DELIVERY_WHATSAPP_PHONE');
-        const apiKey = this.configService.get<string>('DELIVERY_WHATSAPP_API_KEY');
-        if (phone && apiKey) await this.whatsappService.enviarMensaje(msg, phone, apiKey);
-      } catch (e) { console.error('delivery whatsapp', e); }
+      // WhatsApp delivery desactivado temporalmente. Reactivar si se quiere volver a notificar por este canal.
+      // try {
+      //   const msg = this.whatsappService.formatearMensajeParaDelivery(pedido);
+      //   const phone = this.configService.get<string>('DELIVERY_WHATSAPP_PHONE');
+      //   const apiKey = this.configService.get<string>('DELIVERY_WHATSAPP_API_KEY');
+      //   if (phone && apiKey) await this.whatsappService.enviarMensaje(msg, phone, apiKey);
+      // } catch (e) { console.error('delivery whatsapp', e); }
 
       try {
         const msg = this.whatsappService.formatearMensajeParaDelivery(pedido);

@@ -179,6 +179,8 @@ export class VtaComprobanteService {
       direccion: ubicacionParsed.direccion,
       localidad: ubicacionParsed.localidad,
       provincia: ubicacionParsed.provincia,
+      cpa: ubicacionParsed.cpa,
+      observaciones: pedido.observaciones_direccion ?? undefined,
       condicionIva: 'CF',
       visible: true,
     };
@@ -347,11 +349,12 @@ export class VtaComprobanteService {
     return `${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;
   }
 
-  // 🏠 Parsea string de ubicación y extrae dirección, localidad, provincia
+  // 🏠 Parsea string de ubicación y extrae dirección, localidad, provincia y CPA
   private parseUbicacion(ubicacionString: string): {
     direccion?: string;
     localidad?: string;
     provincia?: string;
+    cpa?: string;
   } {
     if (!ubicacionString) return {};
 
@@ -362,6 +365,7 @@ export class VtaComprobanteService {
       direccion: partes[0] || undefined, // Calle y número
       localidad: partes[1] || undefined, // Ciudad
       provincia: partes[2] || undefined, // Región/Provincia
+      cpa: partes[4] || undefined, // Código postal
     };
   }
 

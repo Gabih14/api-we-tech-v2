@@ -57,14 +57,8 @@ export class TelegramService {
   }
 
   private normalizarMensaje(mensaje: string): string {
-    const mensajeSinEmojis = mensaje
-      .replace(/[\p{Extended_Pictographic}\uFE0F]/gu, '')
-      .replace(/\s+\n/g, '\n');
-
-    return this.escaparHtml(mensajeSinEmojis)
-      .replace(/\*(.*?)\*/g, '<b>$1</b>')
-      .replace(/_(.*?)_/g, '$1')
-      .replace(/`(.*?)`/g, '$1');
+    return this.escaparHtml(mensaje)
+      .replace(/\*(.*?)\*/g, '<b>$1</b>');
   }
 
   private escaparHtml(texto: string): string {
