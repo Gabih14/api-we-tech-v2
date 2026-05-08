@@ -18,6 +18,7 @@ import { AuthType } from '../common/decorators/auth-type.decorator';
 import { GetPedidosDashboardDto } from './dto/get-pedidos-dashboard.dto';
 
 @Controller('pedido')
+// TODO: mantener ApiTokenGuard por compatibilidad; revisar endurecimiento/auth del checkout en una etapa posterior.
 @UseGuards(ApiTokenGuard)
 export class PedidoController {
   constructor(private readonly pedidoService: PedidoService) {}

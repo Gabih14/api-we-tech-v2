@@ -16,7 +16,7 @@ export class MapsService {
   }
 
   async getDistanceToDestination(address: string, city: string) {
-  const destination = `${address}, ${city}`;
+  const destination = [address, city].filter(Boolean).join(', ');
   const url = `https://maps.googleapis.com/maps/api/distancematrix/json?destinations=${encodeURIComponent(destination)}&origins=${this.originPlaceId}&key=${this.googleApiKey}`;
 
   try {
@@ -27,7 +27,10 @@ export class MapsService {
       throw new Error(data.error_message || 'Error en la respuesta de la API');
     }
 
-    const element = data.rows[0].elements[0];
+    const element = data.rows?.[0]?.elements?.[0];
+    if (!element || element.status !== 'OK' || !element.distance) {
+      throw new Error(element?.status || 'No se encontro distancia para el destino');
+    }
 
     return {
       distance: element.distance.text,

@@ -12,10 +12,11 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Pedido } from './entities/pedido.entity';
-import { Brackets, Repository } from 'typeorm';
+import { Brackets, In, Repository } from 'typeorm';
 import { CreatePedidoDto } from './dto/create-pedido.dto';
 import { StkExistenciaService } from 'src/stk-existencia/stk-existencia.service';
 import { StkItem } from 'src/stk-item/entities/stk-item.entity';
+import { StkItemService } from 'src/stk-item/stk-item.service';
 import { VtaComprobanteService } from 'src/vta-comprobante/vta-comprobante.service';
 import { PedidoItem } from './entities/pedido-item.entity';
 import { v4 as uuidv4 } from 'uuid';
@@ -25,6 +26,39 @@ import { WhatsappService } from 'src/whatsapp/whatsapp.service';
 import { TelegramService } from 'src/telegram/telegram.service';
 import { CobrosService } from 'src/vta-comprobante/cobros.service';
 import { GetPedidosDashboardDto } from './dto/get-pedidos-dashboard.dto';
+import { MapsService } from 'src/maps/maps.service';
+import { CuponService } from 'src/cupon/cupon.service';
+
+type NormalizedPedidoProduct = {
+  itemId: string;
+  qty: number;
+};
+
+type PricedPedidoLine = {
+  item: StkItem;
+  itemId: string;
+  qty: number;
+  baseUnitCents: number;
+  baseLineCents: number;
+  finalLineCents: number;
+  finalUnitPrice: number;
+  adjustmentRate: number | null;
+};
+
+type PricingResult = {
+  lines: PricedPedidoLine[];
+  productsTotalCents: number;
+  originalTotalCents: number;
+  couponDiscountCents: number;
+  appliedCouponCode: string | null;
+  couponRejectedReason?: string;
+};
+
+type CouponInfo = {
+  code: string;
+  percentage: number;
+  rejectedReason?: string;
+};
 
 @Injectable()
 export class PedidoService {
@@ -49,13 +83,19 @@ export class PedidoService {
 
     private readonly telegramService: TelegramService,
 
-    private readonly cobrosService: CobrosService
+    private readonly cobrosService: CobrosService,
+
+    private readonly mapsService: MapsService,
+
+    private readonly stkItemService: StkItemService,
+
+    private readonly cuponService: CuponService,
   ) { }
 
   // 🧾 Crear pedido e intención de pago
   async crear(
     dto: CreatePedidoDto,
-  ): Promise<{ pedido: Pedido; naveUrl: string }> {
+  ): Promise<{ pedido: Pedido; naveUrl: string; couponRejectedReason?: string }> {
     if (!dto.productos || dto.productos.length === 0) {
       throw new HttpException(
         {
@@ -66,68 +106,135 @@ export class PedidoService {
         HttpStatus.BAD_REQUEST,
       );
     }
-    const productosValidados: PedidoItem[] = [];
-
-    for (const producto of dto.productos) {
-      const item = await this.stkItemRepo.findOne({
-        where: { id: producto.nombre },
-      });
-
-      if (!item) {
-        throw new NotFoundException(
-          `Producto '${producto.nombre}' no existe en catálogo.`,
+    {
+      const productosNormalizados = this.normalizePedidoProducts(dto.productos);
+      if (productosNormalizados.length === 0) {
+        throw new HttpException(
+          {
+            code: 'ERR_VALIDATION_PRODUCTS',
+            message: 'Debes incluir al menos un producto vendible.',
+            retryable: false,
+          },
+          HttpStatus.BAD_REQUEST,
         );
       }
 
-      this.validarSubtotalProducto(producto);
+      const itemIds = productosNormalizados.map((producto) => producto.itemId);
+      const items = await this.stkItemRepo.find({
+        where: { id: In(itemIds) },
+        relations: ['stkPrecios', 'stkPrecios.moneda'],
+      });
+      const itemsById = new Map(items.map((item) => [item.id, item]));
 
-      await this.stockService.reservarStock(
-        item.id,
-        producto.cantidad,
-      );
+      for (const itemId of itemIds) {
+        if (!itemsById.has(itemId)) {
+          throw new NotFoundException(
+            `Producto '${itemId}' no existe en catalogo.`,
+          );
+        }
+      }
 
-      productosValidados.push({
-        nombre: producto.nombre,
-        descripcion: item.descripcion,
-        cantidad: producto.cantidad,
-        precio_unitario: producto.precio_unitario,
-        subtotal: this.redondear2(Number(producto.subtotal)),
-        ajuste_porcentaje: producto.ajuste_porcentaje ?? null,
-      } as PedidoItem);
-    }
+      const pricing = await this.computeTotals(dto, productosNormalizados, itemsById);
+      const costoEnvioCents = await this.computeShippingCents(dto);
+      const totalCalculadoCents = pricing.productsTotalCents + costoEnvioCents;
 
-    const externalId = uuidv4().replace(/-/g, '');
-    const clienteUbicacion = dto.billing_address
-      ? `${dto.billing_address.street} ${dto.billing_address.number}, ${dto.billing_address.city}, ${dto.billing_address.region}, ${dto.billing_address.country}, ${dto.billing_address.postal_code}`
-      : `${dto.calle || ''} ${dto.ciudad || ''}`.trim();
+      const productosValidados: PedidoItem[] = pricing.lines.map((line) => ({
+        nombre: line.itemId,
+        descripcion: line.item.descripcion,
+        cantidad: line.qty,
+        precio_unitario: line.finalUnitPrice,
+        subtotal: this.centsToAmount(line.baseLineCents),
+        ajuste_porcentaje: line.adjustmentRate,
+      } as PedidoItem));
 
-    const pedido = this.pedidoRepo.create({
-      cliente_cuit: dto.cliente_cuit,
-      cliente_nombre: dto.cliente_nombre,
-      cliente_mail: dto.email,
-      external_id: externalId,
-      total: dto.total,
-      costo_envio: dto.costo_envio,
-      descuento_cupon: dto.descuento_cupon ?? undefined,
-      codigo_cupon: dto.codigo_cupon ?? undefined,
-      delivery_method: dto.tipo_envio,
-      cliente_ubicacion: clienteUbicacion,
-      observaciones_direccion: dto.observaciones || undefined,
-      telefono: dto.telefono || undefined,
-      estado: 'PENDIENTE',
-      productos: productosValidados,
-      metodo_pago: dto.metodo_pago ?? 'online',
-    });
+      for (const producto of productosNormalizados) {
+        await this.stockService.reservarStock(
+          producto.itemId,
+          producto.qty,
+        );
+      }
 
-    const pedidoGuardado = await this.pedidoRepo.save(pedido);
+      const externalId = uuidv4().replace(/-/g, '');
+      const clienteUbicacion = dto.billing_address
+        ? `${dto.billing_address.street} ${dto.billing_address.number}, ${dto.billing_address.city}, ${dto.billing_address.region}, ${dto.billing_address.country}, ${dto.billing_address.postal_code}`
+        : `${dto.calle || ''} ${dto.ciudad || ''}`.trim();
 
-    // Para transferencias, generar comprobante pendiente sin cobro
-    if (pedidoGuardado.metodo_pago === 'transfer') {
+      const pedido = this.pedidoRepo.create({
+        cliente_cuit: dto.cliente_cuit,
+        cliente_nombre: dto.cliente_nombre,
+        cliente_mail: dto.email,
+        external_id: externalId,
+        total: this.centsToAmount(totalCalculadoCents),
+        costo_envio: this.centsToAmount(costoEnvioCents),
+        descuento_cupon: this.centsToAmount(pricing.couponDiscountCents),
+        codigo_cupon: pricing.appliedCouponCode,
+        delivery_method: dto.tipo_envio,
+        cliente_ubicacion: clienteUbicacion,
+        observaciones_direccion: dto.observaciones || undefined,
+        telefono: dto.telefono || undefined,
+        estado: 'PENDIENTE',
+        productos: productosValidados,
+        metodo_pago: dto.metodo_pago ?? 'online',
+      });
+
+      const pedidoGuardado = await this.pedidoRepo.save(pedido);
+
+      if (pedidoGuardado.metodo_pago === 'transfer') {
+        try {
+          const comp = await this.vtaComprobanteService.crearDesdePedido(pedidoGuardado);
+          pedidoGuardado.comprobante_tipo = comp.tipo;
+          pedidoGuardado.comprobante_numero = comp.comprobante;
+          await this.pedidoRepo.save(pedidoGuardado);
+        } catch (err) {
+          for (const p of productosValidados) {
+            try {
+              await this.stockService.liberarStock(p.nombre, p.cantidad);
+            } catch (e) {
+              console.error(`Error liberando stock de ${p.nombre}:`, e instanceof Error ? e.message : e);
+            }
+          }
+          pedidoGuardado.estado = 'CANCELADO';
+          await this.pedidoRepo.save(pedidoGuardado);
+          throw err;
+        }
+
+        try {
+          await this.notificarTransferenciaPendiente(pedidoGuardado);
+        } catch (e) {
+          console.error('mail transferencia pendiente', e);
+        }
+
+        try {
+          const msg = this.whatsappService.formatearMensajeTransferenciaPendiente(pedidoGuardado);
+          await this.telegramService.enviarMensaje(msg);
+        } catch (e) {
+          console.error('telegram transferencia pendiente', e);
+        }
+
+        const callbackUrl = `https://shop.wetech.ar/checkout/callback?payment_id=${externalId}`;
+        return {
+          pedido: pedidoGuardado,
+          naveUrl: callbackUrl,
+          ...(pricing.couponRejectedReason ? { couponRejectedReason: pricing.couponRejectedReason } : {}),
+        };
+      }
+
       try {
-        const comp = await this.vtaComprobanteService.crearDesdePedido(pedidoGuardado);
-        pedidoGuardado.comprobante_tipo = comp.tipo;
-        pedidoGuardado.comprobante_numero = comp.comprobante;
-        await this.pedidoRepo.save(pedidoGuardado);
+        const dtoCalculado = this.buildCalculatedPedidoDto(
+          dto,
+          externalId,
+          productosValidados,
+          this.centsToAmount(totalCalculadoCents),
+          this.centsToAmount(costoEnvioCents),
+          this.centsToAmount(pricing.couponDiscountCents),
+          pricing.appliedCouponCode,
+        );
+        const naveUrl = await this.generarIntencionDePago(dtoCalculado);
+        return {
+          pedido: pedidoGuardado,
+          naveUrl,
+          ...(pricing.couponRejectedReason ? { couponRejectedReason: pricing.couponRejectedReason } : {}),
+        };
       } catch (err) {
         for (const p of productosValidados) {
           try {
@@ -140,52 +247,6 @@ export class PedidoService {
         await this.pedidoRepo.save(pedidoGuardado);
         throw err;
       }
-
-      try {
-        await this.notificarTransferenciaPendiente(pedidoGuardado);
-      } catch (e) {
-        console.error('mail transferencia pendiente', e);
-      }
-
-      // WhatsApp desactivado temporalmente. Reactivar si se quiere volver a notificar por este canal.
-      // try {
-      //   const msg = this.whatsappService.formatearMensajeTransferenciaPendiente(pedidoGuardado);
-      //   await this.whatsappService.enviarMensaje(msg);
-      // } catch (e) {
-      //   console.error('whatsapp transferencia pendiente', e);
-      // }
-
-      try {
-        const msg = this.whatsappService.formatearMensajeTransferenciaPendiente(pedidoGuardado);
-        await this.telegramService.enviarMensaje(msg);
-      } catch (e) {
-        console.error('telegram transferencia pendiente', e);
-      }
-
-      const callbackUrl = `https://shop.wetech.ar/checkout/callback?payment_id=${externalId}`;
-      return { pedido: pedidoGuardado, naveUrl: callbackUrl };
-    }
-
-    // Para pagos online, continuar con Nave
-    try {
-      const naveUrl = await this.generarIntencionDePago({
-        ...dto,
-        external_id: externalId,
-      });
-      return { pedido: pedidoGuardado, naveUrl };
-    } catch (err) {
-      // Rollback: liberar stock y marcar pedido como cancelado
-      for (const p of productosValidados) {
-        try {
-          await this.stockService.liberarStock(p.nombre, p.cantidad);
-        } catch (e) {
-          // log y continuar intentando liberar el resto
-          console.error(`Error liberando stock de ${p.nombre}:`, e instanceof Error ? e.message : e);
-        }
-      }
-      pedidoGuardado.estado = 'CANCELADO';
-      await this.pedidoRepo.save(pedidoGuardado);
-      throw err;
     }
   }
 
@@ -871,6 +932,400 @@ export class PedidoService {
     }
     const parsed = new Date(`${value}T23:59:59.999`);
     return Number.isNaN(parsed.getTime()) ? undefined : parsed;
+  }
+
+  private normalizePedidoProducts(productos: CreatePedidoDto['productos']): NormalizedPedidoProduct[] {
+    const grouped = new Map<string, number>();
+
+    for (const producto of productos ?? []) {
+      const itemId = String(producto?.nombre ?? '').trim();
+      if (!itemId || this.isShippingItemId(itemId)) {
+        continue;
+      }
+
+      const qty = Number(producto.cantidad);
+      if (!Number.isFinite(qty) || qty <= 0) {
+        throw new BadRequestException(
+          `Producto '${itemId}': cantidad invalida.`,
+        );
+      }
+
+      grouped.set(itemId, (grouped.get(itemId) ?? 0) + qty);
+    }
+
+    return Array.from(grouped.entries()).map(([itemId, qty]) => ({
+      itemId,
+      qty,
+    }));
+  }
+
+  private async computeTotals(
+    dto: CreatePedidoDto,
+    productos: NormalizedPedidoProduct[],
+    itemsById: Map<string, StkItem>,
+  ): Promise<PricingResult> {
+    const baseLines = productos.map((producto) => {
+      const item = itemsById.get(producto.itemId);
+      if (!item) {
+        throw new NotFoundException(
+          `Producto '${producto.itemId}' no existe en catalogo.`,
+        );
+      }
+
+      const baseUnitCents = this.resolveMinoristaPriceCents(item);
+      const baseLineCents = baseUnitCents * producto.qty;
+      const transferRate = dto.metodo_pago === 'transfer'
+        ? this.transferDiscountRate(item, producto.qty)
+        : 0;
+      const transferFinalLineCents = transferRate > 0
+        ? this.applyDiscountAndRoundUpLineCents(baseLineCents, transferRate)
+        : baseLineCents;
+
+      return {
+        item,
+        itemId: producto.itemId,
+        qty: producto.qty,
+        baseUnitCents,
+        baseLineCents,
+        transferRate,
+        transferFinalLineCents,
+      };
+    });
+
+    const originalTotalCents = baseLines.reduce((acc, line) => acc + line.baseLineCents, 0);
+    const transferTotalCents = baseLines.reduce((acc, line) => acc + line.transferFinalLineCents, 0);
+    const transferDiscountPercentage = originalTotalCents > 0
+      ? ((originalTotalCents - transferTotalCents) / originalTotalCents) * 100
+      : 0;
+    const couponInfo = await this.resolveCouponInfo(dto);
+    const couponWins = !!couponInfo && couponInfo.percentage > transferDiscountPercentage;
+    const applyTransfer = !couponWins && dto.metodo_pago === 'transfer';
+
+    const lines: PricedPedidoLine[] = baseLines.map((line) => {
+      const adjustmentRate = couponWins
+        ? couponInfo!.percentage
+        : applyTransfer && line.transferRate > 0
+          ? line.transferRate
+          : null;
+      const finalLineCents = adjustmentRate
+        ? this.applyDiscountAndRoundUpLineCents(line.baseLineCents, adjustmentRate)
+        : line.baseLineCents;
+
+      return {
+        item: line.item,
+        itemId: line.itemId,
+        qty: line.qty,
+        baseUnitCents: line.baseUnitCents,
+        baseLineCents: line.baseLineCents,
+        finalLineCents,
+        finalUnitPrice: this.redondear2(this.centsToAmount(finalLineCents) / line.qty),
+        adjustmentRate: adjustmentRate ? this.redondear2(adjustmentRate) : null,
+      };
+    });
+
+    const productsTotalCents = lines.reduce((acc, line) => acc + line.finalLineCents, 0);
+    const couponDiscountCents = couponWins
+      ? originalTotalCents - productsTotalCents
+      : 0;
+
+    return {
+      lines,
+      productsTotalCents,
+      originalTotalCents,
+      couponDiscountCents,
+      appliedCouponCode: couponWins ? couponInfo!.code : null,
+      couponRejectedReason: couponInfo?.rejectedReason,
+    };
+  }
+
+  private async resolveCouponInfo(
+    dto: CreatePedidoDto,
+  ): Promise<CouponInfo | null> {
+    const code = String(dto.codigo_cupon ?? '').trim();
+    if (!code) {
+      return null;
+    }
+
+    try {
+      const cupon = await this.cuponService.buscarPorId(code);
+      const now = new Date();
+      if (cupon.fechaDesde && cupon.fechaDesde > now) {
+        return { code, percentage: 0, rejectedReason: 'Cupon aun no vigente' };
+      }
+      if (cupon.fechaHasta && cupon.fechaHasta < now) {
+        return { code, percentage: 0, rejectedReason: 'Cupon vencido' };
+      }
+
+      const transferPercentage = this.toPositiveNumber(cupon.porcentajeDescuentoTransferencia);
+      const legacyPercentage = this.toPositiveNumber(cupon.porcentajeDescuento);
+      const cardPercentage = this.toPositiveNumber(cupon.porcentajeDescuentoTarjeta);
+      const percentage = dto.metodo_pago === 'transfer'
+        ? transferPercentage ?? legacyPercentage
+        : legacyPercentage ?? cardPercentage;
+
+      if (!percentage || percentage <= 0) {
+        return { code, percentage: 0, rejectedReason: 'Cupon sin porcentaje valido' };
+      }
+
+      return { code, percentage };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Cupon invalido';
+      return { code, percentage: 0, rejectedReason: message };
+    }
+  }
+
+  private async computeShippingCents(dto: CreatePedidoDto): Promise<number> {
+    if (dto.tipo_envio !== 'shipping') {
+      return 0;
+    }
+
+    const destinations = this.buildShippingDestinations(dto);
+    if (destinations.length === 0) {
+      throw new BadRequestException('No se pudo resolver la direccion de envio.');
+    }
+
+    let distanciaKm = Number.NaN;
+    let lastDistanceResponse: any = null;
+    for (const destination of destinations) {
+      const distance = await this.mapsService.getDistanceToDestination(
+        destination.address,
+        destination.city,
+      );
+      lastDistanceResponse = distance;
+      distanciaKm = this.extractDistanceKm(distance);
+      if (Number.isFinite(distanciaKm) && distanciaKm > 0) {
+        break;
+      }
+    }
+
+    if (!Number.isFinite(distanciaKm) || distanciaKm <= 0) {
+      console.warn('No se pudo calcular la distancia de envio:', lastDistanceResponse);
+      throw new BadRequestException('No se pudo calcular la distancia de envio.');
+    }
+
+    const envio = await this.stkItemService.getCostoEnvio(distanciaKm);
+    const costoTotal = Number(envio?.costoTotal);
+    if (!Number.isFinite(costoTotal) || costoTotal < 0) {
+      throw new BadRequestException('No se pudo resolver el costo de envio.');
+    }
+
+    return this.toCents(costoTotal);
+  }
+
+  private buildCalculatedPedidoDto(
+    dto: CreatePedidoDto,
+    externalId: string,
+    productosValidados: PedidoItem[],
+    total: number,
+    costoEnvio: number,
+    descuentoCupon: number,
+    codigoCupon: string | null,
+  ): CreatePedidoDto & { external_id: string } {
+    return {
+      ...dto,
+      external_id: externalId,
+      total,
+      costo_envio: costoEnvio,
+      descuento_cupon: descuentoCupon,
+      codigo_cupon: codigoCupon ?? undefined,
+      productos: productosValidados.map((producto) => ({
+        nombre: producto.nombre,
+        cantidad: producto.cantidad,
+        precio_unitario: Number(producto.precio_unitario),
+        subtotal: this.redondear2(Number(producto.precio_unitario) * Number(producto.cantidad)),
+        ajuste_porcentaje: producto.ajuste_porcentaje ?? undefined,
+      })),
+    };
+  }
+
+  private isShippingItemId(itemId: string): boolean {
+    const normalized = itemId.trim().toUpperCase();
+    return normalized.startsWith('ENV-') || /^ENV-\d{2}K-GM-DELIVERY$/.test(normalized);
+  }
+
+  private resolveMinoristaPriceCents(item: StkItem): number {
+    const precioMinorista = item.stkPrecios?.find((precio) => precio.lista === 'MINORISTA');
+    if (!precioMinorista) {
+      throw new BadRequestException(`Producto '${item.id}' sin precio MINORISTA.`);
+    }
+
+    const precioVta = Number(precioMinorista.precioVta ?? 0);
+    const isDol = precioMinorista.moneda?.id === 'DOL';
+    const cotizacion = isDol ? Number(precioMinorista.moneda?.cotizacion ?? 1) : 1;
+    const precio = precioVta * cotizacion;
+
+    if (!Number.isFinite(precio) || precio <= 0) {
+      throw new BadRequestException(`Producto '${item.id}' sin precio valido.`);
+    }
+
+    return this.toCents(precio);
+  }
+
+  private isFilamentGroup(grupo?: string | null): boolean {
+    const normalized = String(grupo ?? '').trim().toUpperCase();
+    return normalized === 'FILAMENTO 3D' || normalized === 'FILAMENTOS';
+  }
+
+  private extractWeightKgFromDescripcion(desc?: string | null): number | null {
+    const segment = String(desc ?? '').split('|')[2]?.trim();
+    if (!segment) {
+      return null;
+    }
+
+    const match = segment.match(/(\d+\.?\d*)\s*(KG|G)/i);
+    if (!match) {
+      return null;
+    }
+
+    const value = Number(match[1]);
+    if (!Number.isFinite(value)) {
+      return null;
+    }
+
+    return match[2].toUpperCase() === 'G' ? value / 1000 : value;
+  }
+
+  private buildProductKeyFromDescripcion(desc?: string | null): string {
+    const parts = String(desc ?? '').split('|').map((part) => part.trim());
+    return `${parts[0] ?? ''}-${parts[1] ?? ''}`.toUpperCase();
+  }
+
+  private transferDiscountRate(item: StkItem, qty: number): number {
+    if (!this.isFilamentGroup(item.grupo)) {
+      return 0;
+    }
+
+    const weightKg = this.extractWeightKgFromDescripcion(item.descripcion);
+    const productKey = this.buildProductKeyFromDescripcion(item.descripcion);
+    const eligibleKeys = new Set([
+      '3N3-PLA',
+      'GRILON3-PLA BOUTIQUE',
+      'GRILON3-PLA',
+      'GST3D-PLA',
+      'HELLBOT-PLA',
+      '3NMAX-PLA',
+      'FREMOVER-PLA',
+    ]);
+
+    if (weightKg === 1 && eligibleKeys.has(productKey)) {
+      if (qty >= 50) return 22;
+      if (qty >= 10) return 20;
+      if (qty >= 5) return 17;
+    }
+
+    return 15;
+  }
+
+  private buildShippingDestinations(dto: CreatePedidoDto): Array<{ address: string; city: string }> {
+    const raw = dto as any;
+    const destinations: Array<{ address: string; city: string }> = [];
+    const directAddress = raw.confirmedAddress || raw.direccion;
+    if (directAddress) {
+      destinations.push({
+        address: String(directAddress).trim(),
+        city: '',
+      });
+    }
+
+    if (dto.billing_address) {
+      destinations.push({
+        address: [
+          dto.billing_address.street,
+          dto.billing_address.number,
+          dto.billing_address.region,
+          dto.billing_address.country,
+          dto.billing_address.postal_code,
+        ].filter(Boolean).join(' '),
+        city: dto.billing_address.city || dto.ciudad || '',
+      });
+    }
+
+    destinations.push({
+      address: `${dto.calle || ''}`.trim(),
+      city: `${dto.ciudad || ''}`.trim(),
+    });
+
+    const seen = new Set<string>();
+    return destinations
+      .map((destination) => ({
+        address: destination.address.trim(),
+        city: destination.city.trim(),
+      }))
+      .filter((destination) => destination.address)
+      .filter((destination) => {
+        const key = `${destination.address}|${destination.city}`.toUpperCase();
+        if (seen.has(key)) {
+          return false;
+        }
+        seen.add(key);
+        return true;
+      });
+  }
+
+  private extractDistanceKm(distance: any): number {
+    const valueMeters = Number(distance?.raw?.distance?.value ?? distance?.distance?.value);
+    if (Number.isFinite(valueMeters) && valueMeters > 0) {
+      return valueMeters / 1000;
+    }
+
+    const text = String(distance?.raw?.distance?.text ?? distance?.distance?.text ?? distance?.distance ?? '').trim();
+    const match = text.match(/([\d.,]+)\s*(km|m)/i);
+    if (!match) {
+      return Number.NaN;
+    }
+
+    const value = this.parseLocalizedNumber(match[1]);
+    if (!Number.isFinite(value)) {
+      return Number.NaN;
+    }
+
+    return match[2].toLowerCase() === 'm' ? value / 1000 : value;
+  }
+
+  private parseLocalizedNumber(value: string): number {
+    const normalized = value.trim();
+    if (normalized.includes(',') && normalized.includes('.')) {
+      return Number(normalized.replace(/\./g, '').replace(',', '.'));
+    }
+    if (normalized.includes(',')) {
+      return Number(normalized.replace(',', '.'));
+    }
+    return Number(normalized);
+  }
+
+  private toPositiveNumber(value: unknown): number | null {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  }
+
+  private toCents(value: number): number {
+    const amount = Number(value);
+    if (!Number.isFinite(amount)) {
+      return 0;
+    }
+
+    return Math.ceil(amount - Number.EPSILON) * 100;
+  }
+
+  private centsToAmount(cents: number): number {
+    return cents / 100;
+  }
+
+  private percentCents(cents: number, percentage: number): number {
+    return Math.round((cents * percentage) / 100);
+  }
+
+  private applyDiscountAndRoundUpLineCents(cents: number, percentage: number): number {
+    const discountedCents = cents * (1 - percentage / 100);
+    return this.roundCentsUpToWholePeso(discountedCents);
+  }
+
+  private roundCentsUpToWholePeso(cents: number): number {
+    if (!Number.isFinite(cents)) {
+      return 0;
+    }
+
+    return Math.ceil((cents - Number.EPSILON) / 100) * 100;
   }
 
   private redondear2(valor: number): number {

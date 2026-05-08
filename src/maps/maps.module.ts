@@ -8,5 +8,6 @@ import { ConfigModule } from '@nestjs/config';
   imports: [ConfigModule], 
   controllers: [MapsController],
   providers: [MapsService],
+  exports: [MapsService],
 })
 export class MapsModule {}
