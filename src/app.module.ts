@@ -1,7 +1,9 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 
 import { StkItemModule } from './stk-item/stk-item.module';
 import { StkExistenciaModule } from './stk-existencia/stk-existencia.module';
@@ -29,6 +31,14 @@ import { VtaCobroMedioModule } from './vta-cobro-medio/vta-cobro-medio.module';
   imports: [
     // Cargar variables de entorno de forma global
     ConfigModule.forRoot({ isGlobal: true }),
+
+    ThrottlerModule.forRoot([
+      {
+        name: 'default',
+        ttl: 60_000,
+        limit: 120,
+      },
+    ]),
 
     // 🟡 Conexión Nacional Software (wetechv2)
     TypeOrmModule.forRootAsync({
@@ -87,6 +97,12 @@ import { VtaCobroMedioModule } from './vta-cobro-medio/vta-cobro-medio.module';
     VtaCobroModule,
     VtaCobroFacturaModule,
     VtaCobroMedioModule,
+  ],
+  providers: [
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
   ],
 })
 export class AppModule {}

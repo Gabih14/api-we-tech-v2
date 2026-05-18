@@ -8,6 +8,7 @@ import {
   UsePipes,
   ValidationPipe,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { CuponService } from './cupon.service';
 import { CreateCuponDto } from './dto/create-cupon.dto';
 import { Cupon } from './entities/cupon.entity';
@@ -35,12 +36,14 @@ export class CuponController {
   }
 
   @Post('usar')
+  @Throttle({ default: { ttl: 60_000, limit: 20 } })
   @UsePipes(new ValidationPipe({ transform: true }))
   async usarCupon(@Body() usarCuponDto: CreateCuponUsoDto): Promise<CuponUso> {
     return this.cuponService.usarCupon(usarCuponDto);
   }
 
   @Get(':id/descuento/:modalidad')
+  @Throttle({ default: { ttl: 60_000, limit: 60 } })
   async resolverDescuentoPorModalidad(
     @Param('id') id: string,
     @Param('modalidad') modalidad: string,
@@ -49,6 +52,7 @@ export class CuponController {
   }
 
   @Get(':id/estadisticas')
+  @Throttle({ default: { ttl: 60_000, limit: 30 } })
   async obtenerEstadisticas(@Param('id') id: string): Promise<any> {
     return this.cuponService.obtenerEstadisticas(id);
   }
