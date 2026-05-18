@@ -26,7 +26,7 @@ export class CuponController {
   }
 
   @Get()
-  async listarActivos(): Promise<Cupon[]> {
+  async listarActivos(): Promise<CuponConResumenUsos[]> {
     return this.cuponService.listarActivos();
   }
 
