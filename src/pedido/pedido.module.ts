@@ -13,6 +13,7 @@ import { VtaComprobanteItemModule } from 'src/vta-comprobante-item/vta-comproban
 import { PedidoExpirationService } from './pedido-expiration.service';
 import { WhatsappModule } from '../whatsapp/whatsapp.module';
 import { TelegramModule } from 'src/telegram/telegram.module';
+import { CuponModule } from 'src/cupon/cupon.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { TelegramModule } from 'src/telegram/telegram.module';
     MailerModule,
     WhatsappModule,
     TelegramModule,
+    CuponModule,
   ],
   controllers: [PedidoController],
   providers: [PedidoService, PedidoExpirationService],

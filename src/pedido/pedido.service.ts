@@ -25,6 +25,7 @@ import { WhatsappService } from 'src/whatsapp/whatsapp.service';
 import { TelegramService } from 'src/telegram/telegram.service';
 import { CobrosService } from 'src/vta-comprobante/cobros.service';
 import { GetPedidosDashboardDto } from './dto/get-pedidos-dashboard.dto';
+import { CuponService } from 'src/cupon/cupon.service';
 
 @Injectable()
 export class PedidoService {
@@ -49,7 +50,9 @@ export class PedidoService {
 
     private readonly telegramService: TelegramService,
 
-    private readonly cobrosService: CobrosService
+    private readonly cobrosService: CobrosService,
+
+    private readonly cuponService: CuponService,
   ) { }
 
   // 🧾 Crear pedido e intención de pago
@@ -587,6 +590,10 @@ export class PedidoService {
 
     await this.pedidoRepo.save(pedido);
 
+    if (pedido.estado === 'APROBADO') {
+      await this.registrarUsoCuponSiCorresponde(pedido);
+    }
+
     return {
       message: `Pedido ${pedido.external_id} procesado correctamente`,
       estado: pedido.estado
@@ -774,6 +781,7 @@ export class PedidoService {
 
     // Guardar pedido actualizado
     await this.pedidoRepo.save(pedido);
+    await this.registrarUsoCuponSiCorresponde(pedido);
 
     // Notificaciones no críticas
     try { await this.notificarSecretaria(pedido); } catch (e) { console.error('mail', e); }
@@ -839,6 +847,25 @@ export class PedidoService {
 
     pedido.comprobante_tipo = null;
     pedido.comprobante_numero = null;
+  }
+
+  private async registrarUsoCuponSiCorresponde(pedido: Pedido): Promise<void> {
+    if (!pedido.codigo_cupon) {
+      return;
+    }
+
+    try {
+      await this.cuponService.usarCupon({
+        cupon_id: pedido.codigo_cupon,
+        cuit: pedido.cliente_cuit,
+        pedido_id: pedido.id,
+      });
+    } catch (e) {
+      console.error(
+        `Error registrando uso de cupon para pedido ${pedido.external_id}:`,
+        e instanceof Error ? e.message : e,
+      );
+    }
   }
 
   private normalizePage(page?: number | string): number {
