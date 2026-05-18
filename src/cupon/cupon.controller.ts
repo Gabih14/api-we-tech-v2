@@ -9,7 +9,7 @@ import {
   ValidationPipe,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
-import { CuponService } from './cupon.service';
+import { CuponService, CuponConResumenUsos } from './cupon.service';
 import { CreateCuponDto } from './dto/create-cupon.dto';
 import { Cupon } from './entities/cupon.entity';
 import { CreateCuponUsoDto } from 'src/cupon_uso/dto/create-cupon_uso.dto';
