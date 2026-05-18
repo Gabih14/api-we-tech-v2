@@ -37,14 +37,14 @@ export class CreateCuponDto {
   @IsOptional()
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
-  @Min(0.01)
+  @Min(0)
   @Max(100)
   porcentajeDescuentoTarjeta?: number;
 
   @IsOptional()
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
-  @Min(0.01)
+  @Min(0)
   @Max(100)
   porcentajeDescuentoTransferencia?: number;
 

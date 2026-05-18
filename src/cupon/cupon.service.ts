@@ -188,7 +188,9 @@ export class CuponService {
 
     return entities.map((cupon, index) =>
       Object.assign(cupon, {
-        ultimoUso: raw[index]?.ultimoUso ? new Date(raw[index].ultimoUso) : null,
+        ultimoUso: raw[index]?.ultimoUso
+          ? new Date(raw[index].ultimoUso)
+          : null,
       }),
     ) as CuponConResumenUsos[];
   }
@@ -222,11 +224,14 @@ export class CuponService {
     const transferencia = this.toNumber(
       crearCuponDto.porcentajeDescuentoTransferencia,
     );
+    const tieneDescuentoPorMetodo = tarjeta !== null || transferencia !== null;
 
     const porcentajeDescuentoTarjeta =
-      tarjeta ?? legacy ?? this.requerirValorDual();
+      tarjeta ?? legacy ?? (tieneDescuentoPorMetodo ? 0 : this.requerirValor());
     const porcentajeDescuentoTransferencia =
-      transferencia ?? legacy ?? this.requerirValorDual();
+      transferencia ??
+      legacy ??
+      (tieneDescuentoPorMetodo ? 0 : this.requerirValor());
     const porcentajeDescuento = legacy ?? porcentajeDescuentoTarjeta;
 
     this.validarRangoPorcentaje(
@@ -250,12 +255,12 @@ export class CuponService {
     valorLegacy: unknown,
   ): number {
     const principal = this.toNumber(valorPrincipal);
-    if (principal !== null && principal > 0) {
+    if (principal !== null) {
       return principal;
     }
 
     const legacy = this.toNumber(valorLegacy);
-    if (legacy !== null && legacy > 0) {
+    if (legacy !== null) {
       return legacy;
     }
 
@@ -278,16 +283,14 @@ export class CuponService {
   }
 
   private validarRangoPorcentaje(value: number, field: string): void {
-    if (value < 0.01 || value > 100) {
-      throw new BadRequestException(
-        `${field} debe estar entre 0.01 y 100`,
-      );
+    if (value < 0 || value > 100) {
+      throw new BadRequestException(`${field} debe estar entre 0 y 100`);
     }
   }
 
-  private requerirValorDual(): never {
+  private requerirValor(): never {
     throw new BadRequestException(
-      'Debes enviar porcentajeDescuentoTarjeta y porcentajeDescuentoTransferencia, o porcentajeDescuento legacy',
+      'Debes enviar porcentajeDescuentoTarjeta, porcentajeDescuentoTransferencia o porcentajeDescuento legacy',
     );
   }
 
