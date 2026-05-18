@@ -16,6 +16,7 @@ import { CreatePedidoDto } from './dto/create-pedido.dto';
 import { ApiTokenGuard } from '../common/guards/api-token.guard';
 import { AuthType } from '../common/decorators/auth-type.decorator';
 import { GetPedidosDashboardDto } from './dto/get-pedidos-dashboard.dto';
+import { SkipThrottle, Throttle } from '@nestjs/throttler';
 
 @Controller('pedido')
 @UseGuards(ApiTokenGuard)
@@ -23,11 +24,13 @@ export class PedidoController {
   constructor(private readonly pedidoService: PedidoService) {}
 
   @Post()
+  @Throttle({ default: { ttl: 60_000, limit: 20 } })
   async crear(@Body() dto: CreatePedidoDto) {
     return this.pedidoService.crear(dto);
   }
 
   @Post('nave-webhook')
+  @SkipThrottle()
   @AuthType('public')
   @HttpCode(HttpStatus.OK)
   async recibirWebhook(@Body() body: any) {
@@ -42,6 +45,7 @@ export class PedidoController {
   }
 
   @Post('nave-webhook/test')
+  @Throttle({ default: { ttl: 60_000, limit: 5 } })
   @AuthType('public')
   @HttpCode(HttpStatus.OK)
   async testWebhook(@Body() body: any) {
@@ -71,6 +75,7 @@ export class PedidoController {
   }
 
   @Post(':externalId/cancelar')
+  @Throttle({ default: { ttl: 60_000, limit: 30 } })
   @AuthType('dashboard')
   @HttpCode(HttpStatus.OK)
   async cancelarPedido(@Param('externalId') externalId: string) {
@@ -82,6 +87,7 @@ export class PedidoController {
   }
 
   @Post(':externalId/rechazar')
+  @Throttle({ default: { ttl: 60_000, limit: 30 } })
   @AuthType('dashboard')
   @HttpCode(HttpStatus.OK)
   async rechazarTransferencia(@Param('externalId') externalId: string) {
