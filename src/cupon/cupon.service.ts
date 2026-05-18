@@ -17,6 +17,11 @@ export interface CuponDescuentoResolucion {
   porcentajeAplicado: number;
 }
 
+export type CuponConResumenUsos = Cupon & {
+  totalUsos: number;
+  ultimoUso: Date | null;
+};
+
 @Injectable()
 export class CuponService {
   constructor(
@@ -104,6 +109,19 @@ export class CuponService {
 
   // Validar y usar cupón
   async usarCupon(usarCuponDto: CreateCuponUsoDto): Promise<CuponUso> {
+    if (usarCuponDto.pedido_id) {
+      const usoExistente = await this.cuponUsoRepository.findOne({
+        where: {
+          cuponId: usarCuponDto.cupon_id,
+          pedidoId: usarCuponDto.pedido_id,
+        },
+      });
+
+      if (usoExistente) {
+        return usoExistente;
+      }
+    }
+
     const cupon = await this.buscarPorId(usarCuponDto.cupon_id);
 
     // Validar fechas
@@ -154,11 +172,25 @@ export class CuponService {
   }
 
   // Listar todos los cupones activos
-  async listarActivos(): Promise<Cupon[]> {
-    return await this.cuponRepository.find({
-      where: { activo: true },
-      order: { fechaDesde: 'DESC' },
-    });
+  async listarActivos(): Promise<CuponConResumenUsos[]> {
+    const { entities, raw } = await this.cuponRepository
+      .createQueryBuilder('cupon')
+      .loadRelationCountAndMap('cupon.totalUsos', 'cupon.usos')
+      .addSelect((subQuery) => {
+        return subQuery
+          .select('MAX(cuponUso.usado_en)')
+          .from(CuponUso, 'cuponUso')
+          .where('cuponUso.cupon_id = cupon.id');
+      }, 'ultimoUso')
+      .where('cupon.activo = :activo', { activo: true })
+      .orderBy('cupon.fechaDesde', 'DESC')
+      .getRawAndEntities();
+
+    return entities.map((cupon, index) =>
+      Object.assign(cupon, {
+        ultimoUso: raw[index]?.ultimoUso ? new Date(raw[index].ultimoUso) : null,
+      }),
+    ) as CuponConResumenUsos[];
   }
 
   // Desactivar cupón

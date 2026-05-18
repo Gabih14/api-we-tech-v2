@@ -8,7 +8,7 @@ import {
   UsePipes,
   ValidationPipe,
 } from '@nestjs/common';
-import { CuponService } from './cupon.service';
+import { CuponConResumenUsos, CuponService } from './cupon.service';
 import { CreateCuponDto } from './dto/create-cupon.dto';
 import { Cupon } from './entities/cupon.entity';
 import { CreateCuponUsoDto } from 'src/cupon_uso/dto/create-cupon_uso.dto';
@@ -25,7 +25,7 @@ export class CuponController {
   }
 
   @Get()
-  async listarActivos(): Promise<Cupon[]> {
+  async listarActivos(): Promise<CuponConResumenUsos[]> {
     return this.cuponService.listarActivos();
   }
 
