@@ -52,4 +52,7 @@ export class VtaCliente {
 
   @Column('bit', { name: 'visible', nullable: true, default: () => "'b'1''" })
   visible: boolean | null;
+
+  @Column("varchar", { name: "contacto", nullable: true, length: 512 })
+  contacto: string | null;
 }
