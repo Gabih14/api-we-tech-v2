@@ -46,7 +46,7 @@ async function bootstrap() {
     allowedOrigins,
   );
   console.log(`Servidor corriendo en ${process.env.PORT ?? 3000}`);
-  console.log("versión con logging en pedidos v3");
+  console.log(`Tiempo de CRON de aprobación de transferencias: ${process.env.PEDIDO_TRANSFER_APPROVAL_CRON ?? 'no configurado'}`);
 
 }
 bootstrap();

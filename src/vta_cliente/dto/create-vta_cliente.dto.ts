@@ -37,6 +37,11 @@ export class CreateVtaClienteDto {
 
   @IsOptional()
   @IsString()
+  @Length(0, 512)
+  contacto?: string;
+
+  @IsOptional()
+  @IsString()
   @Length(0, 100)
   direccion?: string;
 
