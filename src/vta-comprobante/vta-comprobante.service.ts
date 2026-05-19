@@ -360,12 +360,17 @@ export class VtaComprobanteService {
 
     // Formato esperado: "calle numero, ciudad, region, pais, postal_code"
     const partes = ubicacionString.split(',').map((p) => p.trim());
+    const cpa = partes.pop();
+    partes.pop();
+    const provincia = partes.pop();
+    const localidad = partes.pop();
+    const direccion = partes.join(', ');
 
     return {
-      direccion: partes[0] || undefined, // Calle y número
-      localidad: partes[1] || undefined, // Ciudad
-      provincia: partes[2] || undefined, // Región/Provincia
-      cpa: partes[4] || undefined, // Código postal
+      direccion: direccion || undefined,
+      localidad: localidad || undefined,
+      provincia: provincia || undefined,
+      cpa: cpa || undefined,
     };
   }
 
