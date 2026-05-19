@@ -46,6 +46,7 @@ export class VtaClienteService {
     }
 
     const nuevoCliente = this.repo.create({
+      ...dto,
       id: dto.id,
       razonSocial: dto.razonSocial || 'Cliente sin nombre', // ✅ Quitar dto.name
       nombreComercial: dto.nombreComercial || null,          // ✅ Quitar dto.name
@@ -53,7 +54,7 @@ export class VtaClienteService {
       numeroDocumento: dto.numeroDocumento || dto.id,
       email: dto.email || null,
       telefono: dto.telefono || null,
-      visible: true,
+      visible: dto.visible ?? true,
     });
 
     return this.repo.save(nuevoCliente);

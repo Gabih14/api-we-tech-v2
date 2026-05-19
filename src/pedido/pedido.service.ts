@@ -100,9 +100,24 @@ export class PedidoService {
     }
 
     const externalId = uuidv4().replace(/-/g, '');
-    const clienteUbicacion = dto.billing_address
-      ? `${dto.billing_address.street} ${dto.billing_address.number}, ${dto.billing_address.city}, ${dto.billing_address.region}, ${dto.billing_address.country}, ${dto.billing_address.postal_code}`
-      : `${dto.calle || ''} ${dto.ciudad || ''}`.trim();
+    const direccionPedido = {
+      calle: dto.billing_address?.street || dto.calle || '',
+      numero: dto.billing_address?.number || '',
+      ciudad: dto.billing_address?.city || dto.ciudad || '',
+      region: dto.billing_address?.region || dto.region || '',
+      pais: dto.billing_address?.country || dto.pais || '',
+      codigoPostal:
+        dto.billing_address?.postal_code || dto.codigo_postal || '',
+    };
+    const clienteUbicacion = [
+      `${direccionPedido.calle} ${direccionPedido.numero}`.trim(),
+      direccionPedido.ciudad,
+      direccionPedido.region,
+      direccionPedido.pais,
+      direccionPedido.codigoPostal,
+    ]
+      .filter(Boolean)
+      .join(', ');
 
     const pedido = this.pedidoRepo.create({
       cliente_cuit: dto.cliente_cuit,
