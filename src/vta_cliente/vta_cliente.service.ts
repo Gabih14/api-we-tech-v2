@@ -27,16 +27,15 @@ export class VtaClienteService {
     const existing = await this.repo.findOne({ where: { id: clienteDto.id } });
 
     if (existing) {
+      const updateDto = this.omitirValoresVacios(clienteDto);
+
       // Chequea si hay diferencias
-      const hasChanges = Object.entries(clienteDto).some(
-        ([key, value]) =>
-          value !== undefined &&
-          value !== null &&
-          value !== (existing as any)[key],
+      const hasChanges = Object.entries(updateDto).some(
+        ([key, value]) => value !== (existing as any)[key],
       );
 
       if (hasChanges) {
-        await this.repo.update(clienteDto.id, clienteDto);
+        await this.repo.update(clienteDto.id, updateDto);
       }
 
       // ✅ Asegurar que retornamos el cliente actualizado
@@ -67,6 +66,16 @@ export class VtaClienteService {
   async create(dto: CreateVtaClienteDto) {
     const cliente = this.repo.create(this.normalizarClienteDto(dto));
     return this.repo.save(cliente);
+  }
+
+  private omitirValoresVacios<T extends Record<string, any>>(dto: T): Partial<T> {
+    return Object.fromEntries(
+      Object.entries(dto).filter(([, value]) => {
+        if (value === undefined || value === null) return false;
+        if (typeof value === 'string' && value.trim() === '') return false;
+        return true;
+      }),
+    ) as Partial<T>;
   }
 
   private normalizarClienteDto(dto: CreateVtaClienteDto): CreateVtaClienteDto {
@@ -134,7 +143,10 @@ export class VtaClienteService {
   }
 
   async update(id: string, dto: UpdateVtaClienteDto) {
-    await this.repo.update(id, dto);
+    const updateDto = this.omitirValoresVacios(dto);
+    if (Object.keys(updateDto).length > 0) {
+      await this.repo.update(id, updateDto);
+    }
     return this.findOne(id);
   }
 
