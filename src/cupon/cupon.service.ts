@@ -45,6 +45,8 @@ export class CuponService {
     const cupon = this.cuponRepository.create({
       ...crearCuponDto,
       ...descuentosNormalizados,
+      maxUsosPorCuit:
+        crearCuponDto.maxUsosPorCuit ?? crearCuponDto.max_usos_por_cuit,
     });
 
     return await this.cuponRepository.save(cupon);
@@ -109,6 +111,8 @@ export class CuponService {
 
   // Validar y usar cupón
   async usarCupon(usarCuponDto: CreateCuponUsoDto): Promise<CuponUso> {
+    const cuitNormalizado = this.normalizarCuit(usarCuponDto.cuit);
+
     if (usarCuponDto.pedido_id) {
       const usoExistente = await this.cuponUsoRepository.findOne({
         where: {
@@ -146,12 +150,10 @@ export class CuponService {
 
     // Validar usos por CUIT
     if (cupon.maxUsosPorCuit) {
-      const usosPorCuit = await this.cuponUsoRepository.count({
-        where: {
-          cuponId: cupon.id,
-          cuit: usarCuponDto.cuit,
-        },
-      });
+      const usosPorCuit = await this.contarUsosDelCuit(
+        cupon.id,
+        cuitNormalizado,
+      );
 
       if (usosPorCuit >= cupon.maxUsosPorCuit) {
         throw new BadRequestException(
@@ -163,7 +165,7 @@ export class CuponService {
     // Registrar uso
     const cuponUso = this.cuponUsoRepository.create({
       cuponId: cupon.id,
-      cuit: usarCuponDto.cuit,
+      cuit: cuitNormalizado,
       pedidoId: usarCuponDto.pedido_id,
       usadoEn: new Date(),
     });
@@ -286,6 +288,25 @@ export class CuponService {
     if (value < 0 || value > 100) {
       throw new BadRequestException(`${field} debe estar entre 0 y 100`);
     }
+  }
+
+  private normalizarCuit(cuit: string): string {
+    const digitos = cuit.replace(/\D/g, '');
+    return digitos || cuit.trim();
+  }
+
+  private async contarUsosDelCuit(
+    cuponId: string,
+    cuitNormalizado: string,
+  ): Promise<number> {
+    return this.cuponUsoRepository
+      .createQueryBuilder('cuponUso')
+      .where('cuponUso.cupon_id = :cuponId', { cuponId })
+      .andWhere(
+        `REPLACE(REPLACE(REPLACE(REPLACE(cuponUso.cuit, '-', ''), '.', ''), '/', ''), ' ', '') = :cuit`,
+        { cuit: cuitNormalizado },
+      )
+      .getCount();
   }
 
   private requerirValor(): never {

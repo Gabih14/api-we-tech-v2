@@ -20,12 +20,19 @@ export class CreateCuponDto {
   descripcion?: string;
 
   @IsOptional()
+  @Type(() => Number)
   @IsInt()
   max_usos?: number;
 
   @IsOptional()
+  @Type(() => Number)
   @IsInt()
   maxUsosPorCuit?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  max_usos_por_cuit?: number;
 
   @IsOptional()
   @Type(() => Number)
