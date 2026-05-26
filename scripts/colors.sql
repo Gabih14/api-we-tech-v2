@@ -1,0 +1,18 @@
+CREATE TABLE IF NOT EXISTS colors (
+  id INT NOT NULL AUTO_INCREMENT,
+  name VARCHAR(100) NOT NULL,
+  hex VARCHAR(7) NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_colors_name (name)
+);
+
+INSERT INTO colors (name, hex)
+VALUES
+  ('Amarillo', '#FFFF00'),
+  ('Amarillo Fluo', '#FFFF00'),
+  ('Blanco', '#FFFFFF')
+ON DUPLICATE KEY UPDATE
+  hex = VALUES(hex),
+  updated_at = CURRENT_TIMESTAMP;
