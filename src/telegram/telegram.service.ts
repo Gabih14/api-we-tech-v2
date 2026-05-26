@@ -1,5 +1,12 @@
 import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import * as https from 'node:https';
+
+type TelegramHttpResponse = {
+  ok: boolean;
+  status: number;
+  text: () => Promise<string>;
+};
 
 @Injectable()
 export class TelegramService {
@@ -29,26 +36,17 @@ export class TelegramService {
     const timeoutMs = this.obtenerEnteroConfig('TELEGRAM_TIMEOUT_MS', 8000);
     const maxAttempts = this.obtenerEnteroConfig('TELEGRAM_RETRY_ATTEMPTS', 3);
     const retryDelayMs = this.obtenerEnteroConfig('TELEGRAM_RETRY_DELAY_MS', 1000);
+    const payload = JSON.stringify({
+      chat_id: chatIdToUse,
+      text: textoNormalizado,
+      parse_mode: 'HTML',
+      disable_web_page_preview: true,
+    });
     let ultimoError: unknown;
 
     for (let intento = 1; intento <= maxAttempts; intento++) {
       try {
-        const response = await this.fetchConTimeout(
-          url,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              chat_id: chatIdToUse,
-              text: textoNormalizado,
-              parse_mode: 'HTML',
-              disable_web_page_preview: true,
-            }),
-          },
-          timeoutMs,
-        );
+        const response = await this.postJsonConTimeout(url, payload, timeoutMs);
 
         if (!response.ok) {
           const body = await response.text();
@@ -97,19 +95,60 @@ export class TelegramService {
       .replace(/>/g, '&gt;');
   }
 
-  private async fetchConTimeout(
+  private async postJsonConTimeout(
     url: string,
-    init: RequestInit,
+    body: string,
     timeoutMs: number,
-  ): Promise<Response> {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  ): Promise<TelegramHttpResponse> {
+    const parsedUrl = new URL(url);
 
-    try {
-      return await fetch(url, { ...init, signal: controller.signal });
-    } finally {
-      clearTimeout(timeout);
-    }
+    return new Promise((resolve, reject) => {
+      const req = https.request(
+        {
+          protocol: parsedUrl.protocol,
+          hostname: parsedUrl.hostname,
+          port: parsedUrl.port || 443,
+          path: `${parsedUrl.pathname}${parsedUrl.search}`,
+          method: 'POST',
+          family: 4,
+          timeout: timeoutMs,
+          headers: {
+            'Content-Type': 'application/json',
+            'Content-Length': Buffer.byteLength(body),
+          },
+        },
+        (res) => {
+          const chunks: Buffer[] = [];
+
+          res.on('data', (chunk: Buffer | string) => {
+            chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+          });
+
+          res.on('end', () => {
+            const responseBody = Buffer.concat(chunks).toString('utf8');
+            const status = res.statusCode ?? 0;
+
+            resolve({
+              ok: status >= 200 && status < 300,
+              status,
+              text: async () => responseBody,
+            });
+          });
+        },
+      );
+
+      req.on('timeout', () => {
+        const error = new Error(
+          `Telegram request timeout after ${timeoutMs}ms`,
+        ) as NodeJS.ErrnoException;
+        error.code = 'ETIMEDOUT';
+        req.destroy(error);
+      });
+
+      req.on('error', reject);
+      req.write(body);
+      req.end();
+    });
   }
 
   private obtenerEnteroConfig(key: string, defaultValue: number): number {
