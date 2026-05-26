@@ -12,6 +12,7 @@ describe('TelegramService', () => {
           TELEGRAM_BOT_TOKEN: 'bot-token',
           TELEGRAM_CHAT_ID: 'chat-id',
           DELIVERY_TELEGRAM_CHAT_ID: 'delivery-chat-id',
+          TELEGRAM_RETRY_DELAY_MS: '1',
         };
 
         return values[key];
@@ -48,5 +49,39 @@ describe('TelegramService', () => {
 
     expect(body.chat_id).toBe('delivery-chat-id');
     expect(body.text).toBe('<b>Cliente:</b> &lt;Juan &amp; Asociados&gt;');
+  });
+
+  it('reintenta errores temporales de red antes de fallar', async () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation();
+    const error = new TypeError('fetch failed') as Error & { cause?: { code: string } };
+    error.cause = { code: 'ETIMEDOUT' };
+
+    fetchMock.mockRejectedValueOnce(error).mockResolvedValueOnce({ ok: true });
+
+    await service.enviarMensaje('Mensaje');
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('fetch failed (ETIMEDOUT)'),
+    );
+  });
+
+  it('no reintenta errores HTTP no recuperables de Telegram', async () => {
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation();
+    fetchMock.mockResolvedValueOnce({
+      ok: false,
+      status: 400,
+      text: jest.fn().mockResolvedValue('chat not found'),
+    });
+
+    await expect(service.enviarMensaje('Mensaje')).rejects.toThrow(
+      'Error al enviar mensaje de Telegram: Error HTTP: 400 - chat not found',
+    );
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(errorSpy).toHaveBeenCalledWith(
+      'Error al enviar Telegram:',
+      expect.any(Error),
+    );
   });
 });
