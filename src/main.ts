@@ -5,9 +5,9 @@ import { Reflector } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { HttpErrorFilter } from './common/filters/http-exception.filter';
-import dns from 'node:dns';
+import { setDefaultResultOrder } from 'node:dns';
 
-dns.setDefaultResultOrder('ipv4first');
+setDefaultResultOrder('ipv4first');
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
