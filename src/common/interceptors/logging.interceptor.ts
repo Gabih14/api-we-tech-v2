@@ -27,7 +27,11 @@ export class LoggingInterceptor implements NestInterceptor {
       bodyPreview = '[unserializable body]';
     }
 
-    console.log(`➡️ ${method} ${url} | Body:`, bodyPreview);
+    if (bodyPreview === undefined) {
+      console.log(`➡️ ${method} ${url}`);
+    } else {
+      console.log(`➡️ ${method} ${url} | Body:`, bodyPreview);
+    }
 
     return next.handle().pipe(
       tap((data) => {
