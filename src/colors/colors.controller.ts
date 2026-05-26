@@ -2,12 +2,16 @@ import {
   Body,
   Controller,
   Get,
+  Param,
+  ParseIntPipe,
+  Patch,
   Post,
   UsePipes,
   ValidationPipe,
 } from '@nestjs/common';
 import { ColorResponse, ColorsService } from './colors.service';
 import { CreateColorDto } from './dto/create-color.dto';
+import { UpdateColorDto } from './dto/update-color.dto';
 
 @Controller('colors')
 export class ColorsController {
@@ -22,5 +26,14 @@ export class ColorsController {
   @Get()
   async findAll(): Promise<ColorResponse[]> {
     return this.colorsService.findAll();
+  }
+
+  @Patch(':id')
+  @UsePipes(new ValidationPipe({ transform: true }))
+  async update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() updateColorDto: UpdateColorDto,
+  ): Promise<ColorResponse> {
+    return this.colorsService.update(id, updateColorDto);
   }
 }

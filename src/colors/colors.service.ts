@@ -1,10 +1,16 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Not, Repository } from 'typeorm';
 import { CreateColorDto } from './dto/create-color.dto';
+import { UpdateColorDto } from './dto/update-color.dto';
 import { Color } from './entities/color.entity';
 
 export interface ColorResponse {
+  id: number;
   name: string;
   hex: string;
 }
@@ -47,8 +53,45 @@ export class ColorsService {
     return colors.map((color) => this.toResponse(color));
   }
 
+  async update(
+    id: number,
+    updateColorDto: UpdateColorDto,
+  ): Promise<ColorResponse> {
+    const color = await this.colorsRepository.findOne({ where: { id } });
+
+    if (!color) {
+      throw new NotFoundException(`Color ${id} no encontrado`);
+    }
+
+    if (updateColorDto.name !== undefined) {
+      const name = updateColorDto.name.trim();
+
+      if (!name) {
+        throw new BadRequestException('name no puede estar vacio');
+      }
+
+      const existingColor = await this.colorsRepository.findOne({
+        where: { name, id: Not(id) },
+      });
+
+      if (existingColor) {
+        throw new BadRequestException(`El color ${name} ya existe`);
+      }
+
+      color.name = name;
+    }
+
+    if (updateColorDto.hex !== undefined) {
+      color.hex = updateColorDto.hex.trim().toUpperCase();
+    }
+
+    const updatedColor = await this.colorsRepository.save(color);
+    return this.toResponse(updatedColor);
+  }
+
   private toResponse(color: Color): ColorResponse {
     return {
+      id: color.id,
       name: color.name,
       hex: color.hex,
     };

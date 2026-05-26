@@ -1012,11 +1012,9 @@ export class PedidoService {
     const datosTransferencia = `
       <div style="margin: 12px 0; padding: 12px; background-color: #f5f5f5; border-radius: 6px;">
         <div style="font-weight: 600; margin-bottom: 6px;">Te envio los datos de mi cuenta ICBC:</div>
-        <div>Nombre: FEDERICO ERNESTO POLIZZI</div>
-        <div>CBU: 0150516001000141430202</div>
-        <div>Alias: WE.TECH</div>
-        <div>CUIT/CUIL: 20244864121</div>
-        <div>Cuenta: CA $ 00150516000114143020</div>
+        <div>Nombre: HELLO SRL</div>
+        <div>CBU: 0150516002000111877146</div>
+        <div>Alias: WEICBC</div>
       </div>
     `;
 
