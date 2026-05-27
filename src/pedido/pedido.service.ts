@@ -53,7 +53,7 @@ export class PedidoService {
     private readonly cobrosService: CobrosService,
 
     private readonly cuponService: CuponService,
-  ) { }
+  ) {}
 
   // 🧾 Crear pedido e intención de pago
   async crear(
@@ -69,6 +69,14 @@ export class PedidoService {
         HttpStatus.BAD_REQUEST,
       );
     }
+
+    if (dto.codigo_cupon) {
+      await this.cuponService.validarUsoCupon({
+        cupon_id: dto.codigo_cupon,
+        cuit: dto.cliente_cuit,
+      });
+    }
+
     const productosValidados: PedidoItem[] = [];
 
     for (const producto of dto.productos) {
@@ -84,10 +92,7 @@ export class PedidoService {
 
       this.validarSubtotalProducto(producto);
 
-      await this.stockService.reservarStock(
-        item.id,
-        producto.cantidad,
-      );
+      await this.stockService.reservarStock(item.id, producto.cantidad);
 
       productosValidados.push({
         nombre: producto.nombre,
@@ -106,8 +111,7 @@ export class PedidoService {
       ciudad: dto.billing_address?.city || dto.ciudad || '',
       region: dto.billing_address?.region || dto.region || '',
       pais: dto.billing_address?.country || dto.pais || '',
-      codigoPostal:
-        dto.billing_address?.postal_code || dto.codigo_postal || '',
+      codigoPostal: dto.billing_address?.postal_code || dto.codigo_postal || '',
     };
     const clienteUbicacion = [
       `${direccionPedido.calle} ${direccionPedido.numero}`.trim(),
@@ -142,7 +146,8 @@ export class PedidoService {
     // Para transferencias, generar comprobante pendiente sin cobro
     if (pedidoGuardado.metodo_pago === 'transfer') {
       try {
-        const comp = await this.vtaComprobanteService.crearDesdePedido(pedidoGuardado);
+        const comp =
+          await this.vtaComprobanteService.crearDesdePedido(pedidoGuardado);
         pedidoGuardado.comprobante_tipo = comp.tipo;
         pedidoGuardado.comprobante_numero = comp.comprobante;
         await this.pedidoRepo.save(pedidoGuardado);
@@ -151,7 +156,10 @@ export class PedidoService {
           try {
             await this.stockService.liberarStock(p.nombre, p.cantidad);
           } catch (e) {
-            console.error(`Error liberando stock de ${p.nombre}:`, e instanceof Error ? e.message : e);
+            console.error(
+              `Error liberando stock de ${p.nombre}:`,
+              e instanceof Error ? e.message : e,
+            );
           }
         }
         pedidoGuardado.estado = 'CANCELADO';
@@ -174,7 +182,10 @@ export class PedidoService {
       // }
 
       try {
-        const msg = this.whatsappService.formatearMensajeTransferenciaPendiente(pedidoGuardado);
+        const msg =
+          this.whatsappService.formatearMensajeTransferenciaPendiente(
+            pedidoGuardado,
+          );
         await this.telegramService.enviarMensaje(msg);
       } catch (e) {
         console.error('telegram transferencia pendiente', e);
@@ -198,7 +209,10 @@ export class PedidoService {
           await this.stockService.liberarStock(p.nombre, p.cantidad);
         } catch (e) {
           // log y continuar intentando liberar el resto
-          console.error(`Error liberando stock de ${p.nombre}:`, e instanceof Error ? e.message : e);
+          console.error(
+            `Error liberando stock de ${p.nombre}:`,
+            e instanceof Error ? e.message : e,
+          );
         }
       }
       pedidoGuardado.estado = 'CANCELADO';
@@ -229,7 +243,8 @@ export class PedidoService {
 
     // 🔧 Limpiar y validar DNI
     const rawCuit = dto.cliente_cuit.replace(/\D/g, ''); // Solo números
-    const docNumber = rawCuit.length === 11 ? rawCuit.slice(2, -1) : rawCuit.slice(0, 8);
+    const docNumber =
+      rawCuit.length === 11 ? rawCuit.slice(2, -1) : rawCuit.slice(0, 8);
 
     console.log('📋 CUIT original:', dto.cliente_cuit);
     console.log('📋 DNI extraído:', docNumber);
@@ -289,7 +304,11 @@ export class PedidoService {
         },
         body: JSON.stringify(body),
       });
-      console.log('📡 Respuesta de Nave (intención de pago):', response.status, response.statusText);
+      console.log(
+        '📡 Respuesta de Nave (intención de pago):',
+        response.status,
+        response.statusText,
+      );
     } catch (error: any) {
       console.error('❌ Error de red al conectar con Nave:', error.message);
       throw new HttpException(
@@ -305,13 +324,17 @@ export class PedidoService {
     let result: any;
     try {
       result = await response.json();
-      console.log('📦 Respuesta completa de Nave:', JSON.stringify(result, null, 2));
+      console.log(
+        '📦 Respuesta completa de Nave:',
+        JSON.stringify(result, null, 2),
+      );
     } catch {
       console.error('❌ Respuesta no es JSON válido');
       throw new HttpException(
         {
           code: 'ERR_NAVE_INVALID_RESPONSE',
-          message: 'El servicio de pagos no respondió correctamente. Vuelve más tarde.',
+          message:
+            'El servicio de pagos no respondió correctamente. Vuelve más tarde.',
           retryable: false,
         },
         HttpStatus.BAD_GATEWAY,
@@ -321,7 +344,7 @@ export class PedidoService {
     if (!response.ok) {
       console.error('❌ Error de Nave:', {
         status: response.status,
-        body: result
+        body: result,
       });
 
       throw new HttpException(
@@ -372,13 +395,18 @@ export class PedidoService {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ client_id, client_secret, audience }),
       });
-      console.log('📡 Respuesta de Nave Auth:', response.status, response.statusText);
+      console.log(
+        '📡 Respuesta de Nave Auth:',
+        response.status,
+        response.statusText,
+      );
     } catch (error: any) {
       console.error('❌ Error de red al autenticar:', error.message);
       throw new HttpException(
         {
           code: 'ERR_NAVE_AUTH_UNAVAILABLE',
-          message: 'El servicio de autenticación de pagos está con problemas. Vuelve más tarde.',
+          message:
+            'El servicio de autenticación de pagos está con problemas. Vuelve más tarde.',
           retryable: false,
         },
         HttpStatus.SERVICE_UNAVAILABLE,
@@ -392,7 +420,8 @@ export class PedidoService {
       throw new HttpException(
         {
           code: 'ERR_NAVE_AUTH_INVALID_RESPONSE',
-          message: 'Autenticación de pagos no respondió correctamente. Vuelve más tarde.',
+          message:
+            'Autenticación de pagos no respondió correctamente. Vuelve más tarde.',
           retryable: false,
         },
         HttpStatus.BAD_GATEWAY,
@@ -428,9 +457,11 @@ export class PedidoService {
 
     // ✅ VALIDACIÓN: Si no existe el pedido, rechazar la notificación
     if (!pedido) {
-      console.error(`❌ Pedido con ID ${external_payment_id} no encontrado en esta base de datos.`);
+      console.error(
+        `❌ Pedido con ID ${external_payment_id} no encontrado en esta base de datos.`,
+      );
       throw new NotFoundException(
-        `Pedido ${external_payment_id} no encontrado. Posiblemente fue creado en otro ambiente.`
+        `Pedido ${external_payment_id} no encontrado. Posiblemente fue creado en otro ambiente.`,
       );
     }
 
@@ -438,7 +469,9 @@ export class PedidoService {
 
     // 🚫 Bloquear webhooks para pagos por transferencia
     if (pedido.metodo_pago === 'transfer') {
-      console.warn(`⚠️ Webhook recibido para pedido de transferencia ${pedido.external_id}. Las transferencias no deben procesarse por webhook.`);
+      console.warn(
+        `⚠️ Webhook recibido para pedido de transferencia ${pedido.external_id}. Las transferencias no deben procesarse por webhook.`,
+      );
       return {
         message: `Pedido ${pedido.external_id} es de tipo transferencia y no se procesa por webhook`,
         estado: pedido.estado,
@@ -447,20 +480,29 @@ export class PedidoService {
 
     // Idempotencia: si ya fue procesado, no repetir
     if (pedido.estado !== 'PENDIENTE' && pedido.estado !== 'CANCELADO') {
-      console.log(`ℹ Pedido ${pedido.external_id} ya procesado (${pedido.estado}).`);
-      return { message: `Pedido ya procesado con estado: ${pedido.estado}`, estado: pedido.estado };
+      console.log(
+        `ℹ Pedido ${pedido.external_id} ya procesado (${pedido.estado}).`,
+      );
+      return {
+        message: `Pedido ya procesado con estado: ${pedido.estado}`,
+        estado: pedido.estado,
+      };
     }
 
     // Consultar estado real del pago en Nave
     const resp = await fetch(payment_check_url, {
       headers: {
-        'Authorization': `Bearer ${token}`,
+        Authorization: `Bearer ${token}`,
         'User-Agent': 'axios', // ✅ Header requerido por Nave
         'Content-Type': 'application/json',
-        'Accept': 'application/json'
+        Accept: 'application/json',
       },
     });
-    console.log('📡 Verificando estado de pago en Nave...', payment_check_url, token);
+    console.log(
+      '📡 Verificando estado de pago en Nave...',
+      payment_check_url,
+      token,
+    );
     console.log('Respuesta de verificación de pago Nave: ', resp);
     const contentType = resp.headers.get('content-type') || '';
     let pago: any = null;
@@ -468,11 +510,15 @@ export class PedidoService {
       try {
         pago = await resp.json();
       } catch (error: any) {
-        console.error('❌ Error parseando JSON de verificación de pago:', error?.message || error);
+        console.error(
+          '❌ Error parseando JSON de verificación de pago:',
+          error?.message || error,
+        );
         throw new HttpException(
           {
             code: 'ERR_NAVE_PAYMENT_CHECK_INVALID_JSON',
-            message: 'La verificación del pago no respondió correctamente. Intenta nuevamente.',
+            message:
+              'La verificación del pago no respondió correctamente. Intenta nuevamente.',
             retryable: true,
           },
           HttpStatus.BAD_GATEWAY,
@@ -488,7 +534,8 @@ export class PedidoService {
       throw new HttpException(
         {
           code: 'ERR_NAVE_PAYMENT_CHECK_NOT_JSON',
-          message: 'La verificación del pago no respondió correctamente. Intenta nuevamente.',
+          message:
+            'La verificación del pago no respondió correctamente. Intenta nuevamente.',
           retryable: true,
         },
         HttpStatus.BAD_GATEWAY,
@@ -500,12 +547,17 @@ export class PedidoService {
     switch (estado) {
       case 'APPROVED': {
         if (pedido.estado === 'CANCELADO') {
-          console.log(`🔄 Pedido ${pedido.external_id} estaba CANCELADO. Re-reservando stock...`);
+          console.log(
+            `🔄 Pedido ${pedido.external_id} estaba CANCELADO. Re-reservando stock...`,
+          );
           for (const p of pedido.productos) {
             try {
               await this.stockService.reservarStock(p.nombre, p.cantidad);
             } catch (err) {
-              console.error(`❌ No se pudo re-reservar stock para ${p.nombre}`, err);
+              console.error(
+                `❌ No se pudo re-reservar stock para ${p.nombre}`,
+                err,
+              );
               throw new ConflictException(
                 `No se pudo reactivar el pedido ${pedido.external_id}: stock insuficiente para ${p.nombre}`,
               );
@@ -523,31 +575,52 @@ export class PedidoService {
         let comprobanteCreado: { tipo: string; comprobante: string };
 
         try {
-          const comp = await this.vtaComprobanteService.crearDesdePedido(pedido);
-          comprobanteCreado = { tipo: comp.tipo, comprobante: comp.comprobante };
+          const comp =
+            await this.vtaComprobanteService.crearDesdePedido(pedido);
+          comprobanteCreado = {
+            tipo: comp.tipo,
+            comprobante: comp.comprobante,
+          };
           pedido.comprobante_tipo = comp.tipo;
           pedido.comprobante_numero = comp.comprobante;
-          console.log(`🧾 Comprobante generado para pedido ${pedido.external_id}:`, comprobanteCreado);
+          console.log(
+            `🧾 Comprobante generado para pedido ${pedido.external_id}:`,
+            comprobanteCreado,
+          );
         } catch (err) {
-          console.error(`❌ Error al generar comprobante para pedido ${pedido.external_id}:`, err);
+          console.error(
+            `❌ Error al generar comprobante para pedido ${pedido.external_id}:`,
+            err,
+          );
           throw err; // crítico => reintento Nave
         }
 
         try {
-          const cuentaNave = this.configService.get<string>('NAVE_CUENTA_ID') ?? 'BANCOGALICIA';
+          const cuentaNave =
+            this.configService.get<string>('NAVE_CUENTA_ID') ?? 'BANCOGALICIA';
           await this.cobrosService.cobrarFactura(
             comprobanteCreado.tipo,
             comprobanteCreado.comprobante,
             { modalidad: 'CUENTA', medioId: cuentaNave, puntoVenta: '00001' },
           );
-          console.log(`💰 Cobro generado OK para comprobante:`, comprobanteCreado);
+          console.log(
+            `💰 Cobro generado OK para comprobante:`,
+            comprobanteCreado,
+          );
         } catch (err) {
-          console.error(`❌ Error al generar cobro automático para pedido ${pedido.external_id}:`, err);
+          console.error(
+            `❌ Error al generar cobro automático para pedido ${pedido.external_id}:`,
+            err,
+          );
           throw err; // crítico => reintento Nave
         }
 
         // No críticos
-        try { await this.notificarSecretaria(pedido); } catch (e) { console.error('mail', e); }
+        try {
+          await this.notificarSecretaria(pedido);
+        } catch (e) {
+          console.error('mail', e);
+        }
         // WhatsApp desactivado temporalmente. Reactivar si se quiere volver a notificar por este canal.
         // try {
         //   const msg = this.whatsappService.formatearMensajePedido(pedido);
@@ -557,7 +630,9 @@ export class PedidoService {
         try {
           const msg = this.whatsappService.formatearMensajePedido(pedido);
           await this.telegramService.enviarMensaje(msg);
-        } catch (e) { console.error('telegram', e); }
+        } catch (e) {
+          console.error('telegram', e);
+        }
 
         if (pedido.delivery_method === 'shipping') {
           // WhatsApp delivery desactivado temporalmente. Reactivar si se quiere volver a notificar por este canal.
@@ -569,37 +644,39 @@ export class PedidoService {
           // } catch (e) { console.error('delivery whatsapp', e); }
 
           try {
-            const msg = this.whatsappService.formatearMensajeParaDelivery(pedido);
+            const msg =
+              this.whatsappService.formatearMensajeParaDelivery(pedido);
             await this.telegramService.enviarMensajeDelivery(msg);
-          } catch (e) { console.error('delivery telegram', e); }
+          } catch (e) {
+            console.error('delivery telegram', e);
+          }
         }
 
         break;
       }
-
-
-
 
       case 'REJECTED':
       case 'CANCELLED':
       case 'REFUNDED':
         pedido.estado = 'CANCELADO';
         for (const p of pedido.productos) {
-          await this.stockService.liberarStock(
-            p.nombre,
-            p.cantidad,
-          );
+          await this.stockService.liberarStock(p.nombre, p.cantidad);
         }
         await this.eliminarComprobanteSiExiste(pedido);
         try {
-          await this.notificarCancelacionCliente(pedido, 'Pago rechazado o cancelado');
+          await this.notificarCancelacionCliente(
+            pedido,
+            'Pago rechazado o cancelado',
+          );
         } catch (e) {
           console.error('mail cancelacion cliente', e);
         }
         break;
 
       default:
-        console.log(`ℹ Estado ${estado} no requiere acción, manteniendo PENDIENTE`);
+        console.log(
+          `ℹ Estado ${estado} no requiere acción, manteniendo PENDIENTE`,
+        );
         break;
     }
 
@@ -611,7 +688,7 @@ export class PedidoService {
 
     return {
       message: `Pedido ${pedido.external_id} procesado correctamente`,
-      estado: pedido.estado
+      estado: pedido.estado,
     };
   }
 
@@ -718,7 +795,10 @@ export class PedidoService {
 
     for (const producto of pedido.productos) {
       try {
-        await this.stockService.liberarStock(producto.nombre, producto.cantidad);
+        await this.stockService.liberarStock(
+          producto.nombre,
+          producto.cantidad,
+        );
       } catch (err) {
         console.error(`❌ Error liberando stock de ${producto.nombre}:`, err);
       }
@@ -729,7 +809,10 @@ export class PedidoService {
     const pedidoCancelado = await this.pedidoRepo.save(pedido);
 
     try {
-      await this.notificarCancelacionCliente(pedidoCancelado, 'Pedido cancelado por administracion');
+      await this.notificarCancelacionCliente(
+        pedidoCancelado,
+        'Pedido cancelado por administracion',
+      );
     } catch (e) {
       console.error('mail cancelacion cliente', e);
     }
@@ -738,7 +821,9 @@ export class PedidoService {
   }
 
   // 💳 Aprobar pedido por transferencia
-  async aprobarTransferencia(externalId: string): Promise<{ pedido: Pedido; comprobante: any }> {
+  async aprobarTransferencia(
+    externalId: string,
+  ): Promise<{ pedido: Pedido; comprobante: any }> {
     const pedido = await this.pedidoRepo.findOne({
       where: { external_id: externalId },
       relations: ['productos'],
@@ -749,11 +834,15 @@ export class PedidoService {
     }
 
     if (pedido.metodo_pago !== 'transfer') {
-      throw new BadRequestException(`Pedido ${externalId} no es de tipo transferencia`);
+      throw new BadRequestException(
+        `Pedido ${externalId} no es de tipo transferencia`,
+      );
     }
 
     if (pedido.estado !== 'PENDIENTE') {
-      throw new ConflictException(`Pedido ${externalId} ya fue procesado (estado: ${pedido.estado})`);
+      throw new ConflictException(
+        `Pedido ${externalId} ya fue procesado (estado: ${pedido.estado})`,
+      );
     }
 
     // Verificar y confirmar stock
@@ -785,9 +874,15 @@ export class PedidoService {
         comprobanteCreado = { tipo: comp.tipo, comprobante: comp.comprobante };
         pedido.comprobante_tipo = comp.tipo;
         pedido.comprobante_numero = comp.comprobante;
-        console.log(`🧾 Comprobante generado para pedido transferencia ${pedido.external_id}:`, comprobanteCreado);
+        console.log(
+          `🧾 Comprobante generado para pedido transferencia ${pedido.external_id}:`,
+          comprobanteCreado,
+        );
       } catch (err) {
-        console.error(`❌ Error al generar comprobante para pedido ${pedido.external_id}:`, err);
+        console.error(
+          `❌ Error al generar comprobante para pedido ${pedido.external_id}:`,
+          err,
+        );
         throw err;
       }
     }
@@ -799,7 +894,11 @@ export class PedidoService {
     await this.registrarUsoCuponSiCorresponde(pedido);
 
     // Notificaciones no críticas
-    try { await this.notificarSecretaria(pedido); } catch (e) { console.error('mail', e); }
+    try {
+      await this.notificarSecretaria(pedido);
+    } catch (e) {
+      console.error('mail', e);
+    }
     // WhatsApp desactivado temporalmente. Reactivar si se quiere volver a notificar por este canal.
     // try {
     //   const msg = this.whatsappService.formatearMensajePedido(pedido);
@@ -809,7 +908,9 @@ export class PedidoService {
     try {
       const msg = this.whatsappService.formatearMensajePedido(pedido);
       await this.telegramService.enviarMensaje(msg);
-    } catch (e) { console.error('telegram', e); }
+    } catch (e) {
+      console.error('telegram', e);
+    }
 
     if (pedido.delivery_method === 'shipping') {
       // WhatsApp delivery desactivado temporalmente. Reactivar si se quiere volver a notificar por este canal.
@@ -823,7 +924,9 @@ export class PedidoService {
       try {
         const msg = this.whatsappService.formatearMensajeParaDelivery(pedido);
         await this.telegramService.enviarMensajeDelivery(msg);
-      } catch (e) { console.error('delivery telegram', e); }
+      } catch (e) {
+        console.error('delivery telegram', e);
+      }
     }
 
     return { pedido, comprobante: comprobanteCreado };
@@ -840,7 +943,9 @@ export class PedidoService {
     }
 
     if (pedido.metodo_pago !== 'transfer') {
-      throw new BadRequestException(`Pedido ${externalId} no es de tipo transferencia`);
+      throw new BadRequestException(
+        `Pedido ${externalId} no es de tipo transferencia`,
+      );
     }
 
     const cancelado = await this.cancelarPedidoPendiente(externalId);
@@ -858,7 +963,10 @@ export class PedidoService {
     const tipo = pedido.comprobante_tipo;
     const comprobante = pedido.comprobante_numero;
 
-    await this.vtaComprobanteService.eliminarComprobantePorPedido(tipo, comprobante);
+    await this.vtaComprobanteService.eliminarComprobantePorPedido(
+      tipo,
+      comprobante,
+    );
 
     pedido.comprobante_tipo = null;
     pedido.comprobante_numero = null;
@@ -919,19 +1027,25 @@ export class PedidoService {
     return Math.round((Number(valor) + Number.EPSILON) * 100) / 100;
   }
 
-  private validarSubtotalProducto(producto: CreatePedidoDto['productos'][number]): void {
+  private validarSubtotalProducto(
+    producto: CreatePedidoDto['productos'][number],
+  ): void {
     const cantidad = Number(producto.cantidad ?? 0);
     const precioUnitarioNeto = Number(producto.precio_unitario ?? 0);
     const subtotalBruto = this.redondear2(Number(producto.subtotal ?? 0));
     const ajustePorcentaje = Number(producto.ajuste_porcentaje ?? 0);
 
-    if (!Number.isFinite(cantidad) || !Number.isFinite(precioUnitarioNeto) || !Number.isFinite(subtotalBruto)) {
+    if (
+      !Number.isFinite(cantidad) ||
+      !Number.isFinite(precioUnitarioNeto) ||
+      !Number.isFinite(subtotalBruto)
+    ) {
       throw new BadRequestException(
         `Producto '${producto.nombre}': cantidad, precio_unitario y subtotal deben ser valores numéricos válidos.`,
       );
     }
 
-    const factorDescuento = 1 - (Math.abs(ajustePorcentaje) / 100);
+    const factorDescuento = 1 - Math.abs(ajustePorcentaje) / 100;
     if (factorDescuento <= 0) {
       throw new BadRequestException(
         `Producto '${producto.nombre}': ajuste_porcentaje debe ser menor a 100.`,
@@ -1085,7 +1199,9 @@ export class PedidoService {
         htmlCliente,
       );
     } else {
-      console.warn(`No se encontro email de cliente para pedido ${pedido.external_id}`);
+      console.warn(
+        `No se encontro email de cliente para pedido ${pedido.external_id}`,
+      );
     }
 
     if (!secretariaEmail) {
@@ -1240,7 +1356,9 @@ export class PedidoService {
   private async notificarCancelacionCliente(pedido: Pedido, motivo: string) {
     const clienteEmail = pedido.cliente_mail;
     if (!clienteEmail) {
-      console.warn(`No se encontro email de cliente para pedido cancelado ${pedido.external_id}`);
+      console.warn(
+        `No se encontro email de cliente para pedido cancelado ${pedido.external_id}`,
+      );
       return;
     }
 

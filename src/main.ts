@@ -50,6 +50,8 @@ async function bootstrap() {
   );
   console.log(`Servidor corriendo en ${process.env.PORT ?? 3000}`);
   console.log(`Tiempo de CRON de aprobación de transferencias: ${process.env.PEDIDO_TRANSFER_APPROVAL_CRON ?? 'no configurado'}`);
+  console.log(`Tiempo de TTL de transferencias: ${process.env.PEDIDO_TRANSFER_TTL_MIN ?? 'no configurado'}`);
+
 
 }
 bootstrap();
