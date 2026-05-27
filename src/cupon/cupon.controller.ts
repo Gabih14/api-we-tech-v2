@@ -4,12 +4,14 @@ import {
   Delete,
   Get,
   Param,
+  Patch,
   Post,
   UsePipes,
   ValidationPipe,
 } from '@nestjs/common';
 import { CuponConResumenUsos, CuponService } from './cupon.service';
 import { CreateCuponDto } from './dto/create-cupon.dto';
+import { UpdateCuponDto } from './dto/update-cupon.dto';
 import { Cupon } from './entities/cupon.entity';
 import { CreateCuponUsoDto } from 'src/cupon_uso/dto/create-cupon_uso.dto';
 import { CuponUso } from 'src/cupon_uso/entities/cupon_uso.entity';
@@ -32,6 +34,15 @@ export class CuponController {
   @Get(':id')
   async buscarPorId(@Param('id') id: string): Promise<Cupon> {
     return this.cuponService.buscarPorId(id);
+  }
+
+  @Patch(':id')
+  @UsePipes(new ValidationPipe({ transform: true }))
+  async actualizar(
+    @Param('id') id: string,
+    @Body() actualizarCuponDto: UpdateCuponDto,
+  ): Promise<Cupon> {
+    return this.cuponService.actualizar(id, actualizarCuponDto);
   }
 
   @Post('usar')

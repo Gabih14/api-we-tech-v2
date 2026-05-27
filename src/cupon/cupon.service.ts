@@ -4,6 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { CreateCuponDto } from './dto/create-cupon.dto';
+import { UpdateCuponDto } from './dto/update-cupon.dto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Cupon } from './entities/cupon.entity';
 import { Repository } from 'typeorm';
@@ -66,6 +67,37 @@ export class CuponService {
     return cupon;
   }
 
+  async actualizar(
+    id: string,
+    actualizarCuponDto: UpdateCuponDto,
+  ): Promise<Cupon> {
+    if (actualizarCuponDto.id && actualizarCuponDto.id !== id) {
+      throw new BadRequestException('No se puede cambiar el id del cupón');
+    }
+
+    const cupon = await this.buscarPorId(id);
+    const descuentosNormalizados = this.normalizarDescuentosParaEdicion(
+      actualizarCuponDto,
+      cupon,
+    );
+    const {
+      id: _id,
+      max_usos_por_cuit,
+      ...datosActualizables
+    } = actualizarCuponDto;
+
+    Object.assign(cupon, {
+      ...datosActualizables,
+      ...descuentosNormalizados,
+    });
+
+    if (max_usos_por_cuit !== undefined) {
+      cupon.maxUsosPorCuit = max_usos_por_cuit;
+    }
+
+    return await this.cuponRepository.save(cupon);
+  }
+
   async resolverPorcentajePorModalidad(
     codigoCupon: string,
     modalidad: string,
@@ -111,6 +143,8 @@ export class CuponService {
 
   // Validar y usar cupón
   async usarCupon(usarCuponDto: CreateCuponUsoDto): Promise<CuponUso> {
+    await this.validarUsoCupon(usarCuponDto);
+
     const cuitNormalizado = this.normalizarCuit(usarCuponDto.cuit);
 
     if (usarCuponDto.pedido_id) {
@@ -171,6 +205,56 @@ export class CuponService {
     });
 
     return await this.cuponUsoRepository.save(cuponUso);
+  }
+
+  async validarUsoCupon(usarCuponDto: CreateCuponUsoDto): Promise<void> {
+    const cuitNormalizado = this.normalizarCuit(usarCuponDto.cuit);
+
+    if (usarCuponDto.pedido_id) {
+      const usoExistente = await this.cuponUsoRepository.findOne({
+        where: {
+          cuponId: usarCuponDto.cupon_id,
+          pedidoId: usarCuponDto.pedido_id,
+        },
+      });
+
+      if (usoExistente) {
+        return;
+      }
+    }
+
+    const cupon = await this.buscarPorId(usarCuponDto.cupon_id);
+
+    if (cupon.fechaDesde && cupon.fechaDesde > new Date()) {
+      throw new BadRequestException('Cupon aun no esta vigente');
+    }
+
+    if (cupon.fechaHasta && cupon.fechaHasta < new Date()) {
+      throw new BadRequestException('Cupon ha expirado');
+    }
+
+    if (cupon.max_usos) {
+      const usosTotales = await this.cuponUsoRepository.count({
+        where: { cuponId: cupon.id },
+      });
+
+      if (usosTotales >= cupon.max_usos) {
+        throw new BadRequestException('Cupon ha alcanzado su limite de usos');
+      }
+    }
+
+    if (cupon.maxUsosPorCuit) {
+      const usosPorCuit = await this.contarUsosDelCuit(
+        cupon.id,
+        cuitNormalizado,
+      );
+
+      if (usosPorCuit >= cupon.maxUsosPorCuit) {
+        throw new BadRequestException(
+          'Has alcanzado el limite de usos para este cupon',
+        );
+      }
+    }
   }
 
   // Listar todos los cupones activos
@@ -235,6 +319,49 @@ export class CuponService {
       legacy ??
       (tieneDescuentoPorMetodo ? 0 : this.requerirValor());
     const porcentajeDescuento = legacy ?? porcentajeDescuentoTarjeta;
+
+    this.validarRangoPorcentaje(
+      porcentajeDescuentoTarjeta,
+      'porcentajeDescuentoTarjeta',
+    );
+    this.validarRangoPorcentaje(
+      porcentajeDescuentoTransferencia,
+      'porcentajeDescuentoTransferencia',
+    );
+
+    return {
+      porcentajeDescuento,
+      porcentajeDescuentoTarjeta,
+      porcentajeDescuentoTransferencia,
+    };
+  }
+
+  private normalizarDescuentosParaEdicion(
+    actualizarCuponDto: UpdateCuponDto,
+    cupon: Cupon,
+  ) {
+    const descuentoFueEnviado =
+      actualizarCuponDto.porcentajeDescuento !== undefined ||
+      actualizarCuponDto.porcentajeDescuentoTarjeta !== undefined ||
+      actualizarCuponDto.porcentajeDescuentoTransferencia !== undefined;
+
+    if (!descuentoFueEnviado) {
+      return {};
+    }
+
+    const legacy = this.toNumber(actualizarCuponDto.porcentajeDescuento);
+    const tarjeta =
+      actualizarCuponDto.porcentajeDescuentoTarjeta !== undefined
+        ? this.toNumber(actualizarCuponDto.porcentajeDescuentoTarjeta)
+        : (legacy ?? this.toNumber(cupon.porcentajeDescuentoTarjeta));
+    const transferencia =
+      actualizarCuponDto.porcentajeDescuentoTransferencia !== undefined
+        ? this.toNumber(actualizarCuponDto.porcentajeDescuentoTransferencia)
+        : (legacy ?? this.toNumber(cupon.porcentajeDescuentoTransferencia));
+    const porcentajeDescuento = legacy ?? tarjeta ?? this.requerirValor();
+    const porcentajeDescuentoTarjeta = tarjeta ?? this.requerirValor();
+    const porcentajeDescuentoTransferencia =
+      transferencia ?? this.requerirValor();
 
     this.validarRangoPorcentaje(
       porcentajeDescuentoTarjeta,
