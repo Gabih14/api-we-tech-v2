@@ -78,11 +78,14 @@ export class VtaClienteService {
     ) as Partial<T>;
   }
 
-  private normalizarClienteDto(dto: CreateVtaClienteDto): CreateVtaClienteDto {
+  private normalizarClienteDto(
+    dto: Partial<CreateVtaClienteDto>,
+  ): Partial<CreateVtaClienteDto> {
     const telefono = this.formatearTelefono(dto.telefono);
 
     return {
       ...dto,
+      razonSocial: this.capitalizarPalabras(dto.razonSocial),
       numeroDocumento: this.formatearNumeroDocumento(
         dto.numeroDocumento || dto.id,
       ),
@@ -90,6 +93,22 @@ export class VtaClienteService {
       contacto: telefono,
       condicionIva: dto.condicionIva || 'CF',
     };
+  }
+
+  private capitalizarPalabras(value?: string): string | undefined {
+    if (!value) return undefined;
+
+    return value
+      .trim()
+      .split(/(\s+)/)
+      .map((parte) => {
+        if (parte.trim() === '') return parte;
+        return (
+          parte.charAt(0).toLocaleUpperCase('es-AR') +
+          parte.slice(1).toLocaleLowerCase('es-AR')
+        );
+      })
+      .join('');
   }
 
   private formatearNumeroDocumento(value?: string): string | undefined {
