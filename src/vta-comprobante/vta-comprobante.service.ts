@@ -184,7 +184,10 @@ export class VtaComprobanteService {
       condicionIva: 'CF',
       visible: true,
     };
-    await this.clienteService.findOrCreateOrUpdate(clientePayload);
+    const cliente = await this.clienteService.findOrCreateOrUpdate(
+      clientePayload,
+    );
+    const razonSocial = cliente.razonSocial || pedido.cliente_nombre;
 
     const numero = await this.generarNumeroComprobante();
 
@@ -240,7 +243,7 @@ export class VtaComprobanteService {
       tipo: 'FX',
       comprobante: numero,
       cliente: pedido.cliente_cuit,
-      razon_social: pedido.cliente_nombre,
+      razon_social: razonSocial,
       fecha: new Date(),
       periodo: this.obtenerPeriodoActual(),
       tipo_documento: 'CUIT',
