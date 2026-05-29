@@ -16,6 +16,17 @@ import { CreatePedidoDto } from './dto/create-pedido.dto';
 import { ApiTokenGuard } from '../common/guards/api-token.guard';
 import { AuthType } from '../common/decorators/auth-type.decorator';
 import { GetPedidosDashboardDto } from './dto/get-pedidos-dashboard.dto';
+import { Throttle } from '@nestjs/throttler';
+import {
+  DEFAULT_RATE_LIMIT_NAVE_WEBHOOK,
+  DEFAULT_RATE_LIMIT_NAVE_WEBHOOK_TEST,
+  DEFAULT_RATE_LIMIT_PEDIDO_CREATE,
+  DEFAULT_RATE_LIMIT_TTL_MS,
+  RATE_LIMIT_NAVE_WEBHOOK,
+  RATE_LIMIT_PEDIDO_CREATE,
+  RATE_LIMIT_TTL_MS,
+  rateLimitValue,
+} from '../common/rate-limit/rate-limit.config';
 
 @Controller('pedido')
 @UseGuards(ApiTokenGuard)
@@ -23,11 +34,29 @@ export class PedidoController {
   constructor(private readonly pedidoService: PedidoService) {}
 
   @Post()
+  @Throttle({
+    default: {
+      ttl: rateLimitValue(RATE_LIMIT_TTL_MS, DEFAULT_RATE_LIMIT_TTL_MS),
+      limit: rateLimitValue(
+        RATE_LIMIT_PEDIDO_CREATE,
+        DEFAULT_RATE_LIMIT_PEDIDO_CREATE,
+      ),
+    },
+  })
   async crear(@Body() dto: CreatePedidoDto) {
     return this.pedidoService.crear(dto);
   }
 
   @Post('nave-webhook')
+  @Throttle({
+    default: {
+      ttl: rateLimitValue(RATE_LIMIT_TTL_MS, DEFAULT_RATE_LIMIT_TTL_MS),
+      limit: rateLimitValue(
+        RATE_LIMIT_NAVE_WEBHOOK,
+        DEFAULT_RATE_LIMIT_NAVE_WEBHOOK,
+      ),
+    },
+  })
   @AuthType('public')
   @HttpCode(HttpStatus.OK)
   async recibirWebhook(@Body() body: any) {
@@ -42,6 +71,15 @@ export class PedidoController {
   }
 
   @Post('nave-webhook/test')
+  @Throttle({
+    default: {
+      ttl: rateLimitValue(RATE_LIMIT_TTL_MS, DEFAULT_RATE_LIMIT_TTL_MS),
+      limit: rateLimitValue(
+        RATE_LIMIT_NAVE_WEBHOOK,
+        DEFAULT_RATE_LIMIT_NAVE_WEBHOOK_TEST,
+      ),
+    },
+  })
   @AuthType('public')
   @HttpCode(HttpStatus.OK)
   async testWebhook(@Body() body: any) {
