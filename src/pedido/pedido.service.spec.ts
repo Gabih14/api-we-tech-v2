@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, Logger } from '@nestjs/common';
 import { PedidoService } from './pedido.service';
 import { CreatePedidoDto } from './dto/create-pedido.dto';
 
@@ -48,6 +48,7 @@ describe('PedidoService recalculo de importes', () => {
   };
 
   let service: PedidoService;
+  let warnSpy: jest.SpyInstance;
 
   const dtoBase = (
     overrides: Partial<CreatePedidoDto> = {},
@@ -85,9 +86,12 @@ describe('PedidoService recalculo de importes', () => {
     precioVta: string,
     moneda = 'PES',
     cotizacion = '1',
+    grupo: string | null = null,
+    descripcion = `Descripcion ${id}`,
   ) => ({
     id,
-    descripcion: `Descripcion ${id}`,
+    descripcion,
+    grupo,
     stkPrecios: [
       {
         lista: 'MINORISTA',
@@ -102,6 +106,7 @@ describe('PedidoService recalculo de importes', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
     service = new PedidoService(
       createRepo as any,
       stkItemRepo as any,
@@ -205,24 +210,25 @@ describe('PedidoService recalculo de importes', () => {
     expect(pedido.total).toBe(21);
   });
 
-  it('aplica ajuste porcentual, cupon online y excluye envio de la base', async () => {
-    stkItemRepo.findOne.mockResolvedValue(itemConPrecio('ITEM-2', '101'));
+  it('mantiene descuento de filamento si es mayor que el cupon y excluye envio de la base', async () => {
+    stkItemRepo.findOne.mockResolvedValue(
+      itemConPrecio('ITEM-2', '101', 'PES', '1', 'FILAMENTOS'),
+    );
     cuponService.resolverPorcentajePorModalidad.mockResolvedValue({
       porcentajeAplicado: 10,
     });
 
     const dto = dtoBase({
       codigo_cupon: 'CUPON10',
-      descuento_cupon: 9,
+      descuento_cupon: 0,
       costo_envio: 50,
-      total: 131,
+      total: 136,
       productos: [
         {
           nombre: 'ITEM-2',
           cantidad: 1,
-          precio_unitario: 90,
-          subtotal: 90,
-          ajuste_porcentaje: 11,
+          precio_unitario: 86,
+          subtotal: 86,
         },
       ],
     });
@@ -233,9 +239,97 @@ describe('PedidoService recalculo de importes', () => {
       'CUPON10',
       'TARJETA',
     );
-    expect(pedido.productos[0].precio_unitario).toBe(90);
-    expect(pedido.descuento_cupon).toBe(9);
-    expect(pedido.total).toBe(131);
+    expect(pedido.productos[0].precio_unitario).toBe(86);
+    expect(pedido.productos[0].ajuste_porcentaje).toBe(15);
+    expect(pedido.descuento_cupon).toBeUndefined();
+    expect(pedido.total).toBe(136);
+  });
+
+  it('aplica solo el cupon cuando supera al descuento automatico de producto', async () => {
+    stkItemRepo.findOne.mockResolvedValue(
+      itemConPrecio(
+        'HB-PLA-1KG-AMAR',
+        '19411',
+        'PES',
+        '1',
+        'FILAMENTOS',
+        'Filamento PLA 1kg amarillo',
+      ),
+    );
+    cuponService.resolverPorcentajePorModalidad.mockResolvedValue({
+      porcentajeAplicado: 20,
+    });
+    vtaComprobanteService.crearDesdePedido.mockResolvedValue({
+      tipo: 'FX',
+      comprobante: '0002',
+    });
+
+    const productos = Array.from({ length: 6 }, () => ({
+      nombre: 'HB-PLA-1KG-AMAR',
+      cantidad: 1,
+      precio_unitario: 15529,
+      subtotal: 19411,
+      ajuste_porcentaje: 20,
+    }));
+
+    const dto = dtoBase({
+      metodo_pago: 'transfer',
+      codigo_cupon: 'TEST',
+      descuento_cupon: 23292,
+      total: 93174,
+      productos,
+    });
+
+    const { pedido } = await service.crear(dto);
+
+    expect(pedido.productos).toHaveLength(6);
+    expect(pedido.productos[0].precio_unitario).toBe(15529);
+    expect(pedido.productos[0].subtotal).toBe(15529);
+    expect(pedido.productos[0].ajuste_porcentaje).toBe(20);
+    expect(pedido.descuento_cupon).toBe(23292);
+    expect(pedido.total).toBe(93174);
+  });
+
+  it('acepta pedidos sin precios y calcula descuento elegible desde DB', async () => {
+    stkItemRepo.findOne.mockResolvedValue(
+      itemConPrecio(
+        'GST3D-PLA',
+        '100',
+        'PES',
+        '1',
+        'FILAMENTOS',
+        'Filamento PLA 1kg negro',
+      ),
+    );
+
+    const dto = dtoBase({
+      total: undefined,
+      productos: [
+        {
+          nombre: 'GST3D-PLA',
+          cantidad: 10,
+        },
+      ],
+    });
+
+    const { pedido } = await service.crear(dto);
+
+    expect(pedido.productos[0].precio_unitario).toBe(80);
+    expect(pedido.productos[0].subtotal).toBe(800);
+    expect(pedido.productos[0].ajuste_porcentaje).toBe(20);
+    expect(pedido.total).toBe(800);
+    expect(service.generarIntencionDePago).toHaveBeenCalledWith(
+      expect.objectContaining({
+        total: 800,
+        productos: [
+          expect.objectContaining({
+            precio_unitario: 80,
+            subtotal: 800,
+            ajuste_porcentaje: 20,
+          }),
+        ],
+      }),
+    );
   });
 
   it('redondea el descuento de cupon normal al peso', async () => {
@@ -252,7 +346,7 @@ describe('PedidoService recalculo de importes', () => {
         {
           nombre: 'ITEM-2B',
           cantidad: 1,
-          precio_unitario: 101,
+          precio_unitario: 91,
           subtotal: 101,
         },
       ],
@@ -283,7 +377,7 @@ describe('PedidoService recalculo de importes', () => {
         {
           nombre: 'ITEM-3',
           cantidad: 1,
-          precio_unitario: 100,
+          precio_unitario: 95,
           subtotal: 100,
         },
       ],
@@ -313,8 +407,10 @@ describe('PedidoService recalculo de importes', () => {
       ],
     });
 
-    await expect(service.crear(dto)).rejects.toThrow(BadRequestException);
-    await expect(service.crear(dto)).rejects.toMatchObject({
+    const crearPedido = service.crear(dto);
+
+    await expect(crearPedido).rejects.toThrow(BadRequestException);
+    await expect(crearPedido).rejects.toMatchObject({
       response: expect.objectContaining({
         code: 'ERR_ORDER_TOTAL_MISMATCH',
         expected: expect.objectContaining({ total: 100 }),
@@ -329,6 +425,27 @@ describe('PedidoService recalculo de importes', () => {
         ],
       }),
     });
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        code: 'ERR_ORDER_TOTAL_MISMATCH',
+        expected: expect.objectContaining({ total: 100 }),
+        received: expect.objectContaining({ total: 90 }),
+        productos: [
+          expect.objectContaining({
+            nombre: 'ITEM-4',
+            expected: expect.objectContaining({
+              precio_unitario: 100,
+              subtotal: 100,
+            }),
+            received: expect.objectContaining({
+              precio_unitario: 90,
+              subtotal: 90,
+            }),
+          }),
+        ],
+      }),
+      'Los importes recibidos no coinciden con el calculo del servidor.',
+    );
     expect(stockService.reservarStock).not.toHaveBeenCalled();
   });
 });
