@@ -1,6 +1,17 @@
-import { Injectable,  } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
+
+type GoogleAddressComponent = {
+  types?: string[];
+};
+
+type GoogleGeocodeResult = {
+  formatted_address?: string;
+  place_id?: string;
+  types?: string[];
+  address_components?: GoogleAddressComponent[];
+};
 
 @Injectable()
 export class MapsService {
@@ -16,32 +27,84 @@ export class MapsService {
   }
 
   async getDistanceToDestination(address: string, city: string) {
-  const destination = `${address}, ${city}`;
-  const url = `https://maps.googleapis.com/maps/api/distancematrix/json?destinations=${encodeURIComponent(destination)}&origins=${this.originPlaceId}&key=${this.googleApiKey}`;
+    const destination = `${address}, ${city}`;
 
-  try {
+    try {
+      const geocodeResult = await this.geocodeDestination(destination);
+
+      if (!this.isSpecificStreetAddress(geocodeResult)) {
+        return {
+          error: 'La dirección es demasiado imprecisa',
+          detail:
+            'No se pudo identificar calle y altura. Revisá la dirección antes de calcular el envío.',
+          needsMoreSpecificAddress: true,
+          destinationResolved: geocodeResult?.formatted_address ?? null,
+        };
+      }
+
+      const specificGeocodeResult = geocodeResult as GoogleGeocodeResult & {
+        place_id: string;
+      };
+      const destinationParam = `place_id:${specificGeocodeResult.place_id}`;
+      const url = `https://maps.googleapis.com/maps/api/distancematrix/json?destinations=${encodeURIComponent(destinationParam)}&origins=${this.originPlaceId}&key=${this.googleApiKey}`;
+
+      const response = await axios.get(url);
+      const data = response.data;
+
+      if (data.status !== 'OK') {
+        throw new Error(data.error_message || 'Error en la respuesta de la API');
+      }
+
+      const element = data.rows?.[0]?.elements?.[0];
+
+      if (!element || element.status !== 'OK') {
+        throw new Error(element?.status || 'Destino no alcanzable');
+      }
+
+      return {
+        distance: element.distance.text,
+        duration: element.duration.text,
+        destinationResolved:
+          specificGeocodeResult.formatted_address ||
+          data.destination_addresses?.[0],
+        originResolved: data.origin_addresses?.[0],
+        raw: element,
+      };
+    } catch (err) {
+      return {
+        error: 'No se pudo obtener la distancia',
+        detail: err.message,
+      };
+    }
+  }
+
+  private async geocodeDestination(
+    destination: string,
+  ): Promise<GoogleGeocodeResult | null> {
+    const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(destination)}&key=${this.googleApiKey}`;
     const response = await axios.get(url);
     const data = response.data;
 
     if (data.status !== 'OK') {
-      throw new Error(data.error_message || 'Error en la respuesta de la API');
+      throw new Error(data.error_message || 'Error al validar la dirección');
     }
 
-    const element = data.rows[0].elements[0];
-
-    return {
-      distance: element.distance.text,
-      duration: element.duration.text,
-      destinationResolved: data.destination_addresses[0],
-      originResolved: data.origin_addresses[0],
-      raw: element
-    };
-  } catch (err) {
-    return {
-      error: 'No se pudo obtener la distancia',
-      detail: err.message
-    };
+    return data.results?.[0] ?? null;
   }
-}
 
+  private isSpecificStreetAddress(result: GoogleGeocodeResult | null): boolean {
+    if (!result?.place_id) {
+      return false;
+    }
+
+    const components = result.address_components ?? [];
+    const hasStreetNumber = components.some((component) =>
+      component.types?.includes('street_number'),
+    );
+    const hasRoute = components.some((component) =>
+      component.types?.includes('route'),
+    );
+
+    return hasStreetNumber && hasRoute;
+  }
 }
