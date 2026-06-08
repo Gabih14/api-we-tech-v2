@@ -1151,14 +1151,14 @@ export class PedidoService {
       descuentoProductoPorcentaje,
       porcentajeCupon,
     );
-    const precioUnitario = this.redondearPrecio(
-      precioBaseUnitario * (1 - descuentoPorcentaje / 100),
+    const subtotal = this.redondearPrecio(
+      precioBaseUnitario * cantidad * (1 - descuentoPorcentaje / 100),
     );
-    const subtotal = this.redondearPrecio(precioUnitario * cantidad);
+    const precioUnitario = this.redondearPrecio(subtotal / cantidad);
     const descuentoCuponAplicado =
       porcentajeCupon > descuentoProductoPorcentaje
         ? this.redondearPrecio(
-            (precioBaseUnitario - precioUnitario) * cantidad,
+            precioBaseUnitario * cantidad - subtotal,
           )
         : 0;
 

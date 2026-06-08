@@ -17,7 +17,7 @@ import {
 
 describe('pricing discounts', () => {
   const eligibleFilament = {
-    id: 'GST3D-PLA',
+    id: '3N-PLA-1KG-NEGR',
     category: 'FILAMENTOS',
   };
   const nonEligibleFilament = {
@@ -72,6 +72,24 @@ describe('pricing discounts', () => {
     expect(calculateSavingsForProduct(nonEligibleFilament, 100, 2, 1)).toBe(
       30,
     );
+  });
+
+  it.each(['3N-PLA', '3N-PLA-1KG-NEGR', '3N-PLA-1KG-BLAN'])(
+    'considera elegibles los ids con prefijo configurado: %s',
+    (id) => {
+      expect(
+        isEligibleForQuantityDiscount({ id, category: 'FILAMENTOS' }, 1),
+      ).toBe(true);
+    },
+  );
+
+  it('no marca como elegible un id que solo comparte texto sin separador', () => {
+    expect(
+      isEligibleForQuantityDiscount(
+        { id: '3N-PLASTIC-1KG-NEGR', category: 'FILAMENTOS' },
+        1,
+      ),
+    ).toBe(false);
   });
 
   it('no aplica descuento a productos que no son filamento', () => {

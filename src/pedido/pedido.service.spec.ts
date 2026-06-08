@@ -293,7 +293,7 @@ describe('PedidoService recalculo de importes', () => {
   it('acepta pedidos sin precios y calcula descuento elegible desde DB', async () => {
     stkItemRepo.findOne.mockResolvedValue(
       itemConPrecio(
-        'GST3D-PLA',
+        '3N-PLA-1KG-NEGR',
         '100',
         'PES',
         '1',
@@ -306,7 +306,7 @@ describe('PedidoService recalculo de importes', () => {
       total: undefined,
       productos: [
         {
-          nombre: 'GST3D-PLA',
+          nombre: '3N-PLA-1KG-NEGR',
           cantidad: 10,
         },
       ],
@@ -390,6 +390,39 @@ describe('PedidoService recalculo de importes', () => {
       'CUENTA',
     );
     expect(pedido.total).toBe(95);
+  });
+
+  it('calcula el subtotal neto como el frontend desde subtotal bruto y descuento', async () => {
+    stkItemRepo.findOne.mockResolvedValue(
+      itemConPrecio(
+        '3N-PLA-1KG-AMAR',
+        '21764',
+        'PES',
+        '1',
+        'FILAMENTOS',
+        'Filamento PLA 1kg amarillo',
+      ),
+    );
+
+    const dto = dtoBase({
+      metodo_pago: 'transfer',
+      total: 90321,
+      productos: [
+        {
+          nombre: '3N-PLA-1KG-AMAR',
+          cantidad: 5,
+          precio_unitario: 18064,
+          subtotal: 108820,
+          ajuste_porcentaje: 17,
+        },
+      ],
+    });
+
+    const { pedido } = await service.crear(dto);
+
+    expect(pedido.productos[0].precio_unitario).toBe(18064);
+    expect(pedido.productos[0].subtotal).toBe(90321);
+    expect(pedido.total).toBe(90321);
   });
 
   it('rechaza diferencias y no reserva stock', async () => {

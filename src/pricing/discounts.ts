@@ -18,13 +18,13 @@ export const QUANTITY_DISCOUNTS = {
 export const BASE_FILAMENT_DISCOUNT = 0.15;
 
 export const ELIGIBLE_BRANDS_FOR_QUANTITY_DISCOUNT = [
-  '3N3-PLA',
-  'GRILON3-PLA BOUTIQUE',
-  'GRILON3-PLA',
-  'GST3D-PLA',
-  'HELLBOT-PLA',
-  '3NMAX-PLA',
-  'FREMOVER-PLA',
+  '3N-PLA', // 3N3 PLA
+  'G3-BOUT', // G3 PLA BOUTIQUE
+  'G3-PLA', // GRILON3-PLA
+  'GS-PLA', // GST3D-PLA
+  'HB-PLA', // HELLBOT-PLA
+  '3X-PLA', // 3NMAX-PLA
+  'FM-PLA', // FREMOVER-PLA
 ] as const;
 
 export const FILAMENT_CATEGORIES = ['FILAMENTO 3D', 'FILAMENTOS'] as const;
@@ -78,7 +78,7 @@ export const isEligibleForQuantityDiscount = (
 
   const productId = product.id.toUpperCase();
   return ELIGIBLE_BRANDS_FOR_QUANTITY_DISCOUNT.some(
-    (brand) => productId === brand,
+    (brand) => productId === brand || productId.startsWith(`${brand}-`),
   );
 };
 
