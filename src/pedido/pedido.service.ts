@@ -9,6 +9,7 @@ import {
   ConflictException,
   HttpException,
   HttpStatus,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Pedido } from './entities/pedido.entity';
@@ -26,9 +27,47 @@ import { TelegramService } from 'src/telegram/telegram.service';
 import { CobrosService } from 'src/vta-comprobante/cobros.service';
 import { GetPedidosDashboardDto } from './dto/get-pedidos-dashboard.dto';
 import { CuponService } from 'src/cupon/cupon.service';
+import {
+  getDiscountPercentageForProduct,
+  isEligibleForQuantityDiscount,
+  parseProductWeightFromDescription,
+} from 'src/pricing/discounts';
+
+type PedidoMetodoPago = 'online' | 'transfer';
+
+interface PedidoProductoCalculado {
+  nombre: string;
+  cantidad: number;
+  precio_base_unitario: number;
+  precio_unitario: number;
+  subtotal: number;
+  ajuste_porcentaje: number | null;
+  descuento_cupon_aplicado: number;
+}
+
+interface PedidoProductoMismatch {
+  nombre: string;
+  expected: {
+    precio_unitario?: number;
+    subtotal?: number;
+  };
+  received: {
+    precio_unitario?: number;
+    subtotal?: number;
+  };
+}
+
+interface PedidoProductoPrecargado {
+  producto: CreatePedidoDto['productos'][number];
+  item: StkItem;
+  peso?: number;
+  aplicaDescuentoDiferencialPorCantidad: boolean;
+}
 
 @Injectable()
 export class PedidoService {
+  private readonly logger = new Logger(PedidoService.name);
+
   constructor(
     @InjectRepository(Pedido, 'back') // 👈 Base de datos propia
     private readonly pedidoRepo: Repository<Pedido>,
@@ -77,11 +116,21 @@ export class PedidoService {
       });
     }
 
+    const metodoPago = dto.metodo_pago ?? 'online';
+    const porcentajeCupon = await this.resolverPorcentajeCupon(
+      dto.codigo_cupon,
+      metodoPago,
+    );
+    const productosPrecargados: PedidoProductoPrecargado[] = [];
+    let cantidadTotalDescuentoDiferencial = 0;
+    const productosCalculados: PedidoProductoCalculado[] = [];
     const productosValidados: PedidoItem[] = [];
+    const diferenciasProductos: PedidoProductoMismatch[] = [];
 
     for (const producto of dto.productos) {
       const item = await this.stkItemRepo.findOne({
         where: { id: producto.nombre },
+        relations: ['stkPrecios', 'stkPrecios.moneda'],
       });
 
       if (!item) {
@@ -90,18 +139,84 @@ export class PedidoService {
         );
       }
 
-      this.validarSubtotalProducto(producto);
+      const cantidad = this.obtenerCantidadProducto(producto);
+      const peso = parseProductWeightFromDescription(item.descripcion);
+      const productoDescuento = {
+        id: item.id,
+        category: item.grupo,
+      };
+      const aplicaDescuentoDiferencialPorCantidad = isEligibleForQuantityDiscount(
+        productoDescuento,
+        peso ?? 0,
+      );
 
-      await this.stockService.reservarStock(item.id, producto.cantidad);
+      if (aplicaDescuentoDiferencialPorCantidad) {
+        cantidadTotalDescuentoDiferencial += cantidad;
+      }
 
-      productosValidados.push({
-        nombre: producto.nombre,
-        descripcion: item.descripcion,
-        cantidad: producto.cantidad,
-        precio_unitario: producto.precio_unitario,
-        subtotal: this.redondear2(Number(producto.subtotal)),
-        ajuste_porcentaje: producto.ajuste_porcentaje ?? null,
-      } as PedidoItem);
+      productosPrecargados.push({
+        producto,
+        item,
+        peso,
+        aplicaDescuentoDiferencialPorCantidad,
+      });
+    }
+
+    for (const {
+      producto,
+      item,
+      peso,
+      aplicaDescuentoDiferencialPorCantidad,
+    } of productosPrecargados) {
+      const cantidadParaDescuento = aplicaDescuentoDiferencialPorCantidad
+        ? cantidadTotalDescuentoDiferencial
+        : undefined;
+      const productoCalculado = this.calcularProductoPedido(
+        producto,
+        item,
+        porcentajeCupon,
+        peso,
+        cantidadParaDescuento,
+      );
+      const diferenciaProducto = this.obtenerDiferenciaProducto(
+        producto,
+        productoCalculado,
+      );
+
+      if (diferenciaProducto) {
+        diferenciasProductos.push(diferenciaProducto);
+      }
+
+      productosCalculados.push(productoCalculado);
+      productosValidados.push(
+        this.pedidoItemDesdeCalculo(productoCalculado, item.descripcion),
+      );
+    }
+
+    const productosNetos = this.redondearPrecio(
+      productosValidados.reduce(
+        (acc, producto) => acc + Number(producto.subtotal ?? 0),
+        0,
+      ),
+    );
+    const descuentoCupon = this.redondearPrecio(
+      productosCalculados.reduce(
+        (acc, producto) => acc + producto.descuento_cupon_aplicado,
+        0,
+      ),
+    );
+    const totalCalculado = this.redondearPrecio(
+      productosNetos + Number(dto.costo_envio ?? 0),
+    );
+
+    this.validarTotalesRecibidos(dto, {
+      total: totalCalculado,
+      descuento_cupon: descuentoCupon,
+      productos: diferenciasProductos,
+    });
+
+    for (const p of productosValidados) {
+      await this.stockService.reservarStock(p.nombre, p.cantidad);
     }
 
     const externalId = uuidv4().replace(/-/g, '');
@@ -128,9 +243,9 @@ export class PedidoService {
       cliente_nombre: dto.cliente_nombre,
       cliente_mail: dto.email,
       external_id: externalId,
-      total: dto.total,
+      total: totalCalculado,
       costo_envio: dto.costo_envio,
-      descuento_cupon: dto.descuento_cupon ?? undefined,
+      descuento_cupon: descuentoCupon || undefined,
       codigo_cupon: dto.codigo_cupon ?? undefined,
       delivery_method: dto.tipo_envio,
       cliente_ubicacion: clienteUbicacion,
@@ -138,7 +253,7 @@ export class PedidoService {
       telefono: dto.telefono || undefined,
       estado: 'PENDIENTE',
       productos: productosValidados,
-      metodo_pago: dto.metodo_pago ?? 'online',
+      metodo_pago: metodoPago,
     });
 
     const pedidoGuardado = await this.pedidoRepo.save(pedido);
@@ -199,6 +314,16 @@ export class PedidoService {
     try {
       const naveUrl = await this.generarIntencionDePago({
         ...dto,
+        total: totalCalculado,
+        descuento_cupon: descuentoCupon,
+        metodo_pago: metodoPago,
+        productos: productosValidados.map((producto) => ({
+          nombre: producto.nombre,
+          cantidad: producto.cantidad,
+          precio_unitario: producto.precio_unitario,
+          subtotal: Number(producto.subtotal),
+          ajuste_porcentaje: producto.ajuste_porcentaje ?? undefined,
+        })),
         external_id: externalId,
       });
       return { pedido: pedidoGuardado, naveUrl };
@@ -223,7 +348,16 @@ export class PedidoService {
 
   // 💳 Generar intención de pago (nueva API)
   async generarIntencionDePago(
-    dto: CreatePedidoDto & { external_id: string },
+    dto: CreatePedidoDto & {
+      external_id: string;
+      total: number;
+      productos: Array<
+        CreatePedidoDto['productos'][number] & {
+          precio_unitario: number;
+          subtotal: number;
+        }
+      >;
+    },
   ): Promise<string> {
     const token = await this.obtenerTokenDeNave();
 
@@ -273,7 +407,7 @@ export class PedidoService {
             quantity: p.cantidad,
             unit_price: {
               currency: 'ARS',
-              value: p.precio_unitario.toFixed(2),
+              value: Number(p.precio_unitario).toFixed(2),
             },
           })),
         },
@@ -1025,6 +1159,282 @@ export class PedidoService {
 
   private redondear2(valor: number): number {
     return Math.round((Number(valor) + Number.EPSILON) * 100) / 100;
+  }
+
+  private redondearPrecio(valor: number): number {
+    if (!Number.isFinite(valor)) {
+      throw new BadRequestException('Importe monetario invalido');
+    }
+
+    return Number(Math.round(valor).toFixed(2));
+  }
+
+  private calcularProductoPedido(
+    producto: CreatePedidoDto['productos'][number],
+    item: StkItem,
+    porcentajeCupon: number,
+    peso?: number,
+    cantidadParaDescuento?: number,
+  ): PedidoProductoCalculado {
+    const cantidad = this.obtenerCantidadProducto(producto);
+    const precioBaseUnitario = this.obtenerPrecioMinoristaCotizado(item);
+    const productoDescuento = {
+      id: item.id,
+      category: item.grupo,
+    };
+    const descuentoProductoPorcentaje = this.parsearPorcentajeDescuento(
+      getDiscountPercentageForProduct(
+        productoDescuento,
+        cantidadParaDescuento ?? cantidad,
+        peso ?? parseProductWeightFromDescription(item.descripcion),
+      ),
+    );
+    const descuentoPorcentaje = Math.max(
+      descuentoProductoPorcentaje,
+      porcentajeCupon,
+    );
+    const subtotal = this.redondearPrecio(
+      precioBaseUnitario * cantidad * (1 - descuentoPorcentaje / 100),
+    );
+    const precioUnitario = this.redondearPrecio(subtotal / cantidad);
+    const descuentoCuponAplicado =
+      porcentajeCupon > descuentoProductoPorcentaje
+        ? this.redondearPrecio(
+            precioBaseUnitario * cantidad - subtotal,
+          )
+        : 0;
+
+    return {
+      nombre: producto.nombre,
+      cantidad,
+      precio_base_unitario: precioBaseUnitario,
+      precio_unitario: precioUnitario,
+      subtotal,
+      ajuste_porcentaje: descuentoPorcentaje > 0 ? descuentoPorcentaje : null,
+      descuento_cupon_aplicado: descuentoCuponAplicado,
+    };
+  }
+
+  private obtenerCantidadProducto(
+    producto: CreatePedidoDto['productos'][number],
+  ): number {
+    const cantidad = Number(producto.cantidad ?? 0);
+
+    if (!Number.isFinite(cantidad) || cantidad < 1) {
+      throw new BadRequestException(
+        `Producto '${producto.nombre}': cantidad debe ser un valor valido.`,
+      );
+    }
+
+    return cantidad;
+  }
+
+  private parsearPorcentajeDescuento(porcentaje: string): number {
+    const valor = Number(porcentaje.replace('%', ''));
+    return Number.isFinite(valor) ? valor : 0;
+  }
+
+  private obtenerPrecioMinoristaCotizado(item: StkItem): number {
+    const precioMinorista = item.stkPrecios?.find(
+      (precio) => precio.lista === 'MINORISTA',
+    );
+
+    if (!precioMinorista) {
+      throw new NotFoundException(
+        `Precio MINORISTA no disponible para ${item.id}`,
+      );
+    }
+
+    const precioVta = Number(precioMinorista.precioVta ?? 0);
+    const isDolar = precioMinorista.moneda?.id === 'DOL';
+    const cotizacion = isDolar ? Number(precioMinorista.moneda?.cotizacion) : 1;
+
+    if (
+      !Number.isFinite(precioVta) ||
+      precioVta <= 0 ||
+      !Number.isFinite(cotizacion) ||
+      cotizacion <= 0
+    ) {
+      throw new BadRequestException(
+        `Precio MINORISTA invalido para ${item.id}`,
+      );
+    }
+
+    return this.redondearPrecio(precioVta * cotizacion);
+  }
+
+  private pedidoItemDesdeCalculo(
+    producto: PedidoProductoCalculado,
+    descripcion: string | null,
+  ): PedidoItem {
+    return {
+      nombre: producto.nombre,
+      descripcion,
+      cantidad: producto.cantidad,
+      precio_unitario: producto.precio_unitario,
+      subtotal: producto.subtotal,
+      ajuste_porcentaje: producto.ajuste_porcentaje,
+    } as PedidoItem;
+  }
+
+  private obtenerDiferenciaProducto(
+    producto: CreatePedidoDto['productos'][number],
+    calculado: PedidoProductoCalculado,
+  ): PedidoProductoMismatch | null {
+    const precioFueEnviado = producto.precio_unitario !== undefined;
+    const subtotalFueEnviado = producto.subtotal !== undefined;
+    const precioRecibido = precioFueEnviado
+      ? Number(producto.precio_unitario)
+      : undefined;
+    const subtotalRecibido = subtotalFueEnviado
+      ? Number(producto.subtotal)
+      : undefined;
+    const subtotalBruto = this.redondearPrecio(
+      calculado.precio_base_unitario * calculado.cantidad,
+    );
+
+    const difierePrecio =
+      precioFueEnviado &&
+      !this.montosIguales(precioRecibido, calculado.precio_unitario);
+    const difiereSubtotal =
+      subtotalFueEnviado &&
+      !this.montosIguales(subtotalRecibido, calculado.subtotal) &&
+      !this.montosIguales(subtotalRecibido, subtotalBruto);
+
+    if (!difierePrecio && !difiereSubtotal) {
+      return null;
+    }
+
+    const expected: PedidoProductoMismatch['expected'] = {};
+    const received: PedidoProductoMismatch['received'] = {};
+
+    if (difierePrecio) {
+      expected.precio_unitario = calculado.precio_unitario;
+      received.precio_unitario = precioRecibido;
+    }
+
+    if (difiereSubtotal) {
+      expected.subtotal = calculado.subtotal;
+      received.subtotal = subtotalRecibido;
+    }
+
+    return {
+      nombre: producto.nombre,
+      expected,
+      received,
+    };
+  }
+
+  private async resolverPorcentajeCupon(
+    codigoCupon: string | undefined,
+    metodoPago: PedidoMetodoPago,
+  ): Promise<number> {
+    if (!codigoCupon) {
+      return 0;
+    }
+
+    const descuento = await this.cuponService.resolverPorcentajePorModalidad(
+      codigoCupon,
+      metodoPago === 'transfer' ? 'CUENTA' : 'TARJETA',
+    );
+
+    const porcentaje = Number(descuento.porcentajeAplicado ?? 0);
+    if (!Number.isFinite(porcentaje) || porcentaje < 0 || porcentaje > 100) {
+      throw new BadRequestException(
+        `Porcentaje de descuento invalido para el cupon ${codigoCupon}`,
+      );
+    }
+
+    return porcentaje;
+  }
+
+  private validarTotalesRecibidos(
+    dto: CreatePedidoDto,
+    calculado: {
+      total: number;
+      descuento_cupon: number;
+      productos: PedidoProductoMismatch[];
+    },
+  ): void {
+    const diferencias: {
+      expected: {
+        total?: number;
+        descuento_cupon?: number;
+      };
+      received: {
+        total?: number;
+        descuento_cupon?: number;
+      };
+      productos: PedidoProductoMismatch[];
+    } = {
+      expected: {},
+      received: {},
+      productos: calculado.productos,
+    };
+
+    if (
+      dto.total !== undefined &&
+      !this.montosIguales(Number(dto.total), calculado.total)
+    ) {
+      diferencias.expected.total = calculado.total;
+      diferencias.received.total = Number(dto.total);
+    }
+
+    if (
+      dto.descuento_cupon !== undefined &&
+      !this.montosIguales(Number(dto.descuento_cupon), calculado.descuento_cupon)
+    ) {
+      diferencias.expected.descuento_cupon = calculado.descuento_cupon;
+      diferencias.received.descuento_cupon = Number(dto.descuento_cupon);
+    }
+
+    const tieneDiferencias =
+      Object.keys(diferencias.expected).length > 0 ||
+      diferencias.productos.length > 0;
+
+    if (!tieneDiferencias) {
+      return;
+    }
+
+    this.logger.warn(
+      {
+        code: 'ERR_ORDER_TOTAL_MISMATCH',
+        cliente_cuit: dto.cliente_cuit,
+        metodo_pago: dto.metodo_pago ?? 'online',
+        codigo_cupon: dto.codigo_cupon,
+        costo_envio: dto.costo_envio,
+        expected: diferencias.expected,
+        received: diferencias.received,
+        productos: diferencias.productos,
+        productos_recibidos: dto.productos.map((producto) => ({
+          nombre: producto.nombre,
+          cantidad: producto.cantidad,
+          precio_unitario: producto.precio_unitario,
+          subtotal: producto.subtotal,
+          ajuste_porcentaje: producto.ajuste_porcentaje,
+        })),
+      },
+      'Los importes recibidos no coinciden con el calculo del servidor.',
+    );
+
+    throw new BadRequestException({
+      code: 'ERR_ORDER_TOTAL_MISMATCH',
+      message: 'Los importes recibidos no coinciden con el calculo del servidor.',
+      expected: diferencias.expected,
+      received: diferencias.received,
+      productos: diferencias.productos,
+    });
+  }
+
+  private montosIguales(
+    recibido: number | undefined,
+    esperado: number,
+  ): boolean {
+    if (!Number.isFinite(recibido) || !Number.isFinite(esperado)) {
+      return false;
+    }
+
+    return Math.abs(Number(recibido) - esperado) <= 0.01;
   }
 
   private validarSubtotalProducto(
