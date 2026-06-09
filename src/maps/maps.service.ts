@@ -13,6 +13,12 @@ type GoogleGeocodeResult = {
   address_components?: GoogleAddressComponent[];
 };
 
+type DestinationContext = {
+  province?: string;
+  country?: string;
+  postalCode?: string;
+};
+
 @Injectable()
 export class MapsService {
   private readonly googleApiKey: string;
@@ -26,8 +32,12 @@ export class MapsService {
     this.googleApiKey = apiKey;
   }
 
-  async getDistanceToDestination(address: string, city: string) {
-    const destination = `${address}, ${city}`;
+  async getDistanceToDestination(
+    address: string,
+    city: string,
+    context: DestinationContext = {},
+  ) {
+    const destination = this.formatDestination(address, city, context);
 
     try {
       const geocodeResult = await this.geocodeDestination(destination);
@@ -90,6 +100,23 @@ export class MapsService {
     }
 
     return data.results?.[0] ?? null;
+  }
+
+  private formatDestination(
+    address: string,
+    city: string,
+    context: DestinationContext,
+  ): string {
+    return [
+      address,
+      city,
+      context.province,
+      context.country,
+      context.postalCode,
+    ]
+      .map((part) => part?.trim())
+      .filter(Boolean)
+      .join(', ');
   }
 
   private isSpecificStreetAddress(result: GoogleGeocodeResult | null): boolean {
