@@ -25,6 +25,10 @@ export class MapsController {
     },
   })
   async getDistance(@Body() dto: GetDistanceDto) {
-    return await this.mapsService.getDistanceToDestination(dto.address, dto.city);
+    return await this.mapsService.getDistanceToDestination(dto.address, dto.city, {
+      province: dto.province || dto.region || dto.provincia,
+      country: dto.country || dto.pais,
+      postalCode: dto.postalCode || dto.postal_code || dto.codigoPostal || dto.codigo_postal,
+    });
   }
 }

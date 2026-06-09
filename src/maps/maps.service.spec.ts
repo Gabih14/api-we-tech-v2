@@ -104,4 +104,34 @@ describe('MapsService', () => {
       'destinations=place_id%3Astreet-place',
     );
   });
+
+  it('usa provincia, pais y codigo postal para resolver destinos ambiguos', async () => {
+    mockedAxios.get.mockResolvedValueOnce({
+      data: {
+        status: 'OK',
+        results: [
+          {
+            formatted_address: 'Chile 2069, Mendoza, Argentina',
+            place_id: 'mendoza-street-place',
+            types: ['street_address'],
+            address_components: [
+              { types: ['street_number'] },
+              { types: ['route'] },
+            ],
+          },
+        ],
+      },
+    });
+
+    await service.getDistanceToDestination('Chile 2069', 'Mendoza', {
+      province: 'Mendoza',
+      country: 'Argentina',
+      postalCode: '5500',
+    });
+
+    const geocodeUrl = mockedAxios.get.mock.calls[0][0];
+    expect(decodeURIComponent(geocodeUrl)).toContain(
+      'address=Chile 2069, Mendoza, Mendoza, Argentina, 5500',
+    );
+  });
 });
