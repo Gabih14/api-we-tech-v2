@@ -64,6 +64,22 @@ const getTieredDiscount = (
 export const shouldApplyDiscount = (product: ProductDiscountInput): boolean =>
   Boolean(product.category && DISCOUNT_RULES[product.category]);
 
+export const normalizeProductBrandForQuantityDiscount = (
+  productId: string,
+): string | null => {
+  const [brandPrefix, family] = productId.toUpperCase().split('-');
+  if (!brandPrefix || !family) {
+    return null;
+  }
+
+  const normalizedFamily = family.replace(/\d+$/, '');
+  if (!normalizedFamily) {
+    return null;
+  }
+
+  return `${brandPrefix}-${normalizedFamily}`;
+};
+
 export const isEligibleForQuantityDiscount = (
   product: ProductDiscountInput,
   weight: number,
@@ -76,9 +92,12 @@ export const isEligibleForQuantityDiscount = (
     return false;
   }
 
-  const productId = product.id.toUpperCase();
-  return ELIGIBLE_BRANDS_FOR_QUANTITY_DISCOUNT.some(
-    (brand) => productId === brand || productId.startsWith(`${brand}-`),
+  const productBrand = normalizeProductBrandForQuantityDiscount(product.id);
+  return Boolean(
+    productBrand &&
+      ELIGIBLE_BRANDS_FOR_QUANTITY_DISCOUNT.includes(
+        productBrand as (typeof ELIGIBLE_BRANDS_FOR_QUANTITY_DISCOUNT)[number],
+      ),
   );
 };
 

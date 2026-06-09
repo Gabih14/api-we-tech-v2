@@ -29,6 +29,7 @@ import { GetPedidosDashboardDto } from './dto/get-pedidos-dashboard.dto';
 import { CuponService } from 'src/cupon/cupon.service';
 import {
   getDiscountPercentageForProduct,
+  isEligibleForQuantityDiscount,
   parseProductWeightFromDescription,
 } from 'src/pricing/discounts';
 
@@ -54,6 +55,13 @@ interface PedidoProductoMismatch {
     precio_unitario?: number;
     subtotal?: number;
   };
+}
+
+interface PedidoProductoPrecargado {
+  producto: CreatePedidoDto['productos'][number];
+  item: StkItem;
+  peso?: number;
+  aplicaDescuentoDiferencialPorCantidad: boolean;
 }
 
 @Injectable()
@@ -113,6 +121,8 @@ export class PedidoService {
       dto.codigo_cupon,
       metodoPago,
     );
+    const productosPrecargados: PedidoProductoPrecargado[] = [];
+    let cantidadTotalDescuentoDiferencial = 0;
     const productosCalculados: PedidoProductoCalculado[] = [];
     const productosValidados: PedidoItem[] = [];
     const diferenciasProductos: PedidoProductoMismatch[] = [];
@@ -129,10 +139,44 @@ export class PedidoService {
         );
       }
 
+      const cantidad = this.obtenerCantidadProducto(producto);
+      const peso = parseProductWeightFromDescription(item.descripcion);
+      const productoDescuento = {
+        id: item.id,
+        category: item.grupo,
+      };
+      const aplicaDescuentoDiferencialPorCantidad = isEligibleForQuantityDiscount(
+        productoDescuento,
+        peso ?? 0,
+      );
+
+      if (aplicaDescuentoDiferencialPorCantidad) {
+        cantidadTotalDescuentoDiferencial += cantidad;
+      }
+
+      productosPrecargados.push({
+        producto,
+        item,
+        peso,
+        aplicaDescuentoDiferencialPorCantidad,
+      });
+    }
+
+    for (const {
+      producto,
+      item,
+      peso,
+      aplicaDescuentoDiferencialPorCantidad,
+    } of productosPrecargados) {
+      const cantidadParaDescuento = aplicaDescuentoDiferencialPorCantidad
+        ? cantidadTotalDescuentoDiferencial
+        : undefined;
       const productoCalculado = this.calcularProductoPedido(
         producto,
         item,
         porcentajeCupon,
+        peso,
+        cantidadParaDescuento,
       );
       const diferenciaProducto = this.obtenerDiferenciaProducto(
         producto,
@@ -1129,23 +1173,21 @@ export class PedidoService {
     producto: CreatePedidoDto['productos'][number],
     item: StkItem,
     porcentajeCupon: number,
+    peso?: number,
+    cantidadParaDescuento?: number,
   ): PedidoProductoCalculado {
-    const cantidad = Number(producto.cantidad ?? 0);
-
-    if (!Number.isFinite(cantidad) || cantidad < 1) {
-      throw new BadRequestException(
-        `Producto '${producto.nombre}': cantidad debe ser un valor valido.`,
-      );
-    }
-
+    const cantidad = this.obtenerCantidadProducto(producto);
     const precioBaseUnitario = this.obtenerPrecioMinoristaCotizado(item);
     const productoDescuento = {
       id: item.id,
       category: item.grupo,
     };
-    const peso = parseProductWeightFromDescription(item.descripcion);
     const descuentoProductoPorcentaje = this.parsearPorcentajeDescuento(
-      getDiscountPercentageForProduct(productoDescuento, cantidad, peso),
+      getDiscountPercentageForProduct(
+        productoDescuento,
+        cantidadParaDescuento ?? cantidad,
+        peso ?? parseProductWeightFromDescription(item.descripcion),
+      ),
     );
     const descuentoPorcentaje = Math.max(
       descuentoProductoPorcentaje,
@@ -1171,6 +1213,20 @@ export class PedidoService {
       ajuste_porcentaje: descuentoPorcentaje > 0 ? descuentoPorcentaje : null,
       descuento_cupon_aplicado: descuentoCuponAplicado,
     };
+  }
+
+  private obtenerCantidadProducto(
+    producto: CreatePedidoDto['productos'][number],
+  ): number {
+    const cantidad = Number(producto.cantidad ?? 0);
+
+    if (!Number.isFinite(cantidad) || cantidad < 1) {
+      throw new BadRequestException(
+        `Producto '${producto.nombre}': cantidad debe ser un valor valido.`,
+      );
+    }
+
+    return cantidad;
   }
 
   private parsearPorcentajeDescuento(porcentaje: string): number {

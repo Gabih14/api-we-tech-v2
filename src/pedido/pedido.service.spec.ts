@@ -425,6 +425,150 @@ describe('PedidoService recalculo de importes', () => {
     expect(pedido.total).toBe(90321);
   });
 
+  it('combina colores de la misma marca elegible para calcular el descuento por cantidad', async () => {
+    stkItemRepo.findOne
+      .mockResolvedValueOnce(
+        itemConPrecio(
+          'G3-PLA1-1KG-NEGR',
+          '100',
+          'PES',
+          '1',
+          'FILAMENTOS',
+          'Filamento PLA 1kg negro',
+        ),
+      )
+      .mockResolvedValueOnce(
+        itemConPrecio(
+          'G3-PLA2-1KG-AMFL',
+          '100',
+          'PES',
+          '1',
+          'FILAMENTOS',
+          'Filamento PLA 1kg amarillo fluor',
+        ),
+      );
+
+    const dto = dtoBase({
+      total: undefined,
+      productos: [
+        {
+          nombre: 'G3-PLA1-1KG-NEGR',
+          cantidad: 3,
+        },
+        {
+          nombre: 'G3-PLA2-1KG-AMFL',
+          cantidad: 2,
+        },
+      ],
+    });
+
+    const { pedido } = await service.crear(dto);
+
+    expect(pedido.productos[0].precio_unitario).toBe(83);
+    expect(pedido.productos[0].subtotal).toBe(249);
+    expect(pedido.productos[0].ajuste_porcentaje).toBe(17);
+    expect(pedido.productos[1].precio_unitario).toBe(83);
+    expect(pedido.productos[1].subtotal).toBe(166);
+    expect(pedido.productos[1].ajuste_porcentaje).toBe(17);
+    expect(pedido.total).toBe(415);
+  });
+
+  it('combina marcas distintas dentro de la lista de descuento diferencial', async () => {
+    stkItemRepo.findOne
+      .mockResolvedValueOnce(
+        itemConPrecio(
+          'G3-PLA1-1KG-NEGR',
+          '100',
+          'PES',
+          '1',
+          'FILAMENTOS',
+          'Filamento PLA 1kg negro',
+        ),
+      )
+      .mockResolvedValueOnce(
+        itemConPrecio(
+          'HB-PLA-1KG-BLAN',
+          '100',
+          'PES',
+          '1',
+          'FILAMENTOS',
+          'Filamento PLA 1kg blanco',
+        ),
+      );
+
+    const dto = dtoBase({
+      total: undefined,
+      productos: [
+        {
+          nombre: 'G3-PLA1-1KG-NEGR',
+          cantidad: 4,
+        },
+        {
+          nombre: 'HB-PLA-1KG-BLAN',
+          cantidad: 1,
+        },
+      ],
+    });
+
+    const { pedido } = await service.crear(dto);
+
+    expect(pedido.productos[0].precio_unitario).toBe(83);
+    expect(pedido.productos[0].subtotal).toBe(332);
+    expect(pedido.productos[0].ajuste_porcentaje).toBe(17);
+    expect(pedido.productos[1].precio_unitario).toBe(83);
+    expect(pedido.productos[1].subtotal).toBe(83);
+    expect(pedido.productos[1].ajuste_porcentaje).toBe(17);
+    expect(pedido.total).toBe(415);
+  });
+
+  it('no suma productos de peso distinto al grupo diferencial de 1kg', async () => {
+    stkItemRepo.findOne
+      .mockResolvedValueOnce(
+        itemConPrecio(
+          'G3-PLA1-1KG-NEGR',
+          '100',
+          'PES',
+          '1',
+          'FILAMENTOS',
+          'Filamento PLA 1kg negro',
+        ),
+      )
+      .mockResolvedValueOnce(
+        itemConPrecio(
+          'G3-PLA1-500G-BLAN',
+          '100',
+          'PES',
+          '1',
+          'FILAMENTOS',
+          'Filamento PLA 500g blanco',
+        ),
+      );
+
+    const dto = dtoBase({
+      total: undefined,
+      productos: [
+        {
+          nombre: 'G3-PLA1-1KG-NEGR',
+          cantidad: 4,
+        },
+        {
+          nombre: 'G3-PLA1-500G-BLAN',
+          cantidad: 1,
+        },
+      ],
+    });
+
+    const { pedido } = await service.crear(dto);
+
+    expect(pedido.productos[0].precio_unitario).toBe(85);
+    expect(pedido.productos[0].subtotal).toBe(340);
+    expect(pedido.productos[0].ajuste_porcentaje).toBe(15);
+    expect(pedido.productos[1].precio_unitario).toBe(85);
+    expect(pedido.productos[1].subtotal).toBe(85);
+    expect(pedido.productos[1].ajuste_porcentaje).toBe(15);
+    expect(pedido.total).toBe(425);
+  });
+
   it('rechaza diferencias y no reserva stock', async () => {
     stkItemRepo.findOne.mockResolvedValue(itemConPrecio('ITEM-4', '100'));
 

@@ -11,6 +11,7 @@ import {
   getNextDiscountLevelForProduct,
   isDiscountAppliedForProduct,
   isEligibleForQuantityDiscount,
+  normalizeProductBrandForQuantityDiscount,
   parseProductWeightFromDescription,
   shouldApplyDiscount,
 } from './discounts';
@@ -83,10 +84,40 @@ describe('pricing discounts', () => {
     },
   );
 
+  it.each([
+    ['G3-PLA1-1KG-NEGR', 'G3-PLA'],
+    ['G3-PLA2-1KG-AMFL', 'G3-PLA'],
+    ['3N-PLA-1KG-NEGR', '3N-PLA'],
+    ['G3-BOUT-1KG-ROJO', 'G3-BOUT'],
+  ])('normaliza la marca para descuento por cantidad: %s', (id, brand) => {
+    expect(normalizeProductBrandForQuantityDiscount(id)).toBe(brand);
+  });
+
+  it('considera elegibles variantes numeradas de la misma marca configurada', () => {
+    expect(
+      isEligibleForQuantityDiscount(
+        { id: 'G3-PLA1-1KG-NEGR', category: 'FILAMENTOS' },
+        1,
+      ),
+    ).toBe(true);
+    expect(
+      isEligibleForQuantityDiscount(
+        { id: 'G3-PLA2-1KG-AMFL', category: 'FILAMENTOS' },
+        1,
+      ),
+    ).toBe(true);
+  });
+
   it('no marca como elegible un id que solo comparte texto sin separador', () => {
     expect(
       isEligibleForQuantityDiscount(
         { id: '3N-PLASTIC-1KG-NEGR', category: 'FILAMENTOS' },
+        1,
+      ),
+    ).toBe(false);
+    expect(
+      isEligibleForQuantityDiscount(
+        { id: 'G3-PLAFAKE-1KG-NEGR', category: 'FILAMENTOS' },
         1,
       ),
     ).toBe(false);
