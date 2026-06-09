@@ -332,6 +332,120 @@ describe('PedidoService recalculo de importes', () => {
     );
   });
 
+  it('deja envio gratis para shipping desde 10 kg aunque reciba costo de envio', async () => {
+    stkItemRepo.findOne.mockResolvedValue(
+      itemConPrecio(
+        'ITEM-10KG',
+        '100',
+        'PES',
+        '1',
+        null,
+        'Producto 1kg',
+      ),
+    );
+
+    const dto = dtoBase({
+      tipo_envio: 'shipping',
+      costo_envio: 250,
+      total: 1000,
+      productos: [
+        {
+          nombre: 'ITEM-10KG',
+          cantidad: 10,
+          precio_unitario: 100,
+          subtotal: 1000,
+        },
+      ],
+    });
+
+    const { pedido } = await service.crear(dto);
+
+    expect(pedido.costo_envio).toBe(0);
+    expect(pedido.total).toBe(1000);
+    expect(service.generarIntencionDePago).toHaveBeenCalledWith(
+      expect.objectContaining({
+        costo_envio: 0,
+        total: 1000,
+      }),
+    );
+  });
+
+  it('conserva costo de envio para shipping con menos de 10 kg', async () => {
+    stkItemRepo.findOne.mockResolvedValue(
+      itemConPrecio(
+        'ITEM-9KG',
+        '100',
+        'PES',
+        '1',
+        null,
+        'Producto 1kg',
+      ),
+    );
+
+    const dto = dtoBase({
+      tipo_envio: 'shipping',
+      costo_envio: 250,
+      total: 1150,
+      productos: [
+        {
+          nombre: 'ITEM-9KG',
+          cantidad: 9,
+          precio_unitario: 100,
+          subtotal: 900,
+        },
+      ],
+    });
+
+    const { pedido } = await service.crear(dto);
+
+    expect(pedido.costo_envio).toBe(250);
+    expect(pedido.total).toBe(1150);
+    expect(service.generarIntencionDePago).toHaveBeenCalledWith(
+      expect.objectContaining({
+        costo_envio: 250,
+        total: 1150,
+      }),
+    );
+  });
+
+  it('no aplica envio gratis por peso para pickup', async () => {
+    stkItemRepo.findOne.mockResolvedValue(
+      itemConPrecio(
+        'ITEM-PICKUP-10KG',
+        '100',
+        'PES',
+        '1',
+        null,
+        'Producto 1kg',
+      ),
+    );
+
+    const dto = dtoBase({
+      tipo_envio: 'pickup',
+      costo_envio: 250,
+      total: 1250,
+      productos: [
+        {
+          nombre: 'ITEM-PICKUP-10KG',
+          cantidad: 10,
+          precio_unitario: 100,
+          subtotal: 1000,
+        },
+      ],
+    });
+
+    const { pedido } = await service.crear(dto);
+
+    expect(pedido.costo_envio).toBe(250);
+    expect(pedido.total).toBe(1250);
+    expect(service.generarIntencionDePago).toHaveBeenCalledWith(
+      expect.objectContaining({
+        costo_envio: 250,
+        total: 1250,
+      }),
+    );
+  });
+
   it('redondea el descuento de cupon normal al peso', async () => {
     stkItemRepo.findOne.mockResolvedValue(itemConPrecio('ITEM-2B', '101'));
     cuponService.resolverPorcentajePorModalidad.mockResolvedValue({
