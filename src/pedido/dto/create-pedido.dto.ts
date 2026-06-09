@@ -20,13 +20,15 @@ export class ProductoDto {
   @Min(1)
   cantidad: number;
 
+  @IsOptional()
   @IsNumber()
   @Min(0)
-  precio_unitario: number;
+  precio_unitario?: number;
 
+  @IsOptional()
   @IsNumber()
   @Min(0)
-  subtotal: number;
+  subtotal?: number;
 
   @IsOptional()
   @IsNumber({ maxDecimalPlaces: 2 })
@@ -65,8 +67,9 @@ export class CreatePedidoDto {
   @IsEmail()
   cliente_mail: string;
 
+  @IsOptional()
   @IsNumber()
-  total: number;
+  total?: number;
 
   @IsEmail()
   email: string;

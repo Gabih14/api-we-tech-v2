@@ -200,14 +200,25 @@ export class VtaComprobanteService {
       const cantidad = Number(producto.cantidad ?? 0);
       const precioFinalUnitario = Number(producto.precio_unitario ?? 0);
       const importeFinal = this.redondear2(cantidad * precioFinalUnitario);
-      const base = this.redondear2(Number(producto.subtotal ?? importeFinal));
-      const ajusteNeto = this.redondear2(importeFinal - base);
+      const ajustePorcentaje = Number(producto.ajuste_porcentaje ?? 0);
+      const tieneAjustePorcentaje =
+        Number.isFinite(ajustePorcentaje) &&
+        ajustePorcentaje > 0 &&
+        ajustePorcentaje < 100;
+      const base = tieneAjustePorcentaje
+        ? this.redondear2(importeFinal / (1 - ajustePorcentaje / 100))
+        : this.redondear2(Number(producto.subtotal ?? importeFinal));
+      const ajusteNetoCalculado = this.redondear2(importeFinal - base);
+      const ajusteNeto =
+        ajusteNetoCalculado !== 0 ? ajusteNetoCalculado : null;
       const precioBaseUnitario =
         cantidad > 0
           ? this.redondear2(base / cantidad)
           : this.redondear2(precioFinalUnitario);
       const ajuste =
-        base !== 0 && ajusteNeto !== 0
+        tieneAjustePorcentaje
+          ? this.redondear2(-ajustePorcentaje)
+          : base !== 0 && ajusteNeto !== null
           ? this.redondear2((ajusteNeto / base) * 100)
           : null;
 
