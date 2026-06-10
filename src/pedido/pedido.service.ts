@@ -35,6 +35,8 @@ import {
 
 type PedidoMetodoPago = 'online' | 'transfer';
 
+const FREE_SHIPPING_MIN_WEIGHT_KG = 10;
+
 interface PedidoProductoCalculado {
   nombre: string;
   cantidad: number;
@@ -126,6 +128,7 @@ export class PedidoService {
     const productosCalculados: PedidoProductoCalculado[] = [];
     const productosValidados: PedidoItem[] = [];
     const diferenciasProductos: PedidoProductoMismatch[] = [];
+    let pesoTotalKg = 0;
 
     for (const producto of dto.productos) {
       const item = await this.stkItemRepo.findOne({
@@ -141,6 +144,7 @@ export class PedidoService {
 
       const cantidad = this.obtenerCantidadProducto(producto);
       const peso = parseProductWeightFromDescription(item.descripcion);
+      pesoTotalKg += (peso ?? 0) * cantidad;
       const productoDescuento = {
         id: item.id,
         category: item.grupo,
@@ -205,14 +209,19 @@ export class PedidoService {
         0,
       ),
     );
+    const costoEnvioCalculado = this.calcularCostoEnvioPedido(
+      dto,
+      pesoTotalKg,
+    );
     const totalCalculado = this.redondearPrecio(
-      productosNetos + Number(dto.costo_envio ?? 0),
+      productosNetos + costoEnvioCalculado,
     );
 
     this.validarTotalesRecibidos(dto, {
       total: totalCalculado,
       descuento_cupon: descuentoCupon,
       productos: diferenciasProductos,
+      costo_envio: costoEnvioCalculado,
     });
 
     for (const p of productosValidados) {
@@ -244,7 +253,7 @@ export class PedidoService {
       cliente_mail: dto.email,
       external_id: externalId,
       total: totalCalculado,
-      costo_envio: dto.costo_envio,
+      costo_envio: costoEnvioCalculado,
       descuento_cupon: descuentoCupon || undefined,
       codigo_cupon: dto.codigo_cupon ?? undefined,
       delivery_method: dto.tipo_envio,
@@ -315,6 +324,7 @@ export class PedidoService {
       const naveUrl = await this.generarIntencionDePago({
         ...dto,
         total: totalCalculado,
+        costo_envio: costoEnvioCalculado,
         descuento_cupon: descuentoCupon,
         metodo_pago: metodoPago,
         productos: productosValidados.map((producto) => ({
@@ -1169,6 +1179,20 @@ export class PedidoService {
     return Number(Math.round(valor).toFixed(2));
   }
 
+  private calcularCostoEnvioPedido(
+    dto: CreatePedidoDto,
+    pesoTotalKg: number,
+  ): number {
+    if (
+      dto.tipo_envio === 'shipping' &&
+      pesoTotalKg >= FREE_SHIPPING_MIN_WEIGHT_KG
+    ) {
+      return 0;
+    }
+
+    return this.redondearPrecio(Number(dto.costo_envio ?? 0));
+  }
+
   private calcularProductoPedido(
     producto: CreatePedidoDto['productos'][number],
     item: StkItem,
@@ -1354,6 +1378,7 @@ export class PedidoService {
       total: number;
       descuento_cupon: number;
       productos: PedidoProductoMismatch[];
+      costo_envio: number;
     },
   ): void {
     const diferencias: {
@@ -1402,7 +1427,7 @@ export class PedidoService {
         cliente_cuit: dto.cliente_cuit,
         metodo_pago: dto.metodo_pago ?? 'online',
         codigo_cupon: dto.codigo_cupon,
-        costo_envio: dto.costo_envio,
+        costo_envio: calculado.costo_envio,
         expected: diferencias.expected,
         received: diferencias.received,
         productos: diferencias.productos,
