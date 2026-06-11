@@ -36,6 +36,7 @@ import {
 type PedidoMetodoPago = 'online' | 'transfer';
 
 const FREE_SHIPPING_MIN_WEIGHT_KG = 10;
+const ALERTA_IMPORTES_EMAIL = 'virtual.hache@gmail.com';
 
 interface PedidoProductoCalculado {
   nombre: string;
@@ -179,6 +180,7 @@ export class PedidoService {
         producto,
         item,
         porcentajeCupon,
+        metodoPago,
         peso,
         cantidadParaDescuento,
       );
@@ -217,7 +219,7 @@ export class PedidoService {
       productosNetos + costoEnvioCalculado,
     );
 
-    this.validarTotalesRecibidos(dto, {
+    await this.validarTotalesRecibidos(dto, {
       total: totalCalculado,
       descuento_cupon: descuentoCupon,
       productos: diferenciasProductos,
@@ -1197,6 +1199,7 @@ export class PedidoService {
     producto: CreatePedidoDto['productos'][number],
     item: StkItem,
     porcentajeCupon: number,
+    metodoPago: PedidoMetodoPago,
     peso?: number,
     cantidadParaDescuento?: number,
   ): PedidoProductoCalculado {
@@ -1206,13 +1209,19 @@ export class PedidoService {
       id: item.id,
       category: item.grupo,
     };
-    const descuentoProductoPorcentaje = this.parsearPorcentajeDescuento(
-      getDiscountPercentageForProduct(
-        productoDescuento,
-        cantidadParaDescuento ?? cantidad,
-        peso ?? parseProductWeightFromDescription(item.descripcion),
-      ),
-    );
+    const pesoProducto = peso ?? parseProductWeightFromDescription(item.descripcion);
+    const aplicaDescuentoProducto =
+      metodoPago === 'transfer' ||
+      isEligibleForQuantityDiscount(productoDescuento, pesoProducto ?? 0);
+    const descuentoProductoPorcentaje = aplicaDescuentoProducto
+      ? this.parsearPorcentajeDescuento(
+          getDiscountPercentageForProduct(
+            productoDescuento,
+            cantidadParaDescuento ?? cantidad,
+            pesoProducto,
+          ),
+        )
+      : 0;
     const descuentoPorcentaje = Math.max(
       descuentoProductoPorcentaje,
       porcentajeCupon,
@@ -1372,7 +1381,7 @@ export class PedidoService {
     return porcentaje;
   }
 
-  private validarTotalesRecibidos(
+  private async validarTotalesRecibidos(
     dto: CreatePedidoDto,
     calculado: {
       total: number;
@@ -1380,7 +1389,7 @@ export class PedidoService {
       productos: PedidoProductoMismatch[];
       costo_envio: number;
     },
-  ): void {
+  ): Promise<void> {
     const diferencias: {
       expected: {
         total?: number;
@@ -1421,26 +1430,32 @@ export class PedidoService {
       return;
     }
 
+    const logImportes = {
+      code: 'ERR_ORDER_TOTAL_MISMATCH',
+      cliente_nombre: dto.cliente_nombre,
+      cliente_cuit: dto.cliente_cuit,
+      cliente_mail: dto.email ?? dto.cliente_mail,
+      telefono: dto.telefono ?? dto.mobile,
+      metodo_pago: dto.metodo_pago ?? 'online',
+      codigo_cupon: dto.codigo_cupon,
+      costo_envio: calculado.costo_envio,
+      expected: diferencias.expected,
+      received: diferencias.received,
+      productos: diferencias.productos,
+      productos_recibidos: dto.productos.map((producto) => ({
+        nombre: producto.nombre,
+        cantidad: producto.cantidad,
+        precio_unitario: producto.precio_unitario,
+        subtotal: producto.subtotal,
+        ajuste_porcentaje: producto.ajuste_porcentaje,
+      })),
+    };
+
     this.logger.warn(
-      {
-        code: 'ERR_ORDER_TOTAL_MISMATCH',
-        cliente_cuit: dto.cliente_cuit,
-        metodo_pago: dto.metodo_pago ?? 'online',
-        codigo_cupon: dto.codigo_cupon,
-        costo_envio: calculado.costo_envio,
-        expected: diferencias.expected,
-        received: diferencias.received,
-        productos: diferencias.productos,
-        productos_recibidos: dto.productos.map((producto) => ({
-          nombre: producto.nombre,
-          cantidad: producto.cantidad,
-          precio_unitario: producto.precio_unitario,
-          subtotal: producto.subtotal,
-          ajuste_porcentaje: producto.ajuste_porcentaje,
-        })),
-      },
+      logImportes,
       'Los importes recibidos no coinciden con el calculo del servidor.',
     );
+    await this.enviarAlertaImportesNoCoinciden(logImportes);
 
     throw new BadRequestException({
       code: 'ERR_ORDER_TOTAL_MISMATCH',
@@ -1449,6 +1464,39 @@ export class PedidoService {
       received: diferencias.received,
       productos: diferencias.productos,
     });
+  }
+
+  private async enviarAlertaImportesNoCoinciden(
+    logImportes: Record<string, unknown>,
+  ): Promise<void> {
+    const logJson = JSON.stringify(logImportes, null, 2);
+    const html = `
+      <h2>Alerta: importes no coinciden</h2>
+      <p>Se rechazo un pedido porque los importes recibidos no coinciden con el calculo del servidor.</p>
+      <pre style="white-space: pre-wrap; font-family: monospace; background: #f5f5f5; padding: 12px; border: 1px solid #ddd;">${this.escapeHtml(logJson)}</pre>
+    `;
+
+    try {
+      await this.mailerService.enviarCorreo(
+        ALERTA_IMPORTES_EMAIL,
+        'Alerta WeTech: importes no coinciden',
+        html,
+      );
+    } catch (error) {
+      this.logger.error(
+        'No se pudo enviar alerta de importes no coincidentes',
+        error instanceof Error ? error.stack : String(error),
+      );
+    }
+  }
+
+  private escapeHtml(value: string): string {
+    return value
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
   }
 
   private montosIguales(

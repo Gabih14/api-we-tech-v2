@@ -210,15 +210,20 @@ describe('PedidoService recalculo de importes', () => {
     expect(pedido.total).toBe(21);
   });
 
-  it('mantiene descuento de filamento si es mayor que el cupon y excluye envio de la base', async () => {
+  it('mantiene descuento de filamento en transferencia si es mayor que el cupon y excluye envio de la base', async () => {
     stkItemRepo.findOne.mockResolvedValue(
       itemConPrecio('ITEM-2', '101', 'PES', '1', 'FILAMENTOS'),
     );
     cuponService.resolverPorcentajePorModalidad.mockResolvedValue({
       porcentajeAplicado: 10,
     });
+    vtaComprobanteService.crearDesdePedido.mockResolvedValue({
+      tipo: 'FX',
+      comprobante: '0003',
+    });
 
     const dto = dtoBase({
+      metodo_pago: 'transfer',
       codigo_cupon: 'CUPON10',
       descuento_cupon: 0,
       costo_envio: 50,
@@ -237,7 +242,7 @@ describe('PedidoService recalculo de importes', () => {
 
     expect(cuponService.resolverPorcentajePorModalidad).toHaveBeenCalledWith(
       'CUPON10',
-      'TARJETA',
+      'CUENTA',
     );
     expect(pedido.productos[0].precio_unitario).toBe(86);
     expect(pedido.productos[0].ajuste_porcentaje).toBe(15);
@@ -330,6 +335,41 @@ describe('PedidoService recalculo de importes', () => {
         ],
       }),
     );
+  });
+
+  it('no aplica descuento base de filamento para pagos online', async () => {
+    stkItemRepo.findOne.mockResolvedValue(
+      itemConPrecio(
+        'GL-PLA-1KG-VAIN',
+        '21175',
+        'PES',
+        '1',
+        'FILAMENTOS',
+        'Filamento PLA 1kg vainilla',
+      ),
+    );
+
+    const dto = dtoBase({
+      metodo_pago: 'online',
+      total: 25174,
+      costo_envio: 3999,
+      productos: [
+        {
+          nombre: 'GL-PLA-1KG-VAIN',
+          cantidad: 1,
+          precio_unitario: 21175,
+          subtotal: 21175,
+          ajuste_porcentaje: 0,
+        },
+      ],
+    });
+
+    const { pedido } = await service.crear(dto);
+
+    expect(pedido.productos[0].precio_unitario).toBe(21175);
+    expect(pedido.productos[0].ajuste_porcentaje).toBeNull();
+    expect(pedido.costo_envio).toBe(3999);
+    expect(pedido.total).toBe(25174);
   });
 
   it('deja envio gratis para shipping desde 10 kg aunque reciba costo de envio', async () => {
@@ -657,8 +697,13 @@ describe('PedidoService recalculo de importes', () => {
           'Filamento PLA 500g blanco',
         ),
       );
+    vtaComprobanteService.crearDesdePedido.mockResolvedValue({
+      tipo: 'FX',
+      comprobante: '0004',
+    });
 
     const dto = dtoBase({
+      metodo_pago: 'transfer',
       total: undefined,
       productos: [
         {
@@ -736,6 +781,16 @@ describe('PedidoService recalculo de importes', () => {
         ],
       }),
       'Los importes recibidos no coinciden con el calculo del servidor.',
+    );
+    expect(mailerService.enviarCorreo).toHaveBeenCalledWith(
+      'virtual.hache@gmail.com',
+      'Alerta WeTech: importes no coinciden',
+      expect.stringContaining('ERR_ORDER_TOTAL_MISMATCH'),
+    );
+    expect(mailerService.enviarCorreo).toHaveBeenCalledWith(
+      'virtual.hache@gmail.com',
+      'Alerta WeTech: importes no coinciden',
+      expect.stringContaining('&quot;total&quot;: 90'),
     );
     expect(stockService.reservarStock).not.toHaveBeenCalled();
   });
