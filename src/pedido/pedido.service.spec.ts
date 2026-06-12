@@ -448,6 +448,110 @@ describe('PedidoService recalculo de importes', () => {
     );
   });
 
+  it('usa el producto ENV como costo de envio sin duplicarlo en el total', async () => {
+    stkItemRepo.findOne
+      .mockResolvedValueOnce(
+        itemConPrecio(
+          'GL-PLA-1KG-VAIN',
+          '21175',
+          'PES',
+          '1',
+          'FILAMENTOS',
+          'Filamento PLA 1kg vainilla',
+        ),
+      )
+      .mockResolvedValueOnce(
+        itemConPrecio(
+          'ENV-07K-GM-DELIVERY',
+          '3999',
+          'PES',
+          '1',
+          null,
+          'Envio delivery',
+        ),
+      );
+
+    const dto = dtoBase({
+      tipo_envio: 'shipping',
+      costo_envio: 3999,
+      total: 25174,
+      productos: [
+        {
+          nombre: 'GL-PLA-1KG-VAIN',
+          cantidad: 1,
+          precio_unitario: 21175,
+          subtotal: 21175,
+        },
+        {
+          nombre: 'ENV-07K-GM-DELIVERY',
+          cantidad: 1,
+          precio_unitario: 3999,
+          subtotal: 3999,
+        },
+      ],
+    });
+
+    const { pedido } = await service.crear(dto);
+
+    expect(pedido.costo_envio).toBe(3999);
+    expect(pedido.total).toBe(25174);
+    expect(service.generarIntencionDePago).toHaveBeenCalledWith(
+      expect.objectContaining({
+        costo_envio: 3999,
+        total: 25174,
+      }),
+    );
+  });
+
+  it('no cuenta el producto ENV para envio gratis por peso', async () => {
+    stkItemRepo.findOne
+      .mockResolvedValueOnce(
+        itemConPrecio(
+          'ITEM-9KG',
+          '100',
+          'PES',
+          '1',
+          null,
+          'Producto 1kg',
+        ),
+      )
+      .mockResolvedValueOnce(
+        itemConPrecio(
+          'ENV-07K-GM-DELIVERY',
+          '3999',
+          'PES',
+          '1',
+          null,
+          'Envio 7kg delivery',
+        ),
+      );
+
+    const dto = dtoBase({
+      tipo_envio: 'shipping',
+      costo_envio: 3999,
+      total: 4899,
+      productos: [
+        {
+          nombre: 'ITEM-9KG',
+          cantidad: 9,
+          precio_unitario: 100,
+          subtotal: 900,
+        },
+        {
+          nombre: 'ENV-07K-GM-DELIVERY',
+          cantidad: 1,
+          precio_unitario: 3999,
+          subtotal: 3999,
+        },
+      ],
+    });
+
+    const { pedido } = await service.crear(dto);
+
+    expect(pedido.costo_envio).toBe(3999);
+    expect(pedido.total).toBe(4899);
+  });
+
   it('no aplica envio gratis por peso para pickup', async () => {
     stkItemRepo.findOne.mockResolvedValue(
       itemConPrecio(

@@ -64,6 +64,7 @@ interface PedidoProductoPrecargado {
   producto: CreatePedidoDto['productos'][number];
   item: StkItem;
   peso?: number;
+  esProductoEnvio: boolean;
   aplicaDescuentoDiferencialPorCantidad: boolean;
 }
 
@@ -144,16 +145,20 @@ export class PedidoService {
       }
 
       const cantidad = this.obtenerCantidadProducto(producto);
-      const peso = parseProductWeightFromDescription(item.descripcion);
-      pesoTotalKg += (peso ?? 0) * cantidad;
+      const esProductoEnvio = this.esProductoEnvio(producto.nombre);
+      const peso = esProductoEnvio
+        ? undefined
+        : parseProductWeightFromDescription(item.descripcion);
+      if (!esProductoEnvio) {
+        pesoTotalKg += (peso ?? 0) * cantidad;
+      }
       const productoDescuento = {
         id: item.id,
         category: item.grupo,
       };
-      const aplicaDescuentoDiferencialPorCantidad = isEligibleForQuantityDiscount(
-        productoDescuento,
-        peso ?? 0,
-      );
+      const aplicaDescuentoDiferencialPorCantidad =
+        !esProductoEnvio &&
+        isEligibleForQuantityDiscount(productoDescuento, peso ?? 0);
 
       if (aplicaDescuentoDiferencialPorCantidad) {
         cantidadTotalDescuentoDiferencial += cantidad;
@@ -163,6 +168,7 @@ export class PedidoService {
         producto,
         item,
         peso,
+        esProductoEnvio,
         aplicaDescuentoDiferencialPorCantidad,
       });
     }
@@ -171,6 +177,7 @@ export class PedidoService {
       producto,
       item,
       peso,
+      esProductoEnvio,
       aplicaDescuentoDiferencialPorCantidad,
     } of productosPrecargados) {
       const cantidadParaDescuento = aplicaDescuentoDiferencialPorCantidad
@@ -183,6 +190,7 @@ export class PedidoService {
         metodoPago,
         peso,
         cantidadParaDescuento,
+        esProductoEnvio,
       );
       const diferenciaProducto = this.obtenerDiferenciaProducto(
         producto,
@@ -211,12 +219,16 @@ export class PedidoService {
         0,
       ),
     );
-    const costoEnvioCalculado = this.calcularCostoEnvioPedido(
-      dto,
-      pesoTotalKg,
-    );
+    const costoEnvioDesdeProducto =
+      this.obtenerCostoEnvioDesdeProductos(productosValidados);
+    const costoEnvioCalculado =
+      costoEnvioDesdeProducto ??
+      this.calcularCostoEnvioPedido(dto, pesoTotalKg);
+    const costoEnvioAdicional = costoEnvioDesdeProducto == null
+      ? costoEnvioCalculado
+      : 0;
     const totalCalculado = this.redondearPrecio(
-      productosNetos + costoEnvioCalculado,
+      productosNetos + costoEnvioAdicional,
     );
 
     await this.validarTotalesRecibidos(dto, {
@@ -1195,6 +1207,18 @@ export class PedidoService {
     return this.redondearPrecio(Number(dto.costo_envio ?? 0));
   }
 
+  private esProductoEnvio(nombre?: string | null): boolean {
+    return /^ENV-\d+K-GM-DELIVERY$/i.test(String(nombre ?? ''));
+  }
+
+  private obtenerCostoEnvioDesdeProductos(productos: PedidoItem[]): number | null {
+    const totalEnvio = productos
+      .filter((producto) => this.esProductoEnvio(producto.nombre))
+      .reduce((acc, producto) => acc + Number(producto.subtotal ?? 0), 0);
+
+    return totalEnvio > 0 ? this.redondearPrecio(totalEnvio) : null;
+  }
+
   private calcularProductoPedido(
     producto: CreatePedidoDto['productos'][number],
     item: StkItem,
@@ -1202,6 +1226,7 @@ export class PedidoService {
     metodoPago: PedidoMetodoPago,
     peso?: number,
     cantidadParaDescuento?: number,
+    esProductoEnvio = false,
   ): PedidoProductoCalculado {
     const cantidad = this.obtenerCantidadProducto(producto);
     const precioBaseUnitario = this.obtenerPrecioMinoristaCotizado(item);
@@ -1211,8 +1236,9 @@ export class PedidoService {
     };
     const pesoProducto = peso ?? parseProductWeightFromDescription(item.descripcion);
     const aplicaDescuentoProducto =
-      metodoPago === 'transfer' ||
-      isEligibleForQuantityDiscount(productoDescuento, pesoProducto ?? 0);
+      !esProductoEnvio &&
+      (metodoPago === 'transfer' ||
+        isEligibleForQuantityDiscount(productoDescuento, pesoProducto ?? 0));
     const descuentoProductoPorcentaje = aplicaDescuentoProducto
       ? this.parsearPorcentajeDescuento(
           getDiscountPercentageForProduct(
