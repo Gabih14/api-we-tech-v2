@@ -1239,6 +1239,7 @@ export class PedidoService {
       !esProductoEnvio &&
       (metodoPago === 'transfer' ||
         isEligibleForQuantityDiscount(productoDescuento, pesoProducto ?? 0));
+    const porcentajeCuponAplicable = esProductoEnvio ? 0 : porcentajeCupon;
     const descuentoProductoPorcentaje = aplicaDescuentoProducto
       ? this.parsearPorcentajeDescuento(
           getDiscountPercentageForProduct(
@@ -1250,14 +1251,14 @@ export class PedidoService {
       : 0;
     const descuentoPorcentaje = Math.max(
       descuentoProductoPorcentaje,
-      porcentajeCupon,
+      porcentajeCuponAplicable,
     );
     const subtotal = this.redondearPrecio(
       precioBaseUnitario * cantidad * (1 - descuentoPorcentaje / 100),
     );
     const precioUnitario = this.redondearPrecio(subtotal / cantidad);
     const descuentoCuponAplicado =
-      porcentajeCupon > descuentoProductoPorcentaje
+      porcentajeCuponAplicable > descuentoProductoPorcentaje
         ? this.redondearPrecio(
             precioBaseUnitario * cantidad - subtotal,
           )
