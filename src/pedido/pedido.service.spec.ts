@@ -503,6 +503,69 @@ describe('PedidoService recalculo de importes', () => {
     );
   });
 
+  it('no aplica cupon al producto ENV de envio', async () => {
+    stkItemRepo.findOne
+      .mockResolvedValueOnce(
+        itemConPrecio(
+          'ITEM-CUPON',
+          '100',
+          'PES',
+          '1',
+          null,
+          'Producto con cupon',
+        ),
+      )
+      .mockResolvedValueOnce(
+        itemConPrecio(
+          'ENV-09K-GM-DELIVERY',
+          '50',
+          'PES',
+          '1',
+          null,
+          'Envio delivery',
+        ),
+      );
+    cuponService.resolverPorcentajePorModalidad.mockResolvedValue({
+      porcentajeAplicado: 20,
+    });
+
+    const dto = dtoBase({
+      tipo_envio: 'shipping',
+      metodo_pago: 'online',
+      codigo_cupon: 'CUPON20',
+      descuento_cupon: 20,
+      costo_envio: 50,
+      total: 130,
+      productos: [
+        {
+          nombre: 'ITEM-CUPON',
+          cantidad: 1,
+          precio_unitario: 80,
+          subtotal: 80,
+          ajuste_porcentaje: 20,
+        },
+        {
+          nombre: 'ENV-09K-GM-DELIVERY',
+          cantidad: 1,
+          precio_unitario: 50,
+          subtotal: 50,
+          ajuste_porcentaje: 0,
+        },
+      ],
+    });
+
+    const { pedido } = await service.crear(dto);
+
+    expect(pedido.descuento_cupon).toBe(20);
+    expect(pedido.costo_envio).toBe(50);
+    expect(pedido.total).toBe(130);
+    expect(pedido.productos[0].precio_unitario).toBe(80);
+    expect(pedido.productos[0].ajuste_porcentaje).toBe(20);
+    expect(pedido.productos[1].precio_unitario).toBe(50);
+    expect(pedido.productos[1].subtotal).toBe(50);
+    expect(pedido.productos[1].ajuste_porcentaje).toBeNull();
+  });
+
   it('no cuenta el producto ENV para envio gratis por peso', async () => {
     stkItemRepo.findOne
       .mockResolvedValueOnce(

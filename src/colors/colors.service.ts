@@ -7,12 +7,22 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Not, Repository } from 'typeorm';
 import { CreateColorDto } from './dto/create-color.dto';
 import { UpdateColorDto } from './dto/update-color.dto';
+import { ColorGroup } from './entities/color-group.entity';
 import { Color } from './entities/color.entity';
+
+export interface ColorGroupSummaryResponse {
+  id: number;
+  name: string;
+  hex: string | null;
+  sortOrder: number;
+}
 
 export interface ColorResponse {
   id: number;
   name: string;
   hex: string;
+  colorGroupId: number | null;
+  colorGroup?: ColorGroupSummaryResponse | null;
 }
 
 @Injectable()
@@ -20,6 +30,8 @@ export class ColorsService {
   constructor(
     @InjectRepository(Color, 'back')
     private readonly colorsRepository: Repository<Color>,
+    @InjectRepository(ColorGroup, 'back')
+    private readonly colorGroupsRepository: Repository<ColorGroup>,
   ) {}
 
   async create(createColorDto: CreateColorDto): Promise<ColorResponse> {
@@ -38,8 +50,14 @@ export class ColorsService {
       throw new BadRequestException(`El color ${name} ya existe`);
     }
 
+    await this.ensureColorGroupExists(createColorDto.colorGroupId);
+
     const color = await this.colorsRepository.save(
-      this.colorsRepository.create({ name, hex }),
+      this.colorsRepository.create({
+        name,
+        hex,
+        colorGroupId: createColorDto.colorGroupId ?? null,
+      }),
     );
 
     return this.toResponse(color);
@@ -47,6 +65,7 @@ export class ColorsService {
 
   async findAll(): Promise<ColorResponse[]> {
     const colors = await this.colorsRepository.find({
+      relations: { colorGroup: true },
       order: { name: 'ASC' },
     });
 
@@ -85,8 +104,37 @@ export class ColorsService {
       color.hex = updateColorDto.hex.trim().toUpperCase();
     }
 
-    const updatedColor = await this.colorsRepository.save(color);
+    if (updateColorDto.colorGroupId !== undefined) {
+      await this.ensureColorGroupExists(updateColorDto.colorGroupId);
+      color.colorGroupId = updateColorDto.colorGroupId ?? null;
+    }
+
+    await this.colorsRepository.save(color);
+    const updatedColor = await this.colorsRepository.findOneOrFail({
+      where: { id },
+      relations: { colorGroup: true },
+    });
+
     return this.toResponse(updatedColor);
+  }
+
+  private async ensureColorGroupExists(
+    colorGroupId: number | null | undefined,
+  ): Promise<void> {
+    if (colorGroupId === undefined || colorGroupId === null) {
+      return;
+    }
+
+    const colorGroup = await this.colorGroupsRepository.findOne({
+      where: { id: colorGroupId },
+      select: { id: true },
+    });
+
+    if (!colorGroup) {
+      throw new BadRequestException(
+        `Grupo de color ${colorGroupId} no encontrado`,
+      );
+    }
   }
 
   private toResponse(color: Color): ColorResponse {
@@ -94,6 +142,15 @@ export class ColorsService {
       id: color.id,
       name: color.name,
       hex: color.hex,
+      colorGroupId: color.colorGroupId,
+      colorGroup: color.colorGroup
+        ? {
+            id: color.colorGroup.id,
+            name: color.colorGroup.name,
+            hex: color.colorGroup.hex,
+            sortOrder: color.colorGroup.sortOrder,
+          }
+        : null,
     };
   }
 }
