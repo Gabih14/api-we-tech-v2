@@ -61,6 +61,29 @@ describe('WhatsappService', () => {
       expect(mensaje).toContain('ID: pedido-123');
     });
 
+    it('muestra el costo de envio desde el producto ENV cuando el campo esta en cero', () => {
+      const mensaje = service.formatearMensajeParaDelivery({
+        ...pedidoBase,
+        costo_envio: 0,
+        productos: [
+          {
+            nombre: 'Notebook Lenovo',
+            cantidad: 1,
+            precio_unitario: 1250000,
+            subtotal: 1250000,
+          },
+          {
+            nombre: 'ENV-07K-GM-DELIVERY',
+            cantidad: 1,
+            precio_unitario: 3999,
+            subtotal: 3999,
+          },
+        ],
+      });
+
+      expect(mensaje).toContain('$3999.00');
+    });
+
     it('no incluye la linea de Maps cuando no hay ubicacion real', () => {
       const mensaje = service.formatearMensajeParaDelivery({
         ...pedidoBase,

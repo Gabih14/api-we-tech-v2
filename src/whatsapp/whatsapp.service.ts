@@ -40,7 +40,7 @@ export class WhatsappService {
       .join('\n');
 
     const ubicacion = pedido.cliente_ubicacion || 'No especificada';
-    const costoEnvio = (pedido.costo_envio != null) ? `$${Number(pedido.costo_envio).toFixed(2)}` : '$0.00';
+    const costoEnvio = this.formatearCostoEnvio(pedido, '$0.00');
     const tipoEnvio = pedido.delivery_method || 'pickup';
     const observaciones = pedido.observaciones_direccion ? `\n *Observaciones:* ${pedido.observaciones_direccion}` : '';
     const comprobante = this.formatearComprobante(pedido);
@@ -55,7 +55,7 @@ export class WhatsappService {
       .join('\n');
 
     const ubicacion = pedido.cliente_ubicacion || 'No especificada';
-    const costoEnvio = (pedido.costo_envio != null) ? `$${Number(pedido.costo_envio).toFixed(2)}` : '$0.00';
+    const costoEnvio = this.formatearCostoEnvio(pedido, '$0.00');
     const tipoEnvio = pedido.delivery_method || 'pickup';
     const observaciones = pedido.observaciones_direccion ? `\n *Observaciones:* ${pedido.observaciones_direccion}` : '';
     const callbackUrl = `https://shop.wetech.ar/checkout/callback?payment_id=${pedido.external_id}`;
@@ -73,7 +73,7 @@ export class WhatsappService {
       : '';
     const ubicacionLimpia = pedido.cliente_ubicacion?.trim();
     const ubicacion = ubicacionLimpia || 'Sin ubicación proporcionada';
-    const costoEnvio = (pedido.costo_envio != null) ? `$${Number(pedido.costo_envio).toFixed(2)}` : 'No especificado';
+    const costoEnvio = this.formatearCostoEnvio(pedido, 'No especificado');
     const observaciones = pedido.observaciones_direccion ? `\n *Observaciones:* ${pedido.observaciones_direccion}` : '';
     const comprobante = this.formatearComprobante(pedido);
     const mapsLink = this.formatearLinkMaps(ubicacionLimpia);
@@ -91,6 +91,34 @@ export class WhatsappService {
 
     const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(ubicacionLimpia)}`;
     return `\n *Maps:* ${url}\n`;
+  }
+
+  private formatearCostoEnvio(pedido: any, fallback: string): string {
+    const costoDesdeProducto = this.obtenerCostoEnvioDesdeProductos(
+      pedido?.productos,
+    );
+    const costo = costoDesdeProducto ?? pedido?.costo_envio;
+
+    return costo != null ? `$${Number(costo).toFixed(2)}` : fallback;
+  }
+
+  private obtenerCostoEnvioDesdeProductos(productos: any): number | null {
+    if (!Array.isArray(productos)) {
+      return null;
+    }
+
+    const total = productos
+      .filter((producto) => this.esProductoEnvio(producto?.nombre))
+      .reduce(
+        (acc, producto) => acc + Number(producto?.subtotal ?? 0),
+        0,
+      );
+
+    return total > 0 ? total : null;
+  }
+
+  private esProductoEnvio(nombre?: string | null): boolean {
+    return /^ENV-\d+K-GM-DELIVERY$/i.test(String(nombre ?? ''));
   }
 
   private formatearComprobante(pedido: any): string {
