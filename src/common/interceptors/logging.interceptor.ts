@@ -12,13 +12,16 @@ export class LoggingInterceptor implements NestInterceptor {
   intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
     const req = context.switchToHttp().getRequest();
     const { method, url, body } = req;
+    const requestUrl = req.originalUrl ?? url;
     const now = Date.now();
+    const shouldAlwaysLogBody =
+      method === 'POST' && this.isPedidoCreateRequest(requestUrl);
 
     // Evita loguear bodies grandes o no serializables
     let bodyPreview: any = body;
     try {
       const serialized = JSON.stringify(body);
-      if (serialized && serialized.length > 1000) {
+      if (serialized && serialized.length > 1000 && !shouldAlwaysLogBody) {
         bodyPreview = '[omitted large body]';
       } else {
         bodyPreview = body;
@@ -56,5 +59,10 @@ export class LoggingInterceptor implements NestInterceptor {
         throw err;
       }),
     );
+  }
+
+  private isPedidoCreateRequest(url: string): boolean {
+    const path = url.split('?')[0].replace(/\/+$/, '');
+    return path === '/pedido' || path.endsWith('/pedido');
   }
 }

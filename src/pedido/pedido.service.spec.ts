@@ -157,6 +157,42 @@ describe('PedidoService recalculo de importes', () => {
     );
   });
 
+  it('arma cliente_ubicacion priorizando la direccion resuelta por Maps', async () => {
+    stkItemRepo.findOne.mockResolvedValue(itemConPrecio('ITEM-1', '10.01'));
+
+    const dto = dtoBase({
+      calle: 'Direccion Parcial',
+      ciudad: 'Ciudad Real',
+      region: 'Provincia Real',
+      pais: 'AR',
+      codigo_postal: '2000',
+      direccion: 'Direccion Real 456, M2000 Ciudad Real, Argentina',
+      billing_address: {
+        street: 'Billing Street',
+        number: '999',
+        city: 'Billing City',
+        region: 'Billing Region',
+        country: 'BR',
+        postal_code: '9999',
+      },
+      total: 10,
+      productos: [
+        {
+          nombre: 'ITEM-1',
+          cantidad: 1,
+          precio_unitario: 10,
+          subtotal: 10,
+        },
+      ],
+    });
+
+    const { pedido } = await service.crear(dto);
+
+    expect(pedido.cliente_ubicacion).toBe(
+      'Direccion Real 456, M2000 Ciudad Real, Argentina',
+    );
+  });
+
   it('cotiza dolares solo para moneda DOL y redondea normal', async () => {
     stkItemRepo.findOne.mockResolvedValue(
       itemConPrecio('ITEM-USD', '10.01', 'DOL', '1000.25'),
