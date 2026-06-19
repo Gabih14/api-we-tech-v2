@@ -36,6 +36,7 @@ import {
 type PedidoMetodoPago = 'online' | 'transfer';
 
 const FREE_SHIPPING_MIN_WEIGHT_KG = 10;
+const ONLINE_QUANTITY_DISCOUNT_MIN_QUANTITY = 5;
 const ALERTA_IMPORTES_EMAIL = 'virtual.hache@gmail.com';
 
 interface PedidoProductoCalculado {
@@ -1235,16 +1236,18 @@ export class PedidoService {
       category: item.grupo,
     };
     const pesoProducto = peso ?? parseProductWeightFromDescription(item.descripcion);
+    const cantidadDescuentoProducto = cantidadParaDescuento ?? cantidad;
     const aplicaDescuentoProducto =
       !esProductoEnvio &&
       (metodoPago === 'transfer' ||
-        isEligibleForQuantityDiscount(productoDescuento, pesoProducto ?? 0));
+        (isEligibleForQuantityDiscount(productoDescuento, pesoProducto ?? 0) &&
+          cantidadDescuentoProducto >= ONLINE_QUANTITY_DISCOUNT_MIN_QUANTITY));
     const porcentajeCuponAplicable = esProductoEnvio ? 0 : porcentajeCupon;
     const descuentoProductoPorcentaje = aplicaDescuentoProducto
       ? this.parsearPorcentajeDescuento(
           getDiscountPercentageForProduct(
             productoDescuento,
-            cantidadParaDescuento ?? cantidad,
+            cantidadDescuentoProducto,
             pesoProducto,
           ),
         )
