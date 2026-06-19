@@ -372,6 +372,95 @@ describe('PedidoService recalculo de importes', () => {
     expect(pedido.total).toBe(25174);
   });
 
+  it('no aplica descuento base a filamentos elegibles en online con menos de 5 unidades', async () => {
+    stkItemRepo.findOne
+      .mockResolvedValueOnce(
+        itemConPrecio(
+          'G3-SILK-1KG-DORA',
+          '32352',
+          'PES',
+          '1',
+          'FILAMENTOS',
+          'Filamento Silk 1kg dorado',
+        ),
+      )
+      .mockResolvedValueOnce(
+        itemConPrecio(
+          'HB-PLA-1KG-COBA',
+          '19411',
+          'PES',
+          '1',
+          'FILAMENTOS',
+          'Filamento PLA 1kg cobre',
+        ),
+      )
+      .mockResolvedValueOnce(
+        itemConPrecio(
+          'HB-PLA-1KG-PIMA',
+          '19411',
+          'PES',
+          '1',
+          'FILAMENTOS',
+          'Filamento PLA 1kg piel madera',
+        ),
+      )
+      .mockResolvedValueOnce(
+        itemConPrecio(
+          'HB-PLA-1KG-MARR',
+          '19411',
+          'PES',
+          '1',
+          'FILAMENTOS',
+          'Filamento PLA 1kg marron',
+        ),
+      );
+
+    const dto = dtoBase({
+      metodo_pago: 'online',
+      total: 90585,
+      productos: [
+        {
+          nombre: 'G3-SILK-1KG-DORA',
+          cantidad: 1,
+          precio_unitario: 32352,
+          subtotal: 32352,
+          ajuste_porcentaje: 0,
+        },
+        {
+          nombre: 'HB-PLA-1KG-COBA',
+          cantidad: 1,
+          precio_unitario: 19411,
+          subtotal: 19411,
+          ajuste_porcentaje: 0,
+        },
+        {
+          nombre: 'HB-PLA-1KG-PIMA',
+          cantidad: 1,
+          precio_unitario: 19411,
+          subtotal: 19411,
+          ajuste_porcentaje: 0,
+        },
+        {
+          nombre: 'HB-PLA-1KG-MARR',
+          cantidad: 1,
+          precio_unitario: 19411,
+          subtotal: 19411,
+          ajuste_porcentaje: 0,
+        },
+      ],
+    });
+
+    const { pedido } = await service.crear(dto);
+
+    expect(pedido.productos[1].precio_unitario).toBe(19411);
+    expect(pedido.productos[1].ajuste_porcentaje).toBeNull();
+    expect(pedido.productos[2].precio_unitario).toBe(19411);
+    expect(pedido.productos[2].ajuste_porcentaje).toBeNull();
+    expect(pedido.productos[3].precio_unitario).toBe(19411);
+    expect(pedido.productos[3].ajuste_porcentaje).toBeNull();
+    expect(pedido.total).toBe(90585);
+  });
+
   it('deja envio gratis para shipping desde 10 kg aunque reciba costo de envio', async () => {
     stkItemRepo.findOne.mockResolvedValue(
       itemConPrecio(
