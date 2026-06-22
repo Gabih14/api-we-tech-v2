@@ -372,13 +372,32 @@ export class VtaComprobanteService {
   } {
     if (!ubicacionString) return {};
 
-    // Formato esperado: "calle numero, ciudad, region, pais, postal_code"
-    const partes = ubicacionString.split(',').map((p) => p.trim());
-    const cpa = partes.pop();
-    partes.pop();
-    const provincia = partes.pop();
-    const localidad = partes.pop();
-    const direccion = partes.join(', ');
+    const partes = ubicacionString
+      .split(',')
+      .map((p) => p.trim())
+      .filter(Boolean);
+
+    let direccion: string | undefined;
+    let localidad: string | undefined;
+    let provincia: string | undefined;
+    let cpa: string | undefined;
+
+    if (partes.length >= 5) {
+      // Formato estructurado: "calle numero, ciudad, region, pais, postal_code"
+      cpa = partes.pop();
+      partes.pop();
+      provincia = partes.pop();
+      localidad = partes.pop();
+      direccion = partes.join(', ');
+    } else if (partes.length === 4) {
+      // Formato Google: "calle numero, postal_code, region, pais"
+      partes.pop();
+      provincia = partes.pop();
+      cpa = partes.pop();
+      direccion = partes.join(', ');
+    } else {
+      direccion = partes.join(', ');
+    }
 
     return {
       direccion: direccion || undefined,
