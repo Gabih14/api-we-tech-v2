@@ -170,4 +170,29 @@ describe('VtaComprobanteService crearDesdePedido', () => {
       }),
     );
   });
+  it('toma la provincia correcta desde direcciones de Google Maps', async () => {
+    await service.crearDesdePedido({
+      ...pedidoBase(
+        [
+          {
+            nombre: 'ITEM-SIN-AJUSTE',
+            cantidad: 1,
+            precio_unitario: 100,
+            subtotal: 100,
+            ajuste_porcentaje: null,
+          },
+        ],
+        100,
+      ),
+      cliente_ubicacion: 'Joaquin V. Gonzalez 450, M5519, Mendoza, Argentina',
+    } as Pedido);
+
+    expect(clienteService.findOrCreateOrUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        direccion: 'Joaquin V. Gonzalez 450',
+        provincia: 'Mendoza',
+        cpa: 'M5519',
+      }),
+    );
+  });
 });
