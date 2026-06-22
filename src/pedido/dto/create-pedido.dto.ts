@@ -92,6 +92,10 @@ export class CreatePedidoDto {
   @IsString()
   codigo_postal: string;
 
+  @IsOptional()
+  @IsString()
+  direccion?: string;
+
   @IsString()
   mobile: string;
 

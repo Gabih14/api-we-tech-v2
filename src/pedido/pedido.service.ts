@@ -244,15 +244,17 @@ export class PedidoService {
     }
 
     const externalId = uuidv4().replace(/-/g, '');
+    const callePedido = dto.calle || dto.billing_address?.street || '';
     const direccionPedido = {
-      calle: dto.billing_address?.street || dto.calle || '',
-      numero: dto.billing_address?.number || '',
-      ciudad: dto.billing_address?.city || dto.ciudad || '',
-      region: dto.billing_address?.region || dto.region || '',
-      pais: dto.billing_address?.country || dto.pais || '',
-      codigoPostal: dto.billing_address?.postal_code || dto.codigo_postal || '',
+      calle: callePedido,
+      numero: dto.calle ? '' : dto.billing_address?.number || '',
+      ciudad: dto.ciudad || dto.billing_address?.city || '',
+      region: dto.region || dto.billing_address?.region || '',
+      pais: dto.pais || dto.billing_address?.country || '',
+      codigoPostal: dto.codigo_postal || dto.billing_address?.postal_code || '',
     };
-    const clienteUbicacion = [
+    const ubicacionDesdeDireccion = dto.direccion?.trim();
+    const ubicacionDesdePartes = [
       `${direccionPedido.calle} ${direccionPedido.numero}`.trim(),
       direccionPedido.ciudad,
       direccionPedido.region,
@@ -261,6 +263,7 @@ export class PedidoService {
     ]
       .filter(Boolean)
       .join(', ');
+    const clienteUbicacion = ubicacionDesdeDireccion || ubicacionDesdePartes;
 
     const pedido = this.pedidoRepo.create({
       cliente_cuit: dto.cliente_cuit,
