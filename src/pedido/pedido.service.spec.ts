@@ -543,7 +543,7 @@ describe('PedidoService recalculo de importes', () => {
     expect(pedido.total).toBe(93174);
   });
 
-  it('acepta pedidos sin precios y calcula descuento elegible desde DB', async () => {
+  it('acepta pedidos online sin precios y calcula importes desde DB sin descuento diferencial', async () => {
     stkItemRepo.findOne.mockResolvedValue(
       itemConPrecio(
         '3N-PLA-1KG-NEGR',
@@ -567,18 +567,17 @@ describe('PedidoService recalculo de importes', () => {
 
     const { pedido } = await service.crear(dto);
 
-    expect(pedido.productos[0].precio_unitario).toBe(80);
-    expect(pedido.productos[0].subtotal).toBe(800);
-    expect(pedido.productos[0].ajuste_porcentaje).toBe(20);
-    expect(pedido.total).toBe(800);
+    expect(pedido.productos[0].precio_unitario).toBe(100);
+    expect(pedido.productos[0].subtotal).toBe(1000);
+    expect(pedido.productos[0].ajuste_porcentaje).toBeNull();
+    expect(pedido.total).toBe(1000);
     expect(service.generarIntencionDePago).toHaveBeenCalledWith(
       expect.objectContaining({
-        total: 800,
+        total: 1000,
         productos: [
           expect.objectContaining({
-            precio_unitario: 80,
-            subtotal: 800,
-            ajuste_porcentaje: 20,
+            precio_unitario: 100,
+            subtotal: 1000,
           }),
         ],
       }),
@@ -707,6 +706,61 @@ describe('PedidoService recalculo de importes', () => {
     expect(pedido.productos[3].precio_unitario).toBe(19411);
     expect(pedido.productos[3].ajuste_porcentaje).toBeNull();
     expect(pedido.total).toBe(90585);
+  });
+
+  it('no aplica descuento diferencial a filamentos elegibles en online aunque llegue a 5 unidades', async () => {
+    stkItemRepo.findOne
+      .mockResolvedValueOnce(
+        itemConPrecio(
+          'G3-PLA1-1KG-NEGR',
+          '100',
+          'PES',
+          '1',
+          'FILAMENTOS',
+          'Filamento PLA 1kg negro',
+        ),
+      )
+      .mockResolvedValueOnce(
+        itemConPrecio(
+          'G3-PLA2-1KG-AMFL',
+          '100',
+          'PES',
+          '1',
+          'FILAMENTOS',
+          'Filamento PLA 1kg amarillo fluor',
+        ),
+      );
+
+    const dto = dtoBase({
+      metodo_pago: 'online',
+      total: 500,
+      productos: [
+        {
+          nombre: 'G3-PLA1-1KG-NEGR',
+          cantidad: 3,
+          precio_unitario: 100,
+          subtotal: 300,
+          ajuste_porcentaje: 0,
+        },
+        {
+          nombre: 'G3-PLA2-1KG-AMFL',
+          cantidad: 2,
+          precio_unitario: 100,
+          subtotal: 200,
+          ajuste_porcentaje: 0,
+        },
+      ],
+    });
+
+    const { pedido } = await service.crear(dto);
+
+    expect(pedido.productos[0].precio_unitario).toBe(100);
+    expect(pedido.productos[0].subtotal).toBe(300);
+    expect(pedido.productos[0].ajuste_porcentaje).toBeNull();
+    expect(pedido.productos[1].precio_unitario).toBe(100);
+    expect(pedido.productos[1].subtotal).toBe(200);
+    expect(pedido.productos[1].ajuste_porcentaje).toBeNull();
+    expect(pedido.total).toBe(500);
   });
 
   it('deja envio gratis para shipping desde 10 kg aunque reciba costo de envio', async () => {
@@ -1083,7 +1137,7 @@ describe('PedidoService recalculo de importes', () => {
     expect(pedido.total).toBe(90321);
   });
 
-  it('combina colores de la misma marca elegible para calcular el descuento por cantidad', async () => {
+  it('combina colores de la misma marca elegible para calcular el descuento por cantidad en transferencias', async () => {
     stkItemRepo.findOne
       .mockResolvedValueOnce(
         itemConPrecio(
@@ -1107,6 +1161,7 @@ describe('PedidoService recalculo de importes', () => {
       );
 
     const dto = dtoBase({
+      metodo_pago: 'transfer',
       total: undefined,
       productos: [
         {
@@ -1131,7 +1186,7 @@ describe('PedidoService recalculo de importes', () => {
     expect(pedido.total).toBe(415);
   });
 
-  it('combina marcas distintas dentro de la lista de descuento diferencial', async () => {
+  it('combina marcas distintas dentro de la lista de descuento diferencial en transferencias', async () => {
     stkItemRepo.findOne
       .mockResolvedValueOnce(
         itemConPrecio(
@@ -1155,6 +1210,7 @@ describe('PedidoService recalculo de importes', () => {
       );
 
     const dto = dtoBase({
+      metodo_pago: 'transfer',
       total: undefined,
       productos: [
         {

@@ -36,7 +36,6 @@ import {
 type PedidoMetodoPago = 'online' | 'transfer';
 
 const FREE_SHIPPING_MIN_WEIGHT_KG = 10;
-const ONLINE_QUANTITY_DISCOUNT_MIN_QUANTITY = 5;
 const ALERTA_IMPORTES_EMAIL = 'virtual.hache@gmail.com';
 // TODO impresoras: cuando se vendan por la web, no deben usar IVA 21%.
 // Las impresoras tributan 10.5%, por lo que hay que resolver la alicuota por producto.
@@ -1273,11 +1272,9 @@ export class PedidoService {
     };
     const pesoProducto = peso ?? parseProductWeightFromDescription(item.descripcion);
     const cantidadDescuentoProducto = cantidadParaDescuento ?? cantidad;
+    // Los descuentos automaticos de producto solo corresponden a transferencias.
     const aplicaDescuentoProducto =
-      !esProductoEnvio &&
-      (metodoPago === 'transfer' ||
-        (isEligibleForQuantityDiscount(productoDescuento, pesoProducto ?? 0) &&
-          cantidadDescuentoProducto >= ONLINE_QUANTITY_DISCOUNT_MIN_QUANTITY));
+      !esProductoEnvio && metodoPago === 'transfer';
     const porcentajeCuponAplicable = esProductoEnvio ? 0 : porcentajeCupon;
     const descuentoProductoPorcentaje = aplicaDescuentoProducto
       ? this.parsearPorcentajeDescuento(
