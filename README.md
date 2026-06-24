@@ -84,6 +84,8 @@ No es necesario enviar `external_id`; se genera internamente.
 
 `subtotal` en cada producto es obligatorio y representa el importe bruto de la línea (sin descuento), mientras que `precio_unitario` representa el valor neto por unidad (con descuento aplicado).
 
+Los descuentos automáticos de productos, incluyendo el descuento base de filamentos y los descuentos diferenciales por cantidad o marca elegible, se aplican solo cuando `metodo_pago` es `transfer`. Para pagos `online`, el backend no aplica descuentos automáticos de producto; solo considera cupones válidos para la modalidad correspondiente.
+
 ```json
 {
   "cliente_nombre": "Juan Pérez",
