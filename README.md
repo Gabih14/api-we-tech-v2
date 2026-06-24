@@ -84,6 +84,8 @@ No es necesario enviar `external_id`; se genera internamente.
 
 `subtotal` en cada producto es obligatorio y representa el importe bruto de la línea (sin descuento), mientras que `precio_unitario` representa el valor neto por unidad (con descuento aplicado).
 
+Si se envia `factura_tipo` con valor `A` o `B`, el backend valida los importes de cada producto con IVA incluido y guarda internamente el neto mas el IVA discriminado. Actualmente la alicuota aplicada es 21% por linea. Cuando se incorporen impresoras a la venta web, no se debe reutilizar ese porcentaje: las impresoras deben calcularse con IVA 10.5%, resolviendo la alicuota por producto.
+
 ```json
 {
   "cliente_nombre": "Juan Pérez",

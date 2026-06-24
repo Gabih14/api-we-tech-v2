@@ -45,7 +45,10 @@ describe('VtaComprobanteService crearDesdePedido', () => {
     );
     jest
       .spyOn(service as any, 'generarNumeroComprobante')
-      .mockResolvedValue('X 00001 00000001');
+      .mockImplementation(async (_tipo: string, letra: string) => {
+        const puntoDeVenta = letra === 'X' ? '00001' : '00005';
+        return `${letra} ${puntoDeVenta} 00000001`;
+      });
   });
 
   it('registra ajuste de descuento usando ajuste_porcentaje del pedido', async () => {
@@ -66,8 +69,11 @@ describe('VtaComprobanteService crearDesdePedido', () => {
 
     expect(comprobanteRepository.create).toHaveBeenCalledWith(
       expect.objectContaining({
+        tipo: 'FX',
+        comprobante: 'X 00001 00000001',
         total: 415,
         subtotal: 415,
+        iva: 0,
         nogravado: 415,
         ajuste: -17,
         ajuste_neto: -85,
@@ -167,6 +173,147 @@ describe('VtaComprobanteService crearDesdePedido', () => {
         importe: 200,
         ajuste: undefined,
         ajuste_neto: undefined,
+      }),
+    );
+  });
+
+  it('genera factura A con IVA discriminado', async () => {
+    await service.crearDesdePedido({
+      ...pedidoBase(
+        [
+          {
+            nombre: 'ITEM-FAC-A',
+            cantidad: 1,
+            precio_unitario: 100,
+            subtotal: 100,
+            ajuste_porcentaje: null,
+          },
+        ],
+        121,
+      ),
+      factura_tipo: 'A',
+      factura_iva_porcentaje: 21,
+      factura_iva_importe: 21,
+    } as Pedido);
+
+    expect(service['generarNumeroComprobante']).toHaveBeenCalledWith('FA', 'A');
+    expect(clienteService.findOrCreateOrUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        condicionIva: 'RI',
+      }),
+    );
+    expect(comprobanteRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tipo: 'FA',
+        comprobante: 'A 00005 00000001',
+        condicion_iva: 'RI',
+        lista: 'MINORISTA CON IVA',
+        ivainc: undefined,
+        alicuota: undefined,
+        anclar_precio: false,
+        subtotal: 100,
+        neto: 100,
+        nogravado: 0,
+        alicuotas: '21',
+        iva: 21,
+        total: 121,
+        ajuste: undefined,
+        ajuste_neto: undefined,
+        ajuste_iva: undefined,
+      }),
+    );
+    expect(comprobanteItemService.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        itemId: 'ITEM-FAC-A',
+        importe: 100,
+        ajuste_iva: 21,
+      }),
+    );
+  });
+
+  it('genera factura B con IVA discriminado', async () => {
+    await service.crearDesdePedido({
+      ...pedidoBase(
+        [
+          {
+            nombre: 'ITEM-FAC-B',
+            cantidad: 1,
+            precio_unitario: 100,
+            subtotal: 100,
+            ajuste_porcentaje: null,
+          },
+        ],
+        121,
+      ),
+      factura_tipo: 'B',
+      factura_iva_porcentaje: 21,
+      factura_iva_importe: 21,
+    } as Pedido);
+
+    expect(service['generarNumeroComprobante']).toHaveBeenCalledWith('FB', 'B');
+    expect(clienteService.findOrCreateOrUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        condicionIva: 'CF',
+      }),
+    );
+    expect(comprobanteRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tipo: 'FB',
+        comprobante: 'B 00005 00000001',
+        condicion_iva: 'CF',
+        lista: 'MINORISTA CON IVA',
+        ivainc: true,
+        alicuota: undefined,
+        anclar_precio: false,
+        subtotal: 100,
+        neto: 100,
+        nogravado: 0,
+        alicuotas: '21',
+        iva: 21,
+        total: 121,
+        ajuste: undefined,
+        ajuste_neto: undefined,
+        ajuste_iva: undefined,
+      }),
+    );
+    expect(comprobanteItemService.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        itemId: 'ITEM-FAC-B',
+        importe: 100,
+        ajuste_iva: 21,
+      }),
+    );
+  });
+
+  it('mantiene ajustes de cabecera en facturas fiscales con descuento', async () => {
+    await service.crearDesdePedido({
+      ...pedidoBase(
+        [
+          {
+            nombre: 'ITEM-FAC-A-DESC',
+            cantidad: 1,
+            precio_unitario: 85,
+            subtotal: 85,
+            ajuste_porcentaje: 15,
+          },
+        ],
+        103,
+      ),
+      factura_tipo: 'A',
+      factura_iva_porcentaje: 21,
+      factura_iva_importe: 18,
+    } as Pedido);
+
+    expect(comprobanteRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tipo: 'FA',
+        subtotal: 85,
+        neto: 85,
+        iva: 18,
+        total: 103,
+        ajuste: -15,
+        ajuste_neto: -15,
+        ajuste_iva: -3.15,
       }),
     );
   });

@@ -33,6 +33,12 @@ type RawVentasPorVendedor = {
   cantidadComprobantes: string | null;
 };
 
+type TipoComprobantePedido = {
+  tipo: 'FX' | 'FA' | 'FB';
+  letra: 'X' | 'A' | 'B';
+  facturaTipo: 'A' | 'B' | null;
+};
+
 @Injectable()
 export class VtaComprobanteService {
   constructor(
@@ -181,7 +187,7 @@ export class VtaComprobanteService {
       provincia: ubicacionParsed.provincia,
       cpa: ubicacionParsed.cpa,
       observaciones: pedido.observaciones_direccion ?? undefined,
-      condicionIva: 'CF',
+      condicionIva: pedido.factura_tipo === 'A' ? 'RI' : 'CF',
       visible: true,
     };
     const cliente = await this.clienteService.findOrCreateOrUpdate(
@@ -189,7 +195,11 @@ export class VtaComprobanteService {
     );
     const razonSocial = cliente.razonSocial || pedido.cliente_nombre;
 
-    const numero = await this.generarNumeroComprobante();
+    const tipoComprobante = this.obtenerTipoComprobantePedido(pedido);
+    const numero = await this.generarNumeroComprobante(
+      tipoComprobante.tipo,
+      tipoComprobante.letra,
+    );
 
     const cantidadTotal = pedido.productos?.reduce(
       (acc, p) => acc + (p.cantidad ?? 0),
@@ -237,6 +247,12 @@ export class VtaComprobanteService {
     );
     // ✅ Usar el total del pedido para evitar discrepancias por redondeo
     const totalImporte = this.redondear2(pedido.total);
+    const ivaImporte = tipoComprobante.facturaTipo
+      ? this.redondear2(Number(pedido.factura_iva_importe ?? 0))
+      : 0;
+    const netoImporte = tipoComprobante.facturaTipo
+      ? this.redondear2(totalImporte - ivaImporte)
+      : 0;
     const totalAjusteNeto = this.redondear2(
       itemsCalculo.reduce((acc, item) => acc + (item.ajusteNeto ?? 0), 0),
     );
@@ -244,6 +260,10 @@ export class VtaComprobanteService {
       baseTotal !== 0 && totalAjusteNeto !== 0
         ? this.redondear2((totalAjusteNeto / baseTotal) * 100)
         : null;
+    const esFacturaFiscal = Boolean(tipoComprobante.facturaTipo);
+    const totalAjusteIva = esFacturaFiscal
+      ? this.redondear2(totalAjusteNeto * 0.21)
+      : 0;
 
     const cobroFields: Partial<VtaComprobante> =
       (pedido.metodo_pago ?? 'online') === 'transfer'
@@ -251,7 +271,7 @@ export class VtaComprobanteService {
         : { cobrado: totalImporte };
 
     const nuevoComprobanteData: DeepPartial<VtaComprobante> = {
-      tipo: 'FX',
+      tipo: tipoComprobante.tipo,
       comprobante: numero,
       cliente: pedido.cliente_cuit,
       razon_social: razonSocial,
@@ -259,18 +279,21 @@ export class VtaComprobanteService {
       periodo: this.obtenerPeriodoActual(),
       tipo_documento: 'CUIT',
       numero_documento: pedido.cliente_cuit,
+      condicion_iva: tipoComprobante.facturaTipo === 'A' ? 'RI' : 'CF',
       moneda: 'PES',
       cotizacion: 1,
-      lista: 'MINORISTA', // Hacerlo variable cuando se implemente esa funcionalidad de mayorista/minorista
-      ivainc: true,
-      anclar_precio: true,
+      lista: esFacturaFiscal ? 'MINORISTA CON IVA' : 'MINORISTA',
+      ivainc: tipoComprobante.facturaTipo === 'A' ? undefined : true,
+      alicuota: undefined,
+      anclar_precio: esFacturaFiscal ? false : true,
       anulado: false,
       comisionliq: false,
-      subtotal: totalImporte,
-      neto: 0,
+      subtotal: esFacturaFiscal ? netoImporte : totalImporte,
+      neto: netoImporte,
       exento: 0,
-      nogravado: totalImporte,
-      iva: 0,
+      nogravado: tipoComprobante.facturaTipo ? 0 : totalImporte,
+      alicuotas: tipoComprobante.facturaTipo ? '21' : undefined,
+      iva: ivaImporte,
       impuesto_1: 0,
       impuesto_2: 0,
       impuesto_3: 0,
@@ -283,7 +306,8 @@ export class VtaComprobanteService {
       total: totalImporte,
       ajuste: ajusteCabecera ?? undefined,
       ajuste_neto: totalAjusteNeto === 0 ? undefined : totalAjusteNeto,
-      ajuste_iva: undefined,
+      ajuste_iva:
+        esFacturaFiscal && totalAjusteIva !== 0 ? totalAjusteIva : undefined,
       cantidad: cantidadTotal ?? 0,
       entregado: 0,
       entregado$: 0,
@@ -304,6 +328,9 @@ export class VtaComprobanteService {
 
     // 🧮 Crear ítems asociados
     let linea = 1;
+    const ajustesIva = tipoComprobante.facturaTipo
+      ? this.calcularAjustesIvaItems(itemsCalculo.map((item) => item.importe))
+      : [];
     for (const item of itemsCalculo) {
       const producto = item.producto;
       await this.comprobanteItemService.create({
@@ -315,7 +342,7 @@ export class VtaComprobanteService {
         importe: item.importe,
         ajuste: item.ajuste ?? undefined,
         ajuste_neto: item.ajusteNeto ?? undefined,
-        ajuste_iva: undefined,
+        ajuste_iva: ajustesIva[linea - 1] ?? undefined,
         itemId: producto.nombre, // el ID del producto
       } as any);
       linea++;
@@ -332,13 +359,39 @@ export class VtaComprobanteService {
   }
 
   // 🔢 Genera el número en formato "X 00001 00000227"
-  private async generarNumeroComprobante(): Promise<string> {
-    const letra = 'X';
-    const puntoDeVenta = '00001';
+  private obtenerTipoComprobantePedido(pedido: Pedido): TipoComprobantePedido {
+    if (pedido.factura_tipo === 'A') {
+      return { tipo: 'FA', letra: 'A', facturaTipo: 'A' };
+    }
+
+    if (pedido.factura_tipo === 'B') {
+      return { tipo: 'FB', letra: 'B', facturaTipo: 'B' };
+    }
+
+    return { tipo: 'FX', letra: 'X', facturaTipo: null };
+  }
+
+  private calcularAjustesIvaItems(
+    importes: number[],
+  ): number[] {
+    if (importes.length === 0) {
+      return [];
+    }
+
+    return importes.map((importe) =>
+      Math.round(Number(importe ?? 0) * 0.21),
+    );
+  }
+
+  private async generarNumeroComprobante(
+    tipo: 'FX' | 'FA' | 'FB' = 'FX',
+    letra: 'X' | 'A' | 'B' = 'X',
+  ): Promise<string> {
+    const puntoDeVenta = tipo === 'FX' ? '00001' : '00005';
 
     const ultimo = await this.comprobanteRepository
       .createQueryBuilder('c')
-      .where('c.tipo = :tipo', { tipo: 'FX' })
+      .where('c.tipo = :tipo', { tipo })
       .andWhere('c.comprobante LIKE :prefix', {
         prefix: `${letra} ${puntoDeVenta} %`,
       })
