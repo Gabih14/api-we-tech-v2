@@ -37,6 +37,9 @@ type PedidoMetodoPago = 'online' | 'transfer';
 
 const FREE_SHIPPING_MIN_WEIGHT_KG = 10;
 const ALERTA_IMPORTES_EMAIL = 'virtual.hache@gmail.com';
+// TODO impresoras: cuando se vendan por la web, no deben usar IVA 21%.
+// Las impresoras tributan 10.5%, por lo que hay que resolver la alicuota por producto.
+const FACTURA_IVA_PORCENTAJE = 21;
 
 interface PedidoProductoCalculado {
   nombre: string;
@@ -121,6 +124,11 @@ export class PedidoService {
     }
 
     const metodoPago = dto.metodo_pago ?? 'online';
+    const facturaTipo =
+      dto.factura_tipo === 'A' || dto.factura_tipo === 'B'
+        ? dto.factura_tipo
+        : null;
+    const requiereFactura = facturaTipo !== null;
     const porcentajeCupon = await this.resolverPorcentajeCupon(
       dto.codigo_cupon,
       metodoPago,
@@ -191,10 +199,12 @@ export class PedidoService {
         peso,
         cantidadParaDescuento,
         esProductoEnvio,
+        requiereFactura,
       );
       const diferenciaProducto = this.obtenerDiferenciaProducto(
         producto,
         productoCalculado,
+        requiereFactura,
       );
 
       if (diferenciaProducto) {
@@ -227,15 +237,21 @@ export class PedidoService {
     const costoEnvioAdicional = costoEnvioDesdeProducto == null
       ? costoEnvioCalculado
       : 0;
-    const totalCalculado = this.redondearPrecio(
+    const subtotalSinIva = this.redondearPrecio(
       productosNetos + costoEnvioAdicional,
     );
+    const facturaIvaImporte = facturaTipo
+      ? this.calcularIvaFacturaImporte(subtotalSinIva)
+      : null;
+    const totalCalculado = subtotalSinIva + (facturaIvaImporte ?? 0);
 
     await this.validarTotalesRecibidos(dto, {
       total: totalCalculado,
       descuento_cupon: descuentoCupon,
       productos: diferenciasProductos,
       costo_envio: costoEnvioCalculado,
+      subtotal_sin_iva: subtotalSinIva,
+      factura_iva_importe: facturaIvaImporte,
     });
 
     for (const p of productosValidados) {
@@ -280,6 +296,9 @@ export class PedidoService {
       estado: 'PENDIENTE',
       productos: productosValidados,
       metodo_pago: metodoPago,
+      factura_tipo: facturaTipo,
+      factura_iva_porcentaje: facturaTipo ? FACTURA_IVA_PORCENTAJE : null,
+      factura_iva_importe: facturaIvaImporte,
     });
 
     const pedidoGuardado = await this.pedidoRepo.save(pedido);
@@ -1196,6 +1215,16 @@ export class PedidoService {
     return Number(Math.round(valor).toFixed(2));
   }
 
+  private calcularIvaFacturaImporte(importe: number): number {
+    return this.redondearPrecio(importe * (FACTURA_IVA_PORCENTAJE / 100));
+  }
+
+  private normalizarFacturaTipo(
+    facturaTipo?: CreatePedidoDto['factura_tipo'],
+  ): 'A' | 'B' | null {
+    return facturaTipo === 'A' || facturaTipo === 'B' ? facturaTipo : null;
+  }
+
   private calcularCostoEnvioPedido(
     dto: CreatePedidoDto,
     pesoTotalKg: number,
@@ -1230,9 +1259,13 @@ export class PedidoService {
     peso?: number,
     cantidadParaDescuento?: number,
     esProductoEnvio = false,
+    incluyeIvaFactura = false,
   ): PedidoProductoCalculado {
     const cantidad = this.obtenerCantidadProducto(producto);
-    const precioBaseUnitario = this.obtenerPrecioMinoristaCotizado(item);
+    const precioBaseUnitario = this.obtenerPrecioListaCotizado(
+      item,
+      incluyeIvaFactura ? 'MINORISTA CON IVA' : 'MINORISTA',
+    );
     const productoDescuento = {
       id: item.id,
       category: item.grupo,
@@ -1297,20 +1330,23 @@ export class PedidoService {
     return Number.isFinite(valor) ? valor : 0;
   }
 
-  private obtenerPrecioMinoristaCotizado(item: StkItem): number {
-    const precioMinorista = item.stkPrecios?.find(
-      (precio) => precio.lista === 'MINORISTA',
+  private obtenerPrecioListaCotizado(
+    item: StkItem,
+    lista: 'MINORISTA' | 'MINORISTA CON IVA',
+  ): number {
+    const precioLista = item.stkPrecios?.find(
+      (precio) => precio.lista === lista,
     );
 
-    if (!precioMinorista) {
+    if (!precioLista) {
       throw new NotFoundException(
-        `Precio MINORISTA no disponible para ${item.id}`,
+        `Precio ${lista} no disponible para ${item.id}`,
       );
     }
 
-    const precioVta = Number(precioMinorista.precioVta ?? 0);
-    const isDolar = precioMinorista.moneda?.id === 'DOL';
-    const cotizacion = isDolar ? Number(precioMinorista.moneda?.cotizacion) : 1;
+    const precioVta = Number(precioLista.precioVta ?? 0);
+    const isDolar = precioLista.moneda?.id === 'DOL';
+    const cotizacion = isDolar ? Number(precioLista.moneda?.cotizacion) : 1;
 
     if (
       !Number.isFinite(precioVta) ||
@@ -1319,7 +1355,7 @@ export class PedidoService {
       cotizacion <= 0
     ) {
       throw new BadRequestException(
-        `Precio MINORISTA invalido para ${item.id}`,
+        `Precio ${lista} invalido para ${item.id}`,
       );
     }
 
@@ -1343,6 +1379,7 @@ export class PedidoService {
   private obtenerDiferenciaProducto(
     producto: CreatePedidoDto['productos'][number],
     calculado: PedidoProductoCalculado,
+    incluyeIvaFactura = false,
   ): PedidoProductoMismatch | null {
     const precioFueEnviado = producto.precio_unitario !== undefined;
     const subtotalFueEnviado = producto.subtotal !== undefined;
@@ -1355,14 +1392,24 @@ export class PedidoService {
     const subtotalBruto = this.redondearPrecio(
       calculado.precio_base_unitario * calculado.cantidad,
     );
+    const ivaSubtotal = incluyeIvaFactura
+      ? this.calcularIvaFacturaImporte(calculado.subtotal)
+      : 0;
+    const subtotalEsperado = calculado.subtotal + ivaSubtotal;
+    const precioUnitarioEsperado = incluyeIvaFactura
+      ? this.redondearPrecio(subtotalEsperado / calculado.cantidad)
+      : calculado.precio_unitario;
+    const subtotalBrutoEsperado = incluyeIvaFactura
+      ? subtotalBruto + this.calcularIvaFacturaImporte(subtotalBruto)
+      : subtotalBruto;
 
     const difierePrecio =
       precioFueEnviado &&
-      !this.montosIguales(precioRecibido, calculado.precio_unitario);
+      !this.montosIguales(precioRecibido, precioUnitarioEsperado);
     const difiereSubtotal =
       subtotalFueEnviado &&
-      !this.montosIguales(subtotalRecibido, calculado.subtotal) &&
-      !this.montosIguales(subtotalRecibido, subtotalBruto);
+      !this.montosIguales(subtotalRecibido, subtotalEsperado) &&
+      !this.montosIguales(subtotalRecibido, subtotalBrutoEsperado);
 
     if (!difierePrecio && !difiereSubtotal) {
       return null;
@@ -1372,12 +1419,12 @@ export class PedidoService {
     const received: PedidoProductoMismatch['received'] = {};
 
     if (difierePrecio) {
-      expected.precio_unitario = calculado.precio_unitario;
+      expected.precio_unitario = precioUnitarioEsperado;
       received.precio_unitario = precioRecibido;
     }
 
     if (difiereSubtotal) {
-      expected.subtotal = calculado.subtotal;
+      expected.subtotal = subtotalEsperado;
       received.subtotal = subtotalRecibido;
     }
 
@@ -1418,6 +1465,8 @@ export class PedidoService {
       descuento_cupon: number;
       productos: PedidoProductoMismatch[];
       costo_envio: number;
+      subtotal_sin_iva?: number;
+      factura_iva_importe?: number | null;
     },
   ): Promise<void> {
     const diferencias: {
@@ -1467,8 +1516,13 @@ export class PedidoService {
       cliente_mail: dto.email ?? dto.cliente_mail,
       telefono: dto.telefono ?? dto.mobile,
       metodo_pago: dto.metodo_pago ?? 'online',
+      factura_tipo: dto.factura_tipo,
+      factura_tipo_normalizado: this.normalizarFacturaTipo(dto.factura_tipo),
       codigo_cupon: dto.codigo_cupon,
       costo_envio: calculado.costo_envio,
+      subtotal_sin_iva: calculado.subtotal_sin_iva,
+      factura_iva_importe: calculado.factura_iva_importe,
+      total_calculado: calculado.total,
       expected: diferencias.expected,
       received: diferencias.received,
       productos: diferencias.productos,
