@@ -286,12 +286,12 @@ describe('PedidoService recalculo de importes', () => {
 
     const { pedido } = await service.crear(dto);
 
-    expect(pedido.total).toBe(4);
-    expect(pedido.factura_iva_importe).toBe(1);
+    expect(pedido.total).toBe(3.63);
+    expect(pedido.factura_iva_importe).toBe(0.63);
     expect(service.generarIntencionDePago).toHaveBeenCalledWith(
       expect.objectContaining({
         costo_envio: 1,
-        total: 4,
+        total: 3.63,
       }),
     );
   });
@@ -332,8 +332,8 @@ describe('PedidoService recalculo de importes', () => {
 
     expect(pedido.productos[0].precio_unitario).toBe(24499);
     expect(pedido.productos[0].subtotal).toBe(24499);
-    expect(pedido.factura_iva_importe).toBe(5145);
-    expect(pedido.total).toBe(29644);
+    expect(pedido.factura_iva_importe).toBe(5144.79);
+    expect(pedido.total).toBe(29643.79);
   });
 
   it('rechaza total sin IVA cuando se requiere factura', async () => {

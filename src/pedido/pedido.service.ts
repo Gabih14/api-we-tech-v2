@@ -1216,6 +1216,10 @@ export class PedidoService {
   }
 
   private calcularIvaFacturaImporte(importe: number): number {
+    return this.redondear2(importe * (FACTURA_IVA_PORCENTAJE / 100));
+  }
+
+  private calcularIvaFacturaImporteLinea(importe: number): number {
     return this.redondearPrecio(importe * (FACTURA_IVA_PORCENTAJE / 100));
   }
 
@@ -1393,14 +1397,14 @@ export class PedidoService {
       calculado.precio_base_unitario * calculado.cantidad,
     );
     const ivaSubtotal = incluyeIvaFactura
-      ? this.calcularIvaFacturaImporte(calculado.subtotal)
+      ? this.calcularIvaFacturaImporteLinea(calculado.subtotal)
       : 0;
     const subtotalEsperado = calculado.subtotal + ivaSubtotal;
     const precioUnitarioEsperado = incluyeIvaFactura
       ? this.redondearPrecio(subtotalEsperado / calculado.cantidad)
       : calculado.precio_unitario;
     const subtotalBrutoEsperado = incluyeIvaFactura
-      ? subtotalBruto + this.calcularIvaFacturaImporte(subtotalBruto)
+      ? subtotalBruto + this.calcularIvaFacturaImporteLinea(subtotalBruto)
       : subtotalBruto;
 
     const difierePrecio =
@@ -1487,7 +1491,8 @@ export class PedidoService {
 
     if (
       dto.total !== undefined &&
-      !this.montosIguales(Number(dto.total), calculado.total)
+      !this.montosIguales(Number(dto.total), calculado.total) &&
+      !this.montosIguales(Number(dto.total), this.redondearPrecio(calculado.total))
     ) {
       diferencias.expected.total = calculado.total;
       diferencias.received.total = Number(dto.total);

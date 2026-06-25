@@ -14,6 +14,7 @@ import { VtaCobroFactura } from 'src/vta-cobro-factura/entities/vta-cobro-factur
 import { VtaComprobanteAsiento } from 'src/vta_comprobante_asiento/entities/vta_comprobante_asiento.entity';
 import { VtaComprobanteItem } from 'src/vta-comprobante-item/entities/vta-comprobante-item.entity';
 import { CntAsiento } from 'src/cnt-asiento/entities/cnt-asiento.entity';
+import { parseProductWeightFromDescription } from 'src/pricing/discounts';
 
 type RawResumenMetricas = {
   totalVentas: string | null;
@@ -205,6 +206,7 @@ export class VtaComprobanteService {
       (acc, p) => acc + (p.cantidad ?? 0),
       0,
     );
+    const pesoTotal = this.calcularPesoPedido(pedido);
 
     const itemsCalculo = (pedido.productos ?? []).map((producto) => {
       const cantidad = Number(producto.cantidad ?? 0);
@@ -262,7 +264,7 @@ export class VtaComprobanteService {
         : null;
     const esFacturaFiscal = Boolean(tipoComprobante.facturaTipo);
     const totalAjusteIva = esFacturaFiscal
-      ? this.redondear2(totalAjusteNeto * 0.21)
+      ? this.redondearAjusteIva(totalAjusteNeto * 0.21)
       : 0;
 
     const cobroFields: Partial<VtaComprobante> =
@@ -285,7 +287,7 @@ export class VtaComprobanteService {
       lista: esFacturaFiscal ? 'MINORISTA CON IVA' : 'MINORISTA',
       ivainc: tipoComprobante.facturaTipo === 'A' ? undefined : true,
       alicuota: undefined,
-      anclar_precio: esFacturaFiscal ? false : true,
+      anclar_precio: true,
       anulado: false,
       comisionliq: false,
       subtotal: esFacturaFiscal ? netoImporte : totalImporte,
@@ -309,6 +311,7 @@ export class VtaComprobanteService {
       ajuste_iva:
         esFacturaFiscal && totalAjusteIva !== 0 ? totalAjusteIva : undefined,
       cantidad: cantidadTotal ?? 0,
+      peso: pesoTotal ?? undefined,
       entregado: 0,
       entregado$: 0,
       trabajador: 'WEB',
@@ -381,6 +384,41 @@ export class VtaComprobanteService {
     return importes.map((importe) =>
       Math.round(Number(importe ?? 0) * 0.21),
     );
+  }
+
+  private calcularPesoPedido(pedido: Pedido): number | null {
+    const peso = (pedido.productos ?? []).reduce((acc, producto) => {
+      const pesoUnitario = parseProductWeightFromDescription(producto.descripcion);
+      const cantidad = Number(producto.cantidad ?? 0);
+
+      if (
+        pesoUnitario === undefined ||
+        !Number.isFinite(pesoUnitario) ||
+        !Number.isFinite(cantidad)
+      ) {
+        return acc;
+      }
+
+      return acc + pesoUnitario * cantidad;
+    }, 0);
+
+    return peso > 0 ? this.redondear4(peso) : null;
+  }
+
+  private redondearAjusteIva(valor: number): number {
+    if (!Number.isFinite(valor)) {
+      return 0;
+    }
+
+    if (valor < 0) {
+      return Math.floor((valor - Number.EPSILON) * 100) / 100;
+    }
+
+    return this.redondear2(valor);
+  }
+
+  private redondear4(valor: number): number {
+    return Math.round((Number(valor) + Number.EPSILON) * 10000) / 10000;
   }
 
   private async generarNumeroComprobante(
