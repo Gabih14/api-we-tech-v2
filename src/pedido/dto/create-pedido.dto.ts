@@ -131,4 +131,9 @@ export class CreatePedidoDto {
   @IsString()
   @IsIn(['online', 'transfer'])
   metodo_pago?: 'online' | 'transfer';
+
+  @IsOptional()
+  @IsString()
+  @IsIn(['A', 'B'])
+  factura_tipo?: 'A' | 'B';
 }

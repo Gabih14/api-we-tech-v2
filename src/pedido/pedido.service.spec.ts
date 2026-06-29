@@ -88,6 +88,7 @@ describe('PedidoService recalculo de importes', () => {
     cotizacion = '1',
     grupo: string | null = null,
     descripcion = `Descripcion ${id}`,
+    preciosExtra: Array<{ lista: string; precioVta: string }> = [],
   ) => ({
     id,
     descripcion,
@@ -101,6 +102,14 @@ describe('PedidoService recalculo de importes', () => {
           cotizacion,
         },
       },
+      ...preciosExtra.map((precio) => ({
+        lista: precio.lista,
+        precioVta: precio.precioVta,
+        moneda: {
+          id: moneda,
+          cotizacion,
+        },
+      })),
     ],
   });
 
@@ -155,6 +164,209 @@ describe('PedidoService recalculo de importes', () => {
         ],
       }),
     );
+  });
+
+  it('no guarda datos de factura cuando no se requiere factura', async () => {
+    stkItemRepo.findOne.mockResolvedValue(itemConPrecio('ITEM-SIN-FAC', '100'));
+
+    const dto = dtoBase({
+      total: 100,
+      productos: [
+        {
+          nombre: 'ITEM-SIN-FAC',
+          cantidad: 1,
+          precio_unitario: 100,
+          subtotal: 100,
+        },
+      ],
+    });
+
+    const { pedido } = await service.crear(dto);
+
+    expect(pedido.total).toBe(100);
+    expect(pedido.factura_tipo).toBeNull();
+    expect(pedido.factura_iva_porcentaje).toBeNull();
+    expect(pedido.factura_iva_importe).toBeNull();
+  });
+
+  it('suma 21% al total y guarda factura A', async () => {
+    stkItemRepo.findOne.mockResolvedValue(
+      itemConPrecio('ITEM-FAC-A', '100', 'PES', '1', null, 'Descripcion ITEM-FAC-A', [
+        { lista: 'MINORISTA CON IVA', precioVta: '100' },
+      ]),
+    );
+
+    const dto = dtoBase({
+      factura_tipo: 'A',
+      total: 121,
+      productos: [
+        {
+          nombre: 'ITEM-FAC-A',
+          cantidad: 1,
+          precio_unitario: 121,
+          subtotal: 121,
+        },
+      ],
+    });
+
+    const { pedido } = await service.crear(dto);
+
+    expect(pedido.total).toBe(121);
+    expect(pedido.factura_tipo).toBe('A');
+    expect(pedido.factura_iva_porcentaje).toBe(21);
+    expect(pedido.factura_iva_importe).toBe(21);
+    expect(service.generarIntencionDePago).toHaveBeenCalledWith(
+      expect.objectContaining({
+        total: 121,
+      }),
+    );
+  });
+
+  it('suma 21% al total y guarda factura B', async () => {
+    stkItemRepo.findOne.mockResolvedValue(
+      itemConPrecio('ITEM-FAC-B', '100', 'PES', '1', null, 'Descripcion ITEM-FAC-B', [
+        { lista: 'MINORISTA CON IVA', precioVta: '100' },
+      ]),
+    );
+
+    const dto = dtoBase({
+      factura_tipo: 'B',
+      total: 121,
+      productos: [
+        {
+          nombre: 'ITEM-FAC-B',
+          cantidad: 1,
+          precio_unitario: 121,
+          subtotal: 121,
+        },
+      ],
+    });
+
+    const { pedido } = await service.crear(dto);
+
+    expect(pedido.total).toBe(121);
+    expect(pedido.factura_tipo).toBe('B');
+    expect(pedido.factura_iva_porcentaje).toBe(21);
+    expect(pedido.factura_iva_importe).toBe(21);
+  });
+
+  it('calcula el IVA de cabecera sobre productos y envio', async () => {
+    stkItemRepo.findOne
+      .mockResolvedValueOnce(
+        itemConPrecio('ITEM-FAC-1', '1', 'PES', '1', null, 'Descripcion ITEM-FAC-1', [
+          { lista: 'MINORISTA CON IVA', precioVta: '1' },
+        ]),
+      )
+      .mockResolvedValueOnce(
+        itemConPrecio('ITEM-FAC-2', '1', 'PES', '1', null, 'Descripcion ITEM-FAC-2', [
+          { lista: 'MINORISTA CON IVA', precioVta: '1' },
+        ]),
+      );
+
+    const dto = dtoBase({
+      factura_tipo: 'A',
+      tipo_envio: 'shipping',
+      costo_envio: 1,
+      total: 4,
+      productos: [
+        {
+          nombre: 'ITEM-FAC-1',
+          cantidad: 1,
+          precio_unitario: 1,
+          subtotal: 1,
+        },
+        {
+          nombre: 'ITEM-FAC-2',
+          cantidad: 1,
+          precio_unitario: 1,
+          subtotal: 1,
+        },
+      ],
+    });
+
+    const { pedido } = await service.crear(dto);
+
+    expect(pedido.total).toBe(3.63);
+    expect(pedido.factura_iva_importe).toBe(0.63);
+    expect(service.generarIntencionDePago).toHaveBeenCalledWith(
+      expect.objectContaining({
+        costo_envio: 1,
+        total: 3.63,
+      }),
+    );
+  });
+
+  it('acepta subtotal bruto con IVA cuando factura y ajuste_porcentaje vienen del frontend', async () => {
+    stkItemRepo.findOne.mockResolvedValue(
+      itemConPrecio(
+        '3X-PLAF-1KG-VEMA',
+        '28822',
+        'PES',
+        '1',
+        'FILAMENTOS',
+        'Descripcion 3X-PLAF-1KG-VEMA',
+        [{ lista: 'MINORISTA CON IVA', precioVta: '28822' }],
+      ),
+    );
+    vtaComprobanteService.crearDesdePedido.mockResolvedValue({
+      tipo: 'FB',
+      comprobante: 'B 00001 00000001',
+    });
+
+    const dto = dtoBase({
+      factura_tipo: 'B',
+      metodo_pago: 'transfer',
+      total: 29644,
+      productos: [
+        {
+          nombre: '3X-PLAF-1KG-VEMA',
+          cantidad: 1,
+          precio_unitario: 29644,
+          subtotal: 34875,
+          ajuste_porcentaje: 15,
+        },
+      ],
+    });
+
+    const { pedido } = await service.crear(dto);
+
+    expect(pedido.productos[0].precio_unitario).toBe(24499);
+    expect(pedido.productos[0].subtotal).toBe(24499);
+    expect(pedido.factura_iva_importe).toBe(5144.79);
+    expect(pedido.total).toBe(29643.79);
+  });
+
+  it('rechaza total sin IVA cuando se requiere factura', async () => {
+    stkItemRepo.findOne.mockResolvedValue(
+      itemConPrecio('ITEM-FAC-MAL', '100', 'PES', '1', null, 'Descripcion ITEM-FAC-MAL', [
+        { lista: 'MINORISTA CON IVA', precioVta: '100' },
+      ]),
+    );
+
+    const dto = dtoBase({
+      factura_tipo: 'A',
+      total: 100,
+      productos: [
+        {
+          nombre: 'ITEM-FAC-MAL',
+          cantidad: 1,
+          precio_unitario: 121,
+          subtotal: 121,
+        },
+      ],
+    });
+
+    const crearPedido = service.crear(dto);
+
+    await expect(crearPedido).rejects.toThrow(BadRequestException);
+    await expect(crearPedido).rejects.toMatchObject({
+      response: expect.objectContaining({
+        code: 'ERR_ORDER_TOTAL_MISMATCH',
+        expected: expect.objectContaining({ total: 121 }),
+        received: expect.objectContaining({ total: 100 }),
+      }),
+    });
+    expect(stockService.reservarStock).not.toHaveBeenCalled();
   });
 
   it('arma cliente_ubicacion priorizando la direccion resuelta por Maps', async () => {

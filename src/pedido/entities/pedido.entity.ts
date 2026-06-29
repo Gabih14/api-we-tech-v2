@@ -74,4 +74,13 @@ export class Pedido {
 
   @Column({ type: 'varchar', length: 16, nullable: true })
   comprobante_numero: string | null;
+
+  @Column({ type: 'varchar', length: 1, nullable: true })
+  factura_tipo: 'A' | 'B' | null;
+
+  @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true })
+  factura_iva_porcentaje: number | null;
+
+  @Column({ type: 'decimal', precision: 12, scale: 2, nullable: true })
+  factura_iva_importe: number | null;
 }
