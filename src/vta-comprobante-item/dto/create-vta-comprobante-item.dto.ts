@@ -26,6 +26,17 @@ export class CreateVtaComprobanteItemDto {
   importe: number;
 
   @IsOptional()
+  ivainc?: boolean;
+
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  alicuota?: number;
+
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  iva?: number;
+
+  @IsOptional()
   @IsNumber({ maxDecimalPlaces: 2 })
   ajuste?: number;
 

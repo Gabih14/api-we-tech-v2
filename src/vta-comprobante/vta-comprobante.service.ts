@@ -331,6 +331,12 @@ export class VtaComprobanteService {
     const ajustesIva = tipoComprobante.facturaTipo
       ? this.calcularAjustesIvaItems(itemsCalculo.map((item) => item.importe))
       : [];
+    const ivasItems = tipoComprobante.facturaTipo
+      ? this.calcularIvasItems(
+          itemsCalculo.map((item) => item.importe),
+          ivaImporte,
+        )
+      : [];
     for (const item of itemsCalculo) {
       const producto = item.producto;
       await this.comprobanteItemService.create({
@@ -340,6 +346,9 @@ export class VtaComprobanteService {
         cantidad: producto.cantidad,
         precio: item.precioBaseUnitario,
         importe: item.importe,
+        ivainc: tipoComprobante.facturaTipo === 'B' ? true : undefined,
+        alicuota: tipoComprobante.facturaTipo ? 21 : undefined,
+        iva: ivasItems[linea - 1] ?? undefined,
         ajuste: item.ajuste ?? undefined,
         ajuste_neto: item.ajusteNeto ?? undefined,
         ajuste_iva: ajustesIva[linea - 1] ?? undefined,
@@ -381,6 +390,32 @@ export class VtaComprobanteService {
     return importes.map((importe) =>
       Math.round(Number(importe ?? 0) * 0.21),
     );
+  }
+
+  private calcularIvasItems(importes: number[], ivaTotal: number): number[] {
+    if (importes.length === 0) {
+      return [];
+    }
+
+    const netoTotal = this.redondear2(
+      importes.reduce((acc, importe) => acc + Number(importe ?? 0), 0),
+    );
+    if (netoTotal <= 0) {
+      return importes.map(() => 0);
+    }
+
+    let acumulado = 0;
+    return importes.map((importe, index) => {
+      if (index === importes.length - 1) {
+        return this.redondear2(ivaTotal - acumulado);
+      }
+
+      const ivaLinea = this.redondear2(
+        (Number(importe ?? 0) / netoTotal) * ivaTotal,
+      );
+      acumulado = this.redondear2(acumulado + ivaLinea);
+      return ivaLinea;
+    });
   }
 
   private async generarNumeroComprobante(

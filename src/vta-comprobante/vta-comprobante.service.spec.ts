@@ -226,6 +226,9 @@ describe('VtaComprobanteService crearDesdePedido', () => {
       expect.objectContaining({
         itemId: 'ITEM-FAC-A',
         importe: 100,
+        ivainc: undefined,
+        alicuota: 21,
+        iva: 21,
         ajuste_iva: 21,
       }),
     );
@@ -280,6 +283,9 @@ describe('VtaComprobanteService crearDesdePedido', () => {
       expect.objectContaining({
         itemId: 'ITEM-FAC-B',
         importe: 100,
+        ivainc: true,
+        alicuota: 21,
+        iva: 21,
         ajuste_iva: 21,
       }),
     );
