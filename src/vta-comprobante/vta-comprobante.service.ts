@@ -498,6 +498,41 @@ export class VtaComprobanteService {
     };
   }
 
+  private calcularPesoPedido(pedido: Pedido): number | null {
+    const pesoTotal = (pedido.productos ?? []).reduce((total, producto) => {
+      const nombre = String(producto.nombre ?? '');
+      if (nombre.toUpperCase().startsWith('ENV-')) {
+        return total;
+      }
+
+      const pesoUnitario = parseProductWeightFromDescription(
+        producto.descripcion || nombre,
+      );
+      const cantidad = Number(producto.cantidad ?? 0);
+
+      if (!pesoUnitario || !Number.isFinite(cantidad) || cantidad <= 0) {
+        return total;
+      }
+
+      return total + pesoUnitario * cantidad;
+    }, 0);
+
+    return pesoTotal > 0 ? this.redondear2(pesoTotal) : null;
+  }
+
+  private redondearAjusteIva(valor: number): number {
+    const tolerancia = 1e-9;
+    if (Math.abs(valor) < tolerancia) {
+      return 0;
+    }
+
+    const centavos =
+      valor < 0 ? (valor - tolerancia) * 100 : (valor + tolerancia) * 100;
+    const redondeado = valor < 0 ? Math.floor(centavos) : Math.ceil(centavos);
+
+    return redondeado / 100;
+  }
+
   private redondear2(valor: number): number {
     return Math.round(valor * 100) / 100;
   }
