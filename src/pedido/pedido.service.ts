@@ -47,6 +47,8 @@ interface PedidoProductoCalculado {
   precio_base_unitario: number;
   precio_unitario: number;
   subtotal: number;
+  precio_unitario_bruto?: number;
+  subtotal_bruto?: number;
   ajuste_porcentaje: number | null;
   descuento_cupon_aplicado: number;
 }
@@ -217,12 +219,13 @@ export class PedidoService {
       );
     }
 
-    const productosNetos = this.redondearPrecio(
-      productosValidados.reduce(
-        (acc, producto) => acc + Number(producto.subtotal ?? 0),
-        0,
-      ),
+    const productosNetosSinRedondear = productosValidados.reduce(
+      (acc, producto) => acc + Number(producto.subtotal ?? 0),
+      0,
     );
+    const productosNetos = requiereFactura
+      ? this.redondear2(productosNetosSinRedondear)
+      : this.redondearPrecio(productosNetosSinRedondear);
     const descuentoCupon = this.redondearPrecio(
       productosCalculados.reduce(
         (acc, producto) => acc + producto.descuento_cupon_aplicado,
@@ -237,9 +240,9 @@ export class PedidoService {
     const costoEnvioAdicional = costoEnvioDesdeProducto == null
       ? costoEnvioCalculado
       : 0;
-    const subtotalSinIva = this.redondearPrecio(
-      productosNetos + costoEnvioAdicional,
-    );
+    const subtotalSinIva = requiereFactura
+      ? this.redondear2(productosNetos + costoEnvioAdicional)
+      : this.redondearPrecio(productosNetos + costoEnvioAdicional);
     const facturaIvaImporte = facturaTipo
       ? this.calcularIvaFacturaImporte(subtotalSinIva)
       : null;
@@ -1219,10 +1222,6 @@ export class PedidoService {
     return this.redondear2(importe * (FACTURA_IVA_PORCENTAJE / 100));
   }
 
-  private calcularIvaFacturaImporteLinea(importe: number): number {
-    return this.redondearPrecio(importe * (FACTURA_IVA_PORCENTAJE / 100));
-  }
-
   private normalizarFacturaTipo(
     facturaTipo?: CreatePedidoDto['factura_tipo'],
   ): 'A' | 'B' | null {
@@ -1293,6 +1292,46 @@ export class PedidoService {
       descuentoProductoPorcentaje,
       porcentajeCuponAplicable,
     );
+    if (incluyeIvaFactura) {
+      const subtotalBrutoCalculado = this.redondear2(
+        precioBaseUnitario *
+          cantidad *
+          (1 + FACTURA_IVA_PORCENTAJE / 100),
+      );
+      const subtotalBruto = this.obtenerSubtotalBrutoFactura(
+        producto,
+        subtotalBrutoCalculado,
+      );
+      const subtotalFinalBrutoPrevio = this.redondear2(
+        subtotalBruto * (1 - descuentoPorcentaje / 100),
+      );
+      const subtotal = this.redondearPrecio(
+        subtotalFinalBrutoPrevio / (1 + FACTURA_IVA_PORCENTAJE / 100),
+      );
+      const ivaSubtotal = this.calcularIvaFacturaImporte(subtotal);
+      const subtotalFinalBruto = this.redondear2(subtotal + ivaSubtotal);
+      const precioUnitario = this.redondearPrecio(subtotal / cantidad);
+      const precioUnitarioBruto = this.redondear2(
+        subtotalFinalBruto / cantidad,
+      );
+      const descuentoCuponAplicado =
+        porcentajeCuponAplicable > descuentoProductoPorcentaje
+          ? this.redondearPrecio(precioBaseUnitario * cantidad - subtotal)
+          : 0;
+
+      return {
+        nombre: producto.nombre,
+        cantidad,
+        precio_base_unitario: precioBaseUnitario,
+        precio_unitario: precioUnitario,
+        subtotal,
+        precio_unitario_bruto: precioUnitarioBruto,
+        subtotal_bruto: subtotalBruto,
+        ajuste_porcentaje: descuentoPorcentaje > 0 ? descuentoPorcentaje : null,
+        descuento_cupon_aplicado: descuentoCuponAplicado,
+      };
+    }
+
     const subtotal = this.redondearPrecio(
       precioBaseUnitario * cantidad * (1 - descuentoPorcentaje / 100),
     );
@@ -1313,6 +1352,22 @@ export class PedidoService {
       ajuste_porcentaje: descuentoPorcentaje > 0 ? descuentoPorcentaje : null,
       descuento_cupon_aplicado: descuentoCuponAplicado,
     };
+  }
+
+  private obtenerSubtotalBrutoFactura(
+    producto: CreatePedidoDto['productos'][number],
+    subtotalBrutoCalculado: number,
+  ): number {
+    const subtotalRecibido = Number(producto.subtotal);
+
+    if (
+      Number.isFinite(subtotalRecibido) &&
+      Math.abs(subtotalRecibido - subtotalBrutoCalculado) <= 1
+    ) {
+      return this.redondear2(subtotalRecibido);
+    }
+
+    return subtotalBrutoCalculado;
   }
 
   private obtenerCantidadProducto(
@@ -1396,20 +1451,23 @@ export class PedidoService {
     const subtotalBruto = this.redondearPrecio(
       calculado.precio_base_unitario * calculado.cantidad,
     );
-    const ivaSubtotal = incluyeIvaFactura
-      ? this.calcularIvaFacturaImporteLinea(calculado.subtotal)
-      : 0;
-    const subtotalEsperado = calculado.subtotal + ivaSubtotal;
+    const subtotalEsperado = incluyeIvaFactura
+      ? calculado.subtotal_bruto ?? calculado.subtotal
+      : calculado.subtotal;
     const precioUnitarioEsperado = incluyeIvaFactura
-      ? this.redondearPrecio(subtotalEsperado / calculado.cantidad)
+      ? calculado.precio_unitario_bruto ?? calculado.precio_unitario
       : calculado.precio_unitario;
     const subtotalBrutoEsperado = incluyeIvaFactura
-      ? subtotalBruto + this.calcularIvaFacturaImporteLinea(subtotalBruto)
+      ? calculado.subtotal_bruto ?? subtotalEsperado
       : subtotalBruto;
 
     const difierePrecio =
       precioFueEnviado &&
-      !this.montosIguales(precioRecibido, precioUnitarioEsperado);
+      !this.montosIguales(precioRecibido, precioUnitarioEsperado) &&
+      !this.montosIguales(
+        precioRecibido,
+        this.redondearPrecio(precioUnitarioEsperado),
+      );
     const difiereSubtotal =
       subtotalFueEnviado &&
       !this.montosIguales(subtotalRecibido, subtotalEsperado) &&

@@ -334,6 +334,12 @@ export class VtaComprobanteService {
     const ajustesIva = tipoComprobante.facturaTipo
       ? this.calcularAjustesIvaItems(itemsCalculo.map((item) => item.importe))
       : [];
+    const ivasItems = tipoComprobante.facturaTipo
+      ? this.calcularIvasItems(
+          itemsCalculo.map((item) => item.importe),
+          ivaImporte,
+        )
+      : [];
     for (const item of itemsCalculo) {
       const producto = item.producto;
       await this.comprobanteItemService.create({
@@ -343,6 +349,9 @@ export class VtaComprobanteService {
         cantidad: producto.cantidad,
         precio: item.precioBaseUnitario,
         importe: item.importe,
+        ivainc: tipoComprobante.facturaTipo === 'B' ? true : undefined,
+        alicuota: tipoComprobante.facturaTipo ? 21 : undefined,
+        iva: ivasItems[linea - 1] ?? undefined,
         ajuste: item.ajuste ?? undefined,
         ajuste_neto: item.ajusteNeto ?? undefined,
         ajuste_iva: ajustesIva[linea - 1] ?? undefined,
@@ -386,39 +395,30 @@ export class VtaComprobanteService {
     );
   }
 
-  private calcularPesoPedido(pedido: Pedido): number | null {
-    const peso = (pedido.productos ?? []).reduce((acc, producto) => {
-      const pesoUnitario = parseProductWeightFromDescription(producto.descripcion);
-      const cantidad = Number(producto.cantidad ?? 0);
+  private calcularIvasItems(importes: number[], ivaTotal: number): number[] {
+    if (importes.length === 0) {
+      return [];
+    }
 
-      if (
-        pesoUnitario === undefined ||
-        !Number.isFinite(pesoUnitario) ||
-        !Number.isFinite(cantidad)
-      ) {
-        return acc;
+    const netoTotal = this.redondear2(
+      importes.reduce((acc, importe) => acc + Number(importe ?? 0), 0),
+    );
+    if (netoTotal <= 0) {
+      return importes.map(() => 0);
+    }
+
+    let acumulado = 0;
+    return importes.map((importe, index) => {
+      if (index === importes.length - 1) {
+        return this.redondear2(ivaTotal - acumulado);
       }
 
-      return acc + pesoUnitario * cantidad;
-    }, 0);
-
-    return peso > 0 ? this.redondear4(peso) : null;
-  }
-
-  private redondearAjusteIva(valor: number): number {
-    if (!Number.isFinite(valor)) {
-      return 0;
-    }
-
-    if (valor < 0) {
-      return Math.floor((valor - Number.EPSILON) * 100) / 100;
-    }
-
-    return this.redondear2(valor);
-  }
-
-  private redondear4(valor: number): number {
-    return Math.round((Number(valor) + Number.EPSILON) * 10000) / 10000;
+      const ivaLinea = this.redondear2(
+        (Number(importe ?? 0) / netoTotal) * ivaTotal,
+      );
+      acumulado = this.redondear2(acumulado + ivaLinea);
+      return ivaLinea;
+    });
   }
 
   private async generarNumeroComprobante(
