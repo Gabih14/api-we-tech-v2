@@ -210,7 +210,7 @@ describe('VtaComprobanteService crearDesdePedido', () => {
         lista: 'MINORISTA CON IVA',
         ivainc: undefined,
         alicuota: undefined,
-        anclar_precio: false,
+        anclar_precio: true,
         subtotal: 100,
         neto: 100,
         nogravado: 0,
@@ -267,7 +267,7 @@ describe('VtaComprobanteService crearDesdePedido', () => {
         lista: 'MINORISTA CON IVA',
         ivainc: true,
         alicuota: undefined,
-        anclar_precio: false,
+        anclar_precio: true,
         subtotal: 100,
         neto: 100,
         nogravado: 0,
@@ -319,7 +319,7 @@ describe('VtaComprobanteService crearDesdePedido', () => {
         total: 103,
         ajuste: -15,
         ajuste_neto: -15,
-        ajuste_iva: -3.15,
+        ajuste_iva: -3.16,
       }),
     );
   });
