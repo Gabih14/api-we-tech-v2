@@ -25,6 +25,7 @@ export const ELIGIBLE_BRANDS_FOR_QUANTITY_DISCOUNT = [
   'HB-PLA', // HELLBOT-PLA
   '3X-PLA', // 3NMAX-PLA
   'FM-PLA', // FREMOVER-PLA
+  'EG-PLA', // ELEGOO-PLA
 ] as const;
 
 export const FILAMENT_CATEGORIES = ['FILAMENTO 3D', 'FILAMENTOS'] as const;

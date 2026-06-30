@@ -25,8 +25,17 @@ export class VtaComprobanteItem {
   @Column('decimal', { name: 'precio', precision: 14, scale: 4 })
   precio: number;
 
+  @Column('tinyint', { name: 'ivainc', nullable: true, width: 1 })
+  ivainc: boolean | null;
+
+  @Column('decimal', { name: 'alicuota', precision: 5, scale: 2, nullable: true })
+  alicuota: number | null;
+
   @Column('decimal', { name: 'importe', precision: 12, scale: 2 })
   importe: number;
+
+  @Column('decimal', { name: 'iva', precision: 12, scale: 2, nullable: true })
+  iva: number | null;
 
   @Column('decimal', { name: 'ajuste', precision: 5, scale: 2, nullable: true })
   ajuste: number | null;

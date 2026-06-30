@@ -253,45 +253,45 @@ describe('PedidoService recalculo de importes', () => {
   it('calcula el IVA de cabecera sobre productos y envio', async () => {
     stkItemRepo.findOne
       .mockResolvedValueOnce(
-        itemConPrecio('ITEM-FAC-1', '1', 'PES', '1', null, 'Descripcion ITEM-FAC-1', [
-          { lista: 'MINORISTA CON IVA', precioVta: '1' },
+        itemConPrecio('ITEM-FAC-1', '100', 'PES', '1', null, 'Descripcion ITEM-FAC-1', [
+          { lista: 'MINORISTA CON IVA', precioVta: '100' },
         ]),
       )
       .mockResolvedValueOnce(
-        itemConPrecio('ITEM-FAC-2', '1', 'PES', '1', null, 'Descripcion ITEM-FAC-2', [
-          { lista: 'MINORISTA CON IVA', precioVta: '1' },
+        itemConPrecio('ITEM-FAC-2', '100', 'PES', '1', null, 'Descripcion ITEM-FAC-2', [
+          { lista: 'MINORISTA CON IVA', precioVta: '100' },
         ]),
       );
 
     const dto = dtoBase({
       factura_tipo: 'A',
       tipo_envio: 'shipping',
-      costo_envio: 1,
-      total: 4,
+      costo_envio: 100,
+      total: 363,
       productos: [
         {
           nombre: 'ITEM-FAC-1',
           cantidad: 1,
-          precio_unitario: 1,
-          subtotal: 1,
+          precio_unitario: 121,
+          subtotal: 121,
         },
         {
           nombre: 'ITEM-FAC-2',
           cantidad: 1,
-          precio_unitario: 1,
-          subtotal: 1,
+          precio_unitario: 121,
+          subtotal: 121,
         },
       ],
     });
 
     const { pedido } = await service.crear(dto);
 
-    expect(pedido.total).toBe(3.63);
-    expect(pedido.factura_iva_importe).toBe(0.63);
+    expect(pedido.total).toBe(363);
+    expect(pedido.factura_iva_importe).toBe(63);
     expect(service.generarIntencionDePago).toHaveBeenCalledWith(
       expect.objectContaining({
-        costo_envio: 1,
-        total: 3.63,
+        costo_envio: 100,
+        total: 363,
       }),
     );
   });
@@ -334,6 +334,145 @@ describe('PedidoService recalculo de importes', () => {
     expect(pedido.productos[0].subtotal).toBe(24499);
     expect(pedido.factura_iva_importe).toBe(5144.79);
     expect(pedido.total).toBe(29643.79);
+  });
+
+  it('calcula factura como Nacional: IVA primero y descuento despues', async () => {
+    stkItemRepo.findOne.mockResolvedValue(
+      itemConPrecio(
+        '3N-PLA-1KG-BLAN',
+        '21764',
+        'PES',
+        '1',
+        'FILAMENTOS',
+        'Descripcion 3N-PLA-1KG-BLAN',
+        [{ lista: 'MINORISTA CON IVA', precioVta: '21764' }],
+      ),
+    );
+    vtaComprobanteService.crearDesdePedido.mockResolvedValue({
+      tipo: 'FA',
+      comprobante: 'A 00005 00000001',
+    });
+
+    const dto = dtoBase({
+      factura_tipo: 'A',
+      metodo_pago: 'transfer',
+      total: 22385,
+      productos: [
+        {
+          nombre: '3N-PLA-1KG-BLAN',
+          cantidad: 1,
+          precio_unitario: 22385,
+          subtotal: 26335.3,
+          ajuste_porcentaje: 15,
+        },
+      ],
+    });
+
+    const { pedido } = await service.crear(dto);
+
+    expect(pedido.productos[0].precio_unitario).toBe(18500);
+    expect(pedido.productos[0].subtotal).toBe(18500);
+    expect(pedido.factura_iva_importe).toBe(3885);
+    expect(pedido.total).toBe(22385);
+  });
+
+  it('calcula lineas de factura como Nacional con descuento 17%', async () => {
+    stkItemRepo.findOne
+      .mockResolvedValueOnce(
+        itemConPrecio(
+          '3N-PLA-1KG-AMAR',
+          '23528',
+          'PES',
+          '1',
+          'FILAMENTOS',
+          'Descripcion 3N-PLA-1KG-AMAR',
+          [{ lista: 'MINORISTA CON IVA', precioVta: '23528' }],
+        ),
+      )
+      .mockResolvedValueOnce(
+        itemConPrecio(
+          'EG-PLA-1KG-AZOS',
+          '32352',
+          'PES',
+          '1',
+          'FILAMENTOS',
+          'Descripcion EG-PLA-1KG-AZOS',
+          [{ lista: 'MINORISTA CON IVA', precioVta: '32352' }],
+        ),
+      )
+      .mockResolvedValueOnce(
+        itemConPrecio(
+          'FM-PLA-1KG-GRMA',
+          '30587',
+          'PES',
+          '1',
+          'FILAMENTOS',
+          'Descripcion FM-PLA-1KG-GRMA',
+          [{ lista: 'MINORISTA CON IVA', precioVta: '30587' }],
+        ),
+      )
+      .mockResolvedValueOnce(
+        itemConPrecio(
+          'FM-PLA-1KG-AMAR',
+          '30587',
+          'PES',
+          '1',
+          'FILAMENTOS',
+          'Descripcion FM-PLA-1KG-AMAR',
+          [{ lista: 'MINORISTA CON IVA', precioVta: '30587' }],
+        ),
+      );
+    vtaComprobanteService.crearDesdePedido.mockResolvedValue({
+      tipo: 'FA',
+      comprobante: 'A 00005 00000001',
+    });
+
+    const dto = dtoBase({
+      factura_tipo: 'A',
+      metodo_pago: 'transfer',
+      total: 141187.64,
+      productos: [
+        {
+          nombre: '3N-PLA-1KG-AMAR',
+          cantidad: 2,
+          precio_unitario: 23628.88,
+          subtotal: 56937.76,
+          ajuste_porcentaje: 17,
+        },
+        {
+          nombre: 'EG-PLA-1KG-AZOS',
+          cantidad: 1,
+          precio_unitario: 32490.92,
+          subtotal: 39145.92,
+          ajuste_porcentaje: 17,
+        },
+        {
+          nombre: 'FM-PLA-1KG-GRMA',
+          cantidad: 1,
+          precio_unitario: 30719.48,
+          subtotal: 37010.84,
+          ajuste_porcentaje: 17,
+        },
+        {
+          nombre: 'FM-PLA-1KG-AMAR',
+          cantidad: 1,
+          precio_unitario: 30719.48,
+          subtotal: 37010.84,
+          ajuste_porcentaje: 17,
+        },
+      ],
+    });
+
+    const { pedido } = await service.crear(dto);
+
+    expect(pedido.productos.map((producto) => producto.subtotal)).toEqual([
+      39056,
+      26852,
+      25388,
+      25388,
+    ]);
+    expect(pedido.factura_iva_importe).toBe(24503.64);
+    expect(pedido.total).toBe(141187.64);
   });
 
   it('rechaza total sin IVA cuando se requiere factura', async () => {
