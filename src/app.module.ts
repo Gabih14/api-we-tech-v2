@@ -27,6 +27,7 @@ import { VtaCobroModule } from './vta-cobro/vta-cobro.module';
 import { VtaCobroFacturaModule } from './vta-cobro-factura/vta-cobro-factura.module';
 import { VtaCobroMedioModule } from './vta-cobro-medio/vta-cobro-medio.module';
 import { ColorsModule } from './colors/colors.module';
+import { EsperaModule } from './espera/espera.module';
 import {
   DEFAULT_RATE_LIMIT_GLOBAL,
   DEFAULT_RATE_LIMIT_TTL_MS,
@@ -130,6 +131,7 @@ function getConfiguredRateLimit(
     VtaCobroFacturaModule,
     VtaCobroMedioModule,
     ColorsModule,
+    EsperaModule,
   ],
   providers: [
     {
