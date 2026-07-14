@@ -14,6 +14,42 @@ describe('PedidoService recalculo de importes', () => {
   const stkItemRepo = {
     findOne: jest.fn(),
   };
+  // Atributos (Marca+Material) por ítem para la elegibilidad de descuento por cantidad.
+  const ATRIBUTOS_POR_ITEM: Record<string, { marca: string; material: string }> = {
+    '3N-PLA-1KG-AMAR': { marca: '3n3', material: 'PLA' },
+    'EG-PLA-1KG-AZOS': { marca: 'Elegoo', material: 'PLA' },
+    'FM-PLA-1KG-GRMA': { marca: 'Fremover', material: 'High Speed PLA' },
+    'FM-PLA-1KG-AMAR': { marca: 'Fremover', material: 'High Speed PLA' },
+    'G3-PLA1-1KG-NEGR': { marca: 'Grilon3', material: 'PLA' },
+    'G3-PLA2-1KG-AMFL': { marca: 'Grilon3', material: 'PLA' },
+    'HB-PLA-1KG-BLAN': { marca: 'Hellbot', material: 'PLA' },
+  };
+  const stkAtributoNodoRepo = {
+    createQueryBuilder: jest.fn(() => {
+      let arboles: string[] = [];
+      const qb: any = {
+        innerJoin: () => qb,
+        select: () => qb,
+        addSelect: () => qb,
+        where: (_condition: string, params: any) => {
+          arboles = params?.arboles ?? [];
+          return qb;
+        },
+        andWhere: () => qb,
+        getRawMany: async () =>
+          arboles.flatMap((arbol) => {
+            const attr = ATRIBUTOS_POR_ITEM[arbol];
+            return attr
+              ? [
+                  { arbol, clase: 'Marca', valor: attr.marca },
+                  { arbol, clase: 'Material', valor: attr.material },
+                ]
+              : [];
+          }),
+      };
+      return qb;
+    }),
+  };
   const stockService = {
     reservarStock: jest.fn(async () => undefined),
     liberarStock: jest.fn(async () => undefined),
@@ -119,6 +155,7 @@ describe('PedidoService recalculo de importes', () => {
     service = new PedidoService(
       createRepo as any,
       stkItemRepo as any,
+      stkAtributoNodoRepo as any,
       stockService as any,
       vtaComprobanteService as any,
       configService as any,

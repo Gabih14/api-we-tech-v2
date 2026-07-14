@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -n \"PedidoProductoPrecargado\\\\|from './\\\\|from 'src/pricing\\\\|import {\" src/pedido/pedido.service.ts)",
+      "Bash(npx jest *)",
+      "Bash(TS_NODE_TRANSPILE_ONLY=1 node -r ts-node/register -r tsconfig-paths/register verify-pedido.ts)",
+      "Bash(cd 'D:/Programador/Proyectos/Web-WeTECH' && grep -rn \"ELIGIBLE_BRANDS_FOR_QUANTITY_DISCOUNT\\\\|getDiscountIdentifiersForProductId\\\\|normalizeDiscountIdentifier\\\\|isEligibleForQuantityDiscount\" src --include=*.ts --include=*.tsx | grep -v \"utils/discounts.ts\")",
+      "Read(//d/Programador/Proyectos/Web-WeTECH/**)",
+      "Bash(grep -v '^$')",
+      "Bash(TS_NODE_TRANSPILE_ONLY=1 node -r ts-node/register -r tsconfig-paths/register verify-align.ts)",
+      "Bash(git -C ../Web-WeTECH status --short)"
+    ],
+    "additionalDirectories": [
+      "D:\\Programador\\Proyectos\\Web-WeTECH\\src\\utils"
+    ]
+  }
+}
