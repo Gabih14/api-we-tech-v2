@@ -102,6 +102,82 @@ export const isEligibleForQuantityDiscount = (
   );
 };
 
+// ---------------------------------------------------------------------------
+// Elegibilidad por ATRIBUTOS (Marca + Material). Fuente de verdad confiable que
+// reemplaza el parseo frágil de prefijos de id: un mismo Marca+Material puede
+// tener muchos prefijos (G3-PLA / G3-PLA1 / G3-PLA2 / G3-MEGA, GSC-PLA / GSL-PLA…)
+// y con atributos todos resuelven al mismo par.
+// ---------------------------------------------------------------------------
+
+export type FilamentIdentity = {
+  category?: string | null;
+  marca?: string | null;
+  material?: string | null;
+};
+
+/**
+ * Pares (Marca, Material) de filamentos con descuento por cantidad. Reproduce el
+ * alcance histórico de {@link ELIGIBLE_BRANDS_FOR_QUANTITY_DISCOUNT} pero por
+ * atributos. Editar acá para agregar/quitar líneas elegibles.
+ */
+export const ELIGIBLE_FILAMENT_ATTRIBUTES: ReadonlyArray<{
+  marca: string;
+  material: string;
+}> = [
+  { marca: '3n3', material: 'PLA' }, // 3N-PLA
+  { marca: 'Grilon3', material: 'PLA' }, // G3-PLA (+ G3-PLA1/PLA2/MEGA)
+  { marca: 'Grilon3', material: 'PLA Boutique' }, // G3-BOUT
+  { marca: 'GST3D', material: 'PLA' }, // GS-PLA (real: GSC-PLA / GSL-PLA)
+  { marca: 'Hellbot', material: 'PLA' }, // HB-PLA
+  { marca: '3nMax', material: 'PLA+ Matte' }, // 3X-PLA
+  { marca: 'Fremover', material: 'High Speed PLA' }, // FM-PLA
+  { marca: 'Fremover', material: 'High Speed PLA Matte' }, // FM-PLA (matte)
+  { marca: 'Elegoo', material: 'PLA' }, // EG-PLA
+];
+
+const normalizeAttribute = (value?: string | null): string =>
+  (value ?? '').trim().replace(/\s+/g, ' ').toUpperCase();
+
+const ELIGIBLE_ATTRIBUTE_KEYS = new Set(
+  ELIGIBLE_FILAMENT_ATTRIBUTES.map(
+    (e) => `${normalizeAttribute(e.marca)}|${normalizeAttribute(e.material)}`,
+  ),
+);
+
+export const isEligibleForQuantityDiscountByAttributes = (
+  identity: FilamentIdentity,
+  weight: number,
+): boolean => {
+  if (!shouldApplyDiscount({ id: '', category: identity.category })) {
+    return false;
+  }
+  if (weight !== 1) {
+    return false;
+  }
+  return ELIGIBLE_ATTRIBUTE_KEYS.has(
+    `${normalizeAttribute(identity.marca)}|${normalizeAttribute(identity.material)}`,
+  );
+};
+
+export const getDiscountPercentageForFilament = (
+  identity: FilamentIdentity,
+  quantity: number,
+  weight?: number,
+): string => {
+  const productoCategoria = { id: '', category: identity.category };
+  if (!shouldApplyDiscount(productoCategoria)) {
+    return '0%';
+  }
+  if (
+    weight !== undefined &&
+    isEligibleForQuantityDiscountByAttributes(identity, weight)
+  ) {
+    const rate = getDiscountForQuantityForProduct(productoCategoria, quantity);
+    return `${Math.round(rate * 100)}%`;
+  }
+  return `${Math.round(BASE_FILAMENT_DISCOUNT * 100)}%`;
+};
+
 export const getDiscountForQuantityForProduct = (
   product: ProductDiscountInput,
   quantity: number,

@@ -1,4 +1,13 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  Query,
+} from '@nestjs/common';
 import { StkItemService } from './stk-item.service';
 import { CreateStkItemDto } from './dto/create-stk-item.dto';
 import { UpdateStkItemDto } from './dto/update-stk-item.dto';
@@ -13,8 +22,35 @@ export class StkItemController {
   }
 
   @Get()
-  findAll() {
-    return this.stkItemService.findAll();
+  findAll(
+    @Query('material') material?: string,
+    @Query('nivel') nivel?: string,
+    @Query('aptoAlimentos') aptoAlimentos?: string,
+    @Query('marca') marca?: string,
+    @Query('color') color?: string,
+  ) {
+    return this.stkItemService.findAll({
+      material,
+      nivel,
+      aptoAlimentos,
+      marca,
+      color,
+    });
+  }
+
+  /** Valores disponibles por clase de atributo, para poblar los selects de filtros. */
+  @Get('atributos/facetas')
+  getFacetasAtributos() {
+    return this.stkItemService.getFacetasAtributos();
+  }
+
+  /**
+   * Catálogo "armado": todos los ítems agrupados en productos con sus variantes
+   * (peso, color, etc.) y atributos, para reemplazar el armado manual en la web.
+   */
+  @Get('catalogo')
+  getCatalogo() {
+    return this.stkItemService.getCatalogo();
   }
 
   @Get('costo/:distancia')
@@ -23,9 +59,16 @@ export class StkItemController {
     return this.stkItemService.getCostoEnvio(distanciaNum);
   }
 
+  /** Ficha técnica (atributos) de un ítem, fusionando los del padre GENERICO. */
+  @Get(':id/atributos')
+  getAtributos(@Param('id') id: string) {
+    return this.stkItemService.getAtributos(id);
+  }
+
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.stkItemService.findOne(id);
+  findOne(@Param('id') id: string, @Query('atributos') atributos?: string) {
+    const includeAtributos = atributos === 'true' || atributos === '1';
+    return this.stkItemService.findOne(id, includeAtributos);
   }
 
   @Patch(':id')

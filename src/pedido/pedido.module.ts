@@ -6,6 +6,8 @@ import { PedidoController } from './pedido.controller';
 import { Pedido } from './entities/pedido.entity';
 import { PedidoItem } from './entities/pedido-item.entity';
 import { StkItem } from 'src/stk-item/entities/stk-item.entity';
+import { StkAtributo } from 'src/stk-item/entities/stk-atributo.entity';
+import { StkAtributoNodo } from 'src/stk-item/entities/stk-atributo-nodo.entity';
 import { StkExistenciaModule } from 'src/stk-existencia/stk-existencia.module';
 import { VtaComprobanteModule } from 'src/vta-comprobante/vta-comprobante.module';
 import { MailerModule } from 'src/mailer/mailer.module';
@@ -19,7 +21,7 @@ import { CuponModule } from 'src/cupon/cupon.module';
   imports: [
     // 👇 Se indica la conexión 'back' para la BD propia
     TypeOrmModule.forFeature([Pedido, PedidoItem], 'back'),
-    TypeOrmModule.forFeature([StkItem]), // Esta sigue en la conexión default (Nacional)
+    TypeOrmModule.forFeature([StkItem, StkAtributo, StkAtributoNodo]), // conexión default (Nacional)
     forwardRef(() => StkExistenciaModule),
     forwardRef(() => VtaComprobanteModule),
     forwardRef(() => VtaComprobanteItemModule),
