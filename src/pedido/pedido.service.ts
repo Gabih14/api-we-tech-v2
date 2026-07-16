@@ -17,6 +17,8 @@ import { Brackets, Repository } from 'typeorm';
 import { CreatePedidoDto } from './dto/create-pedido.dto';
 import { StkExistenciaService } from 'src/stk-existencia/stk-existencia.service';
 import { StkItem } from 'src/stk-item/entities/stk-item.entity';
+import { StkAtributo } from 'src/stk-item/entities/stk-atributo.entity';
+import { StkAtributoNodo } from 'src/stk-item/entities/stk-atributo-nodo.entity';
 import { VtaComprobanteService } from 'src/vta-comprobante/vta-comprobante.service';
 import { PedidoItem } from './entities/pedido-item.entity';
 import { v4 as uuidv4 } from 'uuid';
@@ -28,9 +30,10 @@ import { CobrosService } from 'src/vta-comprobante/cobros.service';
 import { GetPedidosDashboardDto } from './dto/get-pedidos-dashboard.dto';
 import { CuponService } from 'src/cupon/cupon.service';
 import {
-  getDiscountPercentageForProduct,
-  isEligibleForQuantityDiscount,
+  getDiscountPercentageForFilament,
+  isEligibleForQuantityDiscountByAttributes,
   parseProductWeightFromDescription,
+  FilamentIdentity,
 } from 'src/pricing/discounts';
 
 type PedidoMetodoPago = 'online' | 'transfer';
@@ -71,6 +74,7 @@ interface PedidoProductoPrecargado {
   peso?: number;
   esProductoEnvio: boolean;
   aplicaDescuentoDiferencialPorCantidad: boolean;
+  identidad: FilamentIdentity;
 }
 
 @Injectable()
@@ -83,6 +87,9 @@ export class PedidoService {
 
     @InjectRepository(StkItem) // 👈 Viene de la base original
     private readonly stkItemRepo: Repository<StkItem>,
+
+    @InjectRepository(StkAtributoNodo) // 👈 Atributos (misma base Nacional)
+    private readonly stkAtributoNodoRepo: Repository<StkAtributoNodo>,
 
     @Inject(forwardRef(() => StkExistenciaService))
     private readonly stockService: StkExistenciaService,
@@ -162,13 +169,14 @@ export class PedidoService {
       if (!esProductoEnvio) {
         pesoTotalKg += (peso ?? 0) * cantidad;
       }
-      const productoDescuento = {
-        id: item.id,
-        category: item.grupo,
-      };
+      // Identidad (Marca+Material) desde atributos: base confiable para el
+      // descuento por cantidad, en vez de parsear prefijos del id.
+      const identidad: FilamentIdentity = esProductoEnvio
+        ? { category: item.grupo }
+        : await this.obtenerIdentidadFilamento(item);
       const aplicaDescuentoDiferencialPorCantidad =
         !esProductoEnvio &&
-        isEligibleForQuantityDiscount(productoDescuento, peso ?? 0);
+        isEligibleForQuantityDiscountByAttributes(identidad, peso ?? 0);
 
       if (aplicaDescuentoDiferencialPorCantidad) {
         cantidadTotalDescuentoDiferencial += cantidad;
@@ -180,6 +188,7 @@ export class PedidoService {
         peso,
         esProductoEnvio,
         aplicaDescuentoDiferencialPorCantidad,
+        identidad,
       });
     }
 
@@ -189,6 +198,7 @@ export class PedidoService {
       peso,
       esProductoEnvio,
       aplicaDescuentoDiferencialPorCantidad,
+      identidad,
     } of productosPrecargados) {
       const cantidadParaDescuento = aplicaDescuentoDiferencialPorCantidad
         ? cantidadTotalDescuentoDiferencial
@@ -202,6 +212,7 @@ export class PedidoService {
         cantidadParaDescuento,
         esProductoEnvio,
         requiereFactura,
+        identidad,
       );
       const diferenciaProducto = this.obtenerDiferenciaProducto(
         producto,
@@ -1263,16 +1274,13 @@ export class PedidoService {
     cantidadParaDescuento?: number,
     esProductoEnvio = false,
     incluyeIvaFactura = false,
+    identidad: FilamentIdentity = { category: item.grupo },
   ): PedidoProductoCalculado {
     const cantidad = this.obtenerCantidadProducto(producto);
     const precioBaseUnitario = this.obtenerPrecioListaCotizado(
       item,
       incluyeIvaFactura ? 'MINORISTA CON IVA' : 'MINORISTA',
     );
-    const productoDescuento = {
-      id: item.id,
-      category: item.grupo,
-    };
     const pesoProducto = peso ?? parseProductWeightFromDescription(item.descripcion);
     const cantidadDescuentoProducto = cantidadParaDescuento ?? cantidad;
     // Los descuentos automaticos de producto solo corresponden a transferencias.
@@ -1281,8 +1289,8 @@ export class PedidoService {
     const porcentajeCuponAplicable = esProductoEnvio ? 0 : porcentajeCupon;
     const descuentoProductoPorcentaje = aplicaDescuentoProducto
       ? this.parsearPorcentajeDescuento(
-          getDiscountPercentageForProduct(
-            productoDescuento,
+          getDiscountPercentageForFilament(
+            identidad,
             cantidadDescuentoProducto,
             pesoProducto,
           ),
@@ -1387,6 +1395,37 @@ export class PedidoService {
   private parsearPorcentajeDescuento(porcentaje: string): number {
     const valor = Number(porcentaje.replace('%', ''));
     return Number.isFinite(valor) ? valor : 0;
+  }
+
+  /**
+   * Marca + Material del ítem desde los Atributos nativos (propios o heredados del
+   * padre GENERICO). Base confiable para la elegibilidad del descuento por cantidad,
+   * en vez de parsear prefijos del id.
+   */
+  private async obtenerIdentidadFilamento(
+    item: StkItem,
+  ): Promise<FilamentIdentity> {
+    const arboles = item.idPadre ? [item.id, item.idPadre] : [item.id];
+    const rows = await this.stkAtributoNodoRepo
+      .createQueryBuilder('n')
+      .innerJoin(StkAtributo, 'a', 'a.id = n.atributo')
+      .select('n.arbol', 'arbol')
+      .addSelect('a.clase', 'clase')
+      .addSelect('a.nombre', 'valor')
+      .where('n.arbol IN (:...arboles)', { arboles })
+      .andWhere('a.clase IN (:...clases)', { clases: ['Marca', 'Material'] })
+      .getRawMany<{ arbol: string; clase: string; valor: string }>();
+
+    // El valor propio del ítem gana sobre el heredado del padre.
+    const valor = (clase: string): string | null =>
+      (rows.find((r) => r.arbol === item.id && r.clase === clase) ??
+        rows.find((r) => r.clase === clase))?.valor ?? null;
+
+    return {
+      category: item.grupo,
+      marca: valor('Marca'),
+      material: valor('Material'),
+    };
   }
 
   private obtenerPrecioListaCotizado(

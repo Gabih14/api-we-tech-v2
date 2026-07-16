@@ -70,4 +70,22 @@ export class StkItem {
 
   @Column('blob', { name: 'foto', nullable: true })
   foto: Buffer | null;
+
+  /**
+   * Marca al ítem "GENERICO" (padre): oculto, no se vende, agrupa los atributos
+   * comunes a toda una línea de color.
+   */
+  @Column('tinyint', {
+    name: 'is_padre',
+    nullable: true,
+    transformer: {
+      to: (value: boolean | null) => (value == null ? null : value ? 1 : 0),
+      from: (value: number | null) => (value == null ? null : value === 1),
+    },
+  })
+  isPadre: boolean | null;
+
+  /** Id del ítem padre (GENERICO) del que un color real deriva sus atributos comunes. */
+  @Column('varchar', { name: 'id_padre', nullable: true, length: 20 })
+  idPadre: string | null;
 }
