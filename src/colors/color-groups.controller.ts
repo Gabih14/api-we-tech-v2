@@ -15,12 +15,14 @@ import {
 } from './color-groups.service';
 import { CreateColorGroupDto } from './dto/create-color-group.dto';
 import { UpdateColorGroupDto } from './dto/update-color-group.dto';
+import { AuthType } from '../common/decorators/auth-type.decorator';
 
 @Controller('color-groups')
 export class ColorGroupsController {
   constructor(private readonly colorGroupsService: ColorGroupsService) {}
 
   @Post()
+  @AuthType('default')
   @UsePipes(new ValidationPipe({ transform: true }))
   async create(
     @Body() createColorGroupDto: CreateColorGroupDto,
@@ -34,6 +36,7 @@ export class ColorGroupsController {
   }
 
   @Patch(':id')
+  @AuthType('default')
   @UsePipes(new ValidationPipe({ transform: true }))
   async update(
     @Param('id', ParseIntPipe) id: number,

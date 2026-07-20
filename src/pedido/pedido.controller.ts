@@ -34,6 +34,7 @@ export class PedidoController {
   constructor(private readonly pedidoService: PedidoService) {}
 
   @Post()
+  @AuthType('default')
   @Throttle({
     default: {
       ttl: rateLimitValue(RATE_LIMIT_TTL_MS, DEFAULT_RATE_LIMIT_TTL_MS),
@@ -109,7 +110,7 @@ export class PedidoController {
   }
 
   @Post(':externalId/cancelar')
-  @AuthType('dashboard')
+  @AuthType('default')
   @HttpCode(HttpStatus.OK)
   async cancelarPedido(@Param('externalId') externalId: string) {
     const pedido = await this.pedidoService.cancelarPedidoPendiente(externalId);
@@ -120,7 +121,7 @@ export class PedidoController {
   }
 
   @Post(':externalId/rechazar')
-  @AuthType('dashboard')
+  @AuthType('default')
   @HttpCode(HttpStatus.OK)
   async rechazarTransferencia(@Param('externalId') externalId: string) {
     const pedido = await this.pedidoService.rechazarTransferencia(externalId);

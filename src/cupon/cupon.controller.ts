@@ -15,12 +15,14 @@ import { UpdateCuponDto } from './dto/update-cupon.dto';
 import { Cupon } from './entities/cupon.entity';
 import { CreateCuponUsoDto } from 'src/cupon_uso/dto/create-cupon_uso.dto';
 import { CuponUso } from 'src/cupon_uso/entities/cupon_uso.entity';
+import { AuthType } from '../common/decorators/auth-type.decorator';
 
 @Controller('cupones')
 export class CuponController {
   constructor(private readonly cuponService: CuponService) {}
 
   @Post()
+  @AuthType('default')
   @UsePipes(new ValidationPipe({ transform: true }))
   async crear(@Body() crearCuponDto: CreateCuponDto): Promise<Cupon> {
     return this.cuponService.crear(crearCuponDto);
@@ -37,6 +39,7 @@ export class CuponController {
   }
 
   @Patch(':id')
+  @AuthType('default')
   @UsePipes(new ValidationPipe({ transform: true }))
   async actualizar(
     @Param('id') id: string,
@@ -46,6 +49,7 @@ export class CuponController {
   }
 
   @Post('usar')
+  @AuthType('default')
   @UsePipes(new ValidationPipe({ transform: true }))
   async usarCupon(@Body() usarCuponDto: CreateCuponUsoDto): Promise<CuponUso> {
     return this.cuponService.usarCupon(usarCuponDto);
@@ -65,6 +69,7 @@ export class CuponController {
   }
 
   @Delete(':id/desactivar')
+  @AuthType('default')
   async desactivar(@Param('id') id: string): Promise<Cupon> {
     return this.cuponService.desactivar(id);
   }
