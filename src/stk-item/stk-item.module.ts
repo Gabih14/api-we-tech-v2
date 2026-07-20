@@ -7,11 +7,13 @@ import { StkFamilia } from '../stk_familia/entities/stk_familia.entity';
 import { StkItemService } from './stk-item.service';
 import { StkItemController } from './stk-item.controller';
 import { StkPrecioModule } from 'src/stk-precio/stk-precio.module';
+import { PedidoSerieModule } from 'src/pedido/pedido-serie.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([StkItem, StkAtributo, StkAtributoNodo, StkFamilia]),
     StkPrecioModule,
+    PedidoSerieModule,
   ],
   providers: [StkItemService],
   controllers: [StkItemController],

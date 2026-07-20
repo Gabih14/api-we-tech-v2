@@ -82,6 +82,15 @@ describe('PedidoService recalculo de importes', () => {
     validarUsoCupon: jest.fn(async () => undefined),
     resolverPorcentajePorModalidad: jest.fn(),
   };
+  const pedidoSerieService = {
+    reservarParaPedido: jest.fn(async () => undefined),
+    reservarStockPedido: jest.fn(async (productos) => {
+      for (const producto of productos) producto.deposito = 'GARAGE';
+    }),
+    liberarPedido: jest.fn(async () => undefined),
+    confirmarPedido: jest.fn(async () => undefined),
+    seriesDelPedido: jest.fn(async () => []),
+  };
 
   let service: PedidoService;
   let warnSpy: jest.SpyInstance;
@@ -164,6 +173,7 @@ describe('PedidoService recalculo de importes', () => {
       telegramService as any,
       cobrosService as any,
       cuponService as any,
+      pedidoSerieService as any,
     );
     jest
       .spyOn(service, 'generarIntencionDePago')

@@ -8,6 +8,7 @@ import { CreateStkItemDto } from './dto/create-stk-item.dto';
 import { UpdateStkItemDto } from './dto/update-stk-item.dto';
 import { StkFamilia } from 'src/stk_familia/entities/stk_familia.entity';
 import { StkPrecioService } from 'src/stk-precio/stk-precio.service';
+import { PedidoSerieService } from 'src/pedido/pedido-serie.service';
 
 /** Proyección pública de un atributo (nada de la fila entera). */
 export interface ItemAtributo {
@@ -77,6 +78,9 @@ export interface CatalogoVariante {
   promotionalPrice: string | null;
   /** Stock disponible (cantidad − comprometido, sumado por depósito, mínimo 0). */
   stock: number;
+  controla_serie: boolean;
+  habilitado_web: boolean;
+  stock_disponible: number;
   /** Peso en kg parseado de "Peso Neto" (null si no aplica, ej. "Kit 20 Colores"). */
   pesoKg: number | null;
   /** Código de familia del ERP (lo usa el front para filtros de exclusión). */
@@ -120,6 +124,7 @@ export class StkItemService {
     private readonly stkFamiliaRepository: Repository<StkFamilia>,
 
     private readonly stkPrecioService: StkPrecioService,
+    private readonly pedidoSerieService: PedidoSerieService,
   ) {}
 
   async create(createStkItemDto: CreateStkItemDto): Promise<StkItem> {
@@ -140,6 +145,11 @@ export class StkItemService {
     });
 
     // Combinás cada item con su precioVtaCotizadoMin (aplica cotización solo si la moneda es DOL)
+    const ids = items.map((item) => item.id);
+    const [configs, series] = await Promise.all([
+      this.pedidoSerieService.configuraciones(ids),
+      this.pedidoSerieService.disponibilidadSeries(ids),
+    ]);
     return items.map((item) => {
       const precioMinorista = item.stkPrecios?.find((p) => p.lista === 'MINORISTA');
 
@@ -153,10 +163,16 @@ export class StkItemService {
         }
       }
 
+      const config = configs.get(item.id);
+      const stock = this.stockDisponible(item);
+      const controlaSerie = Boolean(config?.controla_serie);
       return {
         ...item,
         fotoUrl: this.extractFotoUrl(item.foto),
         precioVtaCotizadoMin,
+        controla_serie: controlaSerie,
+        habilitado_web: config?.habilitado_web ?? true,
+        stock_disponible: controlaSerie ? Math.min(stock, series.get(item.id) ?? 0) : stock,
       };
     });
   }
@@ -190,9 +206,19 @@ export class StkItemService {
       ? await this.fetchAtributos(item.id, item.idPadre)
       : undefined;
 
+    const [configs, series] = await Promise.all([
+      this.pedidoSerieService.configuraciones([item.id]),
+      this.pedidoSerieService.disponibilidadSeries([item.id]),
+    ]);
+    const config = configs.get(item.id);
+    const stock = this.stockDisponible(item);
+    const controlaSerie = Boolean(config?.controla_serie);
     return {
       ...item,
       precioVtaCotizadoMin,
+      controla_serie: controlaSerie,
+      habilitado_web: config?.habilitado_web ?? true,
+      stock_disponible: controlaSerie ? Math.min(stock, series.get(item.id) ?? 0) : stock,
       ...(includeAtributos ? { atributos } : {}),
     };
   }
@@ -382,6 +408,22 @@ export class StkItemService {
       this.armarProducto(key, variantes, atributosPorItem),
     );
 
+    const ids = items.map((item) => item.id);
+    const [configs, series] = await Promise.all([
+      this.pedidoSerieService.configuraciones(ids),
+      this.pedidoSerieService.disponibilidadSeries(ids),
+    ]);
+    for (const producto of productos) {
+      for (const variante of producto.variantes) {
+        const config = configs.get(variante.id);
+        variante.controla_serie = Boolean(config?.controla_serie);
+        variante.habilitado_web = config?.habilitado_web ?? true;
+        variante.stock_disponible = variante.controla_serie
+          ? Math.min(variante.stock, series.get(variante.id) ?? 0)
+          : variante.stock;
+      }
+    }
+
     return productos.sort((a, b) => a.nombre.localeCompare(b.nombre));
   }
 
@@ -527,6 +569,9 @@ export class StkItemService {
           invoicePrice: invoice != null ? invoice.toFixed(2) : null,
           promotionalPrice: promo != null ? promo.toFixed(2) : null,
           stock: this.stockDisponible(item),
+          controla_serie: false,
+          habilitado_web: true,
+          stock_disponible: this.stockDisponible(item),
           pesoKg: StkItemService.pesoAKg(pesoNeto),
           familia: item.familia ?? null,
           visible: !!item.visible,

@@ -1,6 +1,6 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { EntityManager, Repository } from 'typeorm';
 import { StkExistencia } from './entities/stk-existencia.entity';
 import { CreateStkExistenciaDto } from './dto/create-stk-existencia.dto';
 import { UpdateStkExistenciaDto } from './dto/update-stk-existencia.dto';
@@ -44,7 +44,12 @@ export class StkExistenciaService {
     await this.stkExistenciaRepository.remove(existencia);
   }
 
-  async reservarStock(item: string, cantidad: number, depositoPreferido?: string): Promise<string> {
+  async reservarStock(
+    item: string,
+    cantidad: number,
+    depositoPreferido?: string,
+    manager?: EntityManager,
+  ): Promise<string> {
     // 🚚 Items de envío (ENV-*) no requieren validación de depósito
     if (item.startsWith('ENV')) {
       return 'ENV'; // Retornar depósito virtual para items de envío
@@ -52,8 +57,10 @@ export class StkExistenciaService {
 
     // Si se especifica depósito, usar lógica actual
     if (depositoPreferido) {
-      const existencia = await this.stkExistenciaRepository.findOne({
+      const repo = manager?.getRepository(StkExistencia) ?? this.stkExistenciaRepository;
+      const existencia = await repo.findOne({
         where: { item, deposito: depositoPreferido },
+        ...(manager ? { lock: { mode: 'pessimistic_write' as const } } : {}),
       });
       if (!existencia) {
         throw new NotFoundException(`Stock no encontrado para ${item} en ${depositoPreferido}`);
@@ -70,12 +77,16 @@ export class StkExistenciaService {
       }
 
       existencia.comprometido = (comprometido + cantidad).toString();
-      await this.stkExistenciaRepository.save(existencia);
+      await repo.save(existencia);
       return depositoPreferido;
     }
 
     // Sin depósito especificado: buscar en todos
-    const existencias = await this.stkExistenciaRepository.find({ where: { item } });
+    const repo = manager?.getRepository(StkExistencia) ?? this.stkExistenciaRepository;
+    const existencias = await repo.find({
+      where: { item },
+      ...(manager ? { lock: { mode: 'pessimistic_write' as const } } : {}),
+    });
 
     if (!existencias.length) {
       throw new NotFoundException(`Item ${item} no encontrado en ningún depósito`);
@@ -103,27 +114,37 @@ export class StkExistenciaService {
 
     const comprometido = Number(existencia.comprometido || 0);
     existencia.comprometido = (comprometido + cantidad).toString();
-    await this.stkExistenciaRepository.save(existencia);
+    await repo.save(existencia);
     
     return existencia.deposito; // 👈 Retornar el depósito usado
   }
 
-  async confirmarStock(item: string, cantidad: number, deposito?: string) {
+  async confirmarStock(
+    item: string,
+    cantidad: number,
+    deposito?: string,
+    manager?: EntityManager,
+  ) {
     // 🚚 Items de envío (ENV-*) no requieren confirmación de stock
     if (item.startsWith('ENV')) {
       return; // Sin operación para items de envío
     }
 
     let existencia: StkExistencia | null;
+    const repo = manager?.getRepository(StkExistencia) ?? this.stkExistenciaRepository;
     
     if (deposito) {
       // Depósito específico
-      existencia = await this.stkExistenciaRepository.findOne({
+      existencia = await repo.findOne({
         where: { item, deposito },
+        ...(manager ? { lock: { mode: 'pessimistic_write' as const } } : {}),
       });
     } else {
       // Buscar depósito con stock comprometido >= cantidad
-      const existencias = await this.stkExistenciaRepository.find({ where: { item } });
+      const existencias = await repo.find({
+        where: { item },
+        ...(manager ? { lock: { mode: 'pessimistic_write' as const } } : {}),
+      });
       existencia = existencias
         .filter(e => Number(e.comprometido || 0) >= cantidad)
         .sort((a, b) => Number(b.comprometido || 0) - Number(a.comprometido || 0))[0] || null;
@@ -140,25 +161,35 @@ export class StkExistenciaService {
     existencia.comprometido = (comprometido - cantidad).toString();
     existencia.cantidad = (cantidadActual - cantidad).toString();
 
-    await this.stkExistenciaRepository.save(existencia);
+    await repo.save(existencia);
   }
 
-  async liberarStock(item: string, cantidad: number, deposito?: string) {
+  async liberarStock(
+    item: string,
+    cantidad: number,
+    deposito?: string,
+    manager?: EntityManager,
+  ) {
     // 🚚 Items de envío (ENV-*) no requieren liberación de stock
     if (item.startsWith('ENV')) {
       return; // Sin operación para items de envío
     }
 
     let existencia: StkExistencia | null;
+    const repo = manager?.getRepository(StkExistencia) ?? this.stkExistenciaRepository;
     
     if (deposito) {
       // Depósito específico
-      existencia = await this.stkExistenciaRepository.findOne({
+      existencia = await repo.findOne({
         where: { item, deposito },
+        ...(manager ? { lock: { mode: 'pessimistic_write' as const } } : {}),
       });
     } else {
       // Buscar depósito con stock comprometido
-      const existencias = await this.stkExistenciaRepository.find({ where: { item } });
+      const existencias = await repo.find({
+        where: { item },
+        ...(manager ? { lock: { mode: 'pessimistic_write' as const } } : {}),
+      });
       existencia = existencias
         .filter(e => Number(e.comprometido || 0) > 0)
         .sort((a, b) => Number(b.comprometido || 0) - Number(a.comprometido || 0))[0] || null;
@@ -169,7 +200,7 @@ export class StkExistenciaService {
     const comprometido = Number(existencia.comprometido || 0);
     existencia.comprometido = Math.max(0, comprometido - cantidad).toString();
 
-    await this.stkExistenciaRepository.save(existencia);
+    await repo.save(existencia);
   }
 
 }

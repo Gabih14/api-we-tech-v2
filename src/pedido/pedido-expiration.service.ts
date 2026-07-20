@@ -6,6 +6,8 @@ import { Pedido } from './entities/pedido.entity';
 import { StkExistenciaService } from 'src/stk-existencia/stk-existencia.service';
 import { CobrosService } from 'src/vta-comprobante/cobros.service';
 import { PedidoService } from './pedido.service';
+import { PedidoSerieService } from './pedido-serie.service';
+import { PedidoItemSerieEstado } from './entities/pedido-item-serie.entity';
 
 @Injectable()
 export class PedidoExpirationService {
@@ -17,6 +19,7 @@ export class PedidoExpirationService {
     private readonly existenciaService: StkExistenciaService,
     private readonly cobrosService: CobrosService,
     private readonly pedidoService: PedidoService,
+    private readonly pedidoSerieService: PedidoSerieService,
   ) {}
 
   async run(ttlMin = Number(process.env.PEDIDO_TTL_MIN || 30)) {
@@ -59,7 +62,11 @@ export class PedidoExpirationService {
         // 1️⃣ Intentar liberar cada producto
         for (const p of pedido.productos) {
           try {
-            await this.existenciaService.liberarStock(p.nombre, p.cantidad);
+            await this.existenciaService.liberarStock(
+              p.nombre,
+              p.cantidad,
+              p.deposito ?? undefined,
+            );
             liberacionesExitosas.push({ nombre: p.nombre, cantidad: p.cantidad });
           } catch (stockError) {
             tieneErrores = true;
@@ -71,6 +78,10 @@ export class PedidoExpirationService {
 
         // 2️⃣ Marcar como cancelado incluso si hubo fallos parciales
         pedido.estado = 'CANCELADO';
+        await this.pedidoSerieService.liberarPedido(
+          pedido.id,
+          PedidoItemSerieEstado.CANCELADA,
+        );
         await this.pedidoRepo.save(pedido);
         expirados++;
 
@@ -103,6 +114,11 @@ export class PedidoExpirationService {
         `Expiración completada: ${resultado.expirados}/${resultado.total} cancelados, ${resultado.fallos} errores críticos`,
       );
     }
+  }
+
+  @Cron(process.env.PEDIDO_SERIE_RECONCILIATION_CRON || '*/15 * * * *')
+  async reconciliarSeries() {
+    return this.pedidoSerieService.reconciliarConfirmaciones();
   }
 
   @Cron(process.env.PEDIDO_TRANSFER_APPROVAL_CRON || '*/5 * * * *')

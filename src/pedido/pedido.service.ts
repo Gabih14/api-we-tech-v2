@@ -35,6 +35,8 @@ import {
   parseProductWeightFromDescription,
   FilamentIdentity,
 } from 'src/pricing/discounts';
+import { PedidoSerieService } from './pedido-serie.service';
+import { PedidoItemSerieEstado } from './entities/pedido-item-serie.entity';
 
 type PedidoMetodoPago = 'online' | 'transfer';
 
@@ -108,6 +110,8 @@ export class PedidoService {
     private readonly cobrosService: CobrosService,
 
     private readonly cuponService: CuponService,
+
+    private readonly pedidoSerieService: PedidoSerieService,
   ) {}
 
   // 🧾 Crear pedido e intención de pago
@@ -268,10 +272,6 @@ export class PedidoService {
       factura_iva_importe: facturaIvaImporte,
     });
 
-    for (const p of productosValidados) {
-      await this.stockService.reservarStock(p.nombre, p.cantidad);
-    }
-
     const externalId = uuidv4().replace(/-/g, '');
     const callePedido = dto.calle || dto.billing_address?.street || '';
     const direccionPedido = {
@@ -317,6 +317,41 @@ export class PedidoService {
 
     const pedidoGuardado = await this.pedidoRepo.save(pedido);
 
+    try {
+      await this.pedidoSerieService.reservarStockPedido(pedidoGuardado.productos);
+      await this.pedidoRepo.save(pedidoGuardado);
+    } catch (error) {
+      pedidoGuardado.estado = 'CANCELADO';
+      await this.pedidoRepo.save(pedidoGuardado);
+      throw error;
+    }
+
+    try {
+      const ttlMinutos = metodoPago === 'transfer'
+        ? Number(process.env.PEDIDO_TRANSFER_TTL_MIN || 2880)
+        : Number(process.env.PEDIDO_TTL_MIN || 30);
+      await this.pedidoSerieService.reservarParaPedido(pedidoGuardado, ttlMinutos);
+    } catch (error) {
+      for (const p of pedidoGuardado.productos) {
+        try {
+          await this.stockService.liberarStock(
+            p.nombre,
+            p.cantidad,
+            p.deposito ?? undefined,
+          );
+        } catch (stockError) {
+          this.logger.error(`No se pudo compensar stock de ${p.nombre}`, stockError);
+        }
+      }
+      await this.pedidoSerieService.liberarPedido(
+        pedidoGuardado.id,
+        PedidoItemSerieEstado.LIBERADA,
+      );
+      pedidoGuardado.estado = 'CANCELADO';
+      await this.pedidoRepo.save(pedidoGuardado);
+      throw error;
+    }
+
     // Para transferencias, generar comprobante pendiente sin cobro
     if (pedidoGuardado.metodo_pago === 'transfer') {
       try {
@@ -328,7 +363,11 @@ export class PedidoService {
       } catch (err) {
         for (const p of productosValidados) {
           try {
-            await this.stockService.liberarStock(p.nombre, p.cantidad);
+            await this.stockService.liberarStock(
+              p.nombre,
+              p.cantidad,
+              p.deposito ?? undefined,
+            );
           } catch (e) {
             console.error(
               `Error liberando stock de ${p.nombre}:`,
@@ -337,6 +376,10 @@ export class PedidoService {
           }
         }
         pedidoGuardado.estado = 'CANCELADO';
+        await this.pedidoSerieService.liberarPedido(
+          pedidoGuardado.id,
+          PedidoItemSerieEstado.CANCELADA,
+        );
         await this.pedidoRepo.save(pedidoGuardado);
         throw err;
       }
@@ -391,7 +434,11 @@ export class PedidoService {
       // Rollback: liberar stock y marcar pedido como cancelado
       for (const p of productosValidados) {
         try {
-          await this.stockService.liberarStock(p.nombre, p.cantidad);
+          await this.stockService.liberarStock(
+            p.nombre,
+            p.cantidad,
+            p.deposito ?? undefined,
+          );
         } catch (e) {
           // log y continuar intentando liberar el resto
           console.error(
@@ -401,6 +448,10 @@ export class PedidoService {
         }
       }
       pedidoGuardado.estado = 'CANCELADO';
+      await this.pedidoSerieService.liberarPedido(
+        pedidoGuardado.id,
+        PedidoItemSerieEstado.CANCELADA,
+      );
       await this.pedidoRepo.save(pedidoGuardado);
       throw err;
     }
@@ -746,7 +797,11 @@ export class PedidoService {
           );
           for (const p of pedido.productos) {
             try {
-              await this.stockService.reservarStock(p.nombre, p.cantidad);
+              p.deposito = await this.stockService.reservarStock(
+                p.nombre,
+                p.cantidad,
+                p.deposito ?? undefined,
+              );
             } catch (err) {
               console.error(
                 `❌ No se pudo re-reservar stock para ${p.nombre}`,
@@ -757,14 +812,14 @@ export class PedidoService {
               );
             }
           }
+          await this.pedidoSerieService.reservarParaPedido(
+            pedido,
+            Number(process.env.PEDIDO_TTL_MIN || 30),
+          );
         }
 
         pedido.estado = 'APROBADO';
         pedido.aprobado = new Date();
-
-        for (const p of pedido.productos) {
-          await this.stockService.confirmarStock(p.nombre, p.cantidad);
-        }
 
         let comprobanteCreado: { tipo: string; comprobante: string };
 
@@ -788,6 +843,12 @@ export class PedidoService {
           );
           throw err; // crítico => reintento Nave
         }
+
+        await this.pedidoSerieService.confirmarPedido(
+          pedido,
+          comprobanteCreado.tipo,
+          comprobanteCreado.comprobante,
+        );
 
         try {
           const cuentaNave =
@@ -854,8 +915,16 @@ export class PedidoService {
       case 'REFUNDED':
         pedido.estado = 'CANCELADO';
         for (const p of pedido.productos) {
-          await this.stockService.liberarStock(p.nombre, p.cantidad);
+          await this.stockService.liberarStock(
+            p.nombre,
+            p.cantidad,
+            p.deposito ?? undefined,
+          );
         }
+        await this.pedidoSerieService.liberarPedido(
+          pedido.id,
+          PedidoItemSerieEstado.CANCELADA,
+        );
         await this.eliminarComprobanteSiExiste(pedido);
         try {
           await this.notificarCancelacionCliente(
@@ -887,10 +956,15 @@ export class PedidoService {
   }
 
   async encontrarPorExternalId(externalId: string): Promise<Pedido | null> {
-    return this.pedidoRepo.findOne({
+    const pedido = await this.pedidoRepo.findOne({
       where: { external_id: externalId },
       relations: ['productos'],
     });
+    if (pedido?.estado === 'APROBADO') {
+      (pedido as Pedido & { series?: unknown }).series =
+        await this.pedidoSerieService.seriesDelPedido(pedido.id);
+    }
+    return pedido;
   }
 
   async listarParaDashboard(query: GetPedidosDashboardDto): Promise<{
@@ -992,6 +1066,7 @@ export class PedidoService {
         await this.stockService.liberarStock(
           producto.nombre,
           producto.cantidad,
+          producto.deposito ?? undefined,
         );
       } catch (err) {
         console.error(`❌ Error liberando stock de ${producto.nombre}:`, err);
@@ -999,6 +1074,10 @@ export class PedidoService {
     }
 
     pedido.estado = 'CANCELADO';
+    await this.pedidoSerieService.liberarPedido(
+      pedido.id,
+      PedidoItemSerieEstado.CANCELADA,
+    );
     await this.eliminarComprobanteSiExiste(pedido);
     const pedidoCancelado = await this.pedidoRepo.save(pedido);
 
@@ -1039,18 +1118,6 @@ export class PedidoService {
       );
     }
 
-    // Verificar y confirmar stock
-    for (const p of pedido.productos) {
-      try {
-        await this.stockService.confirmarStock(p.nombre, p.cantidad);
-      } catch (err) {
-        console.error(`❌ No se pudo confirmar stock para ${p.nombre}`, err);
-        throw new ConflictException(
-          `Stock insuficiente para ${p.nombre}. El pedido no puede ser aprobado.`,
-        );
-      }
-    }
-
     // Actualizar estado
     pedido.estado = 'APROBADO';
     pedido.aprobado = new Date();
@@ -1080,6 +1147,12 @@ export class PedidoService {
         throw err;
       }
     }
+
+    await this.pedidoSerieService.confirmarPedido(
+      pedido,
+      comprobanteCreado.tipo,
+      comprobanteCreado.comprobante,
+    );
 
     // NO generar cobro para transferencias
 

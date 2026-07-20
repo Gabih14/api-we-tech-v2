@@ -16,11 +16,14 @@ import { PedidoExpirationService } from './pedido-expiration.service';
 import { WhatsappModule } from '../whatsapp/whatsapp.module';
 import { TelegramModule } from 'src/telegram/telegram.module';
 import { CuponModule } from 'src/cupon/cupon.module';
+import { PedidoItemConfig } from './entities/pedido-item-config.entity';
+import { PedidoItemSerie } from './entities/pedido-item-serie.entity';
+import { PedidoSerieModule } from './pedido-serie.module';
 
 @Module({
   imports: [
     // 👇 Se indica la conexión 'back' para la BD propia
-    TypeOrmModule.forFeature([Pedido, PedidoItem], 'back'),
+    TypeOrmModule.forFeature([Pedido, PedidoItem, PedidoItemConfig, PedidoItemSerie], 'back'),
     TypeOrmModule.forFeature([StkItem, StkAtributo, StkAtributoNodo]), // conexión default (Nacional)
     forwardRef(() => StkExistenciaModule),
     forwardRef(() => VtaComprobanteModule),
@@ -29,6 +32,7 @@ import { CuponModule } from 'src/cupon/cupon.module';
     WhatsappModule,
     TelegramModule,
     CuponModule,
+    PedidoSerieModule,
   ],
   controllers: [PedidoController],
   providers: [PedidoService, PedidoExpirationService],

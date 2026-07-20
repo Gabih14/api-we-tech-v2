@@ -25,6 +25,9 @@ export class PedidoItem {
     @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true })
     ajuste_porcentaje: number | null;
 
+    @Column({ type: 'varchar', length: 20, nullable: true })
+    deposito: string | null;
+
     @ManyToOne(() => Pedido, pedido => pedido.productos)
     pedido: Pedido;
 }
