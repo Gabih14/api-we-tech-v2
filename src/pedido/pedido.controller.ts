@@ -98,7 +98,7 @@ export class PedidoController {
   }
 
   @Get(':externalId')
-  @AuthType('dashboard')
+  @AuthType('default')
   async getByExternalId(@Param('externalId') externalId: string) {
     const pedido = await this.pedidoService.encontrarPorExternalId(externalId);
     if (!pedido) {

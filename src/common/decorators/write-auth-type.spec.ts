@@ -24,6 +24,7 @@ describe('write endpoint auth types', () => {
     ColorGroupsController.prototype.create,
     ColorGroupsController.prototype.update,
     PedidoController.prototype.crear,
+    PedidoController.prototype.getByExternalId,
     PedidoController.prototype.cancelarPedido,
     PedidoController.prototype.rechazarTransferencia,
   ];
