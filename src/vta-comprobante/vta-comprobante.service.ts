@@ -176,10 +176,13 @@ export class VtaComprobanteService {
     // 👤 Asegurar que el cliente exista (crear/actualizar según corresponda)
     const ubicacionParsed = this.parseUbicacion(pedido.cliente_ubicacion);
 
+    // 🧾 Consumidor final tiene CUIL; el CUIT es de quien factura A (RI/monotributo).
+    const tipoDocumento = pedido.factura_tipo === 'A' ? 'CUIT' : 'CUIL';
+
     const clientePayload: CreateVtaClienteDto = {
       id: pedido.cliente_cuit,
       razonSocial: pedido.cliente_nombre,
-      tipoDocumento: 'CUIT',
+      tipoDocumento,
       numeroDocumento: pedido.cliente_cuit,
       email: pedido.cliente_mail,
       telefono: pedido.telefono,
@@ -473,21 +476,35 @@ export class VtaComprobanteService {
     let provincia: string | undefined;
     let cpa: string | undefined;
 
-    if (partes.length >= 5) {
-      // Formato estructurado: "calle numero, ciudad, region, pais, postal_code"
-      cpa = partes.pop();
-      partes.pop();
-      provincia = partes.pop();
-      localidad = partes.pop();
-      direccion = partes.join(', ');
-    } else if (partes.length === 4) {
-      // Formato Google: "calle numero, postal_code, region, pais"
-      partes.pop();
-      provincia = partes.pop();
-      cpa = partes.pop();
-      direccion = partes.join(', ');
+    // 📮 El CPA se busca por patrón, no por posición: puede venir solo ("M5519")
+    // o pegado a la localidad como lo devuelve Google ("M5519 Las Heras").
+    // Se recorre de atrás hacia adelante y nunca desde el índice 0 (la calle).
+    for (let i = partes.length - 1; i >= 1; i--) {
+      const match = partes[i].match(/^([A-Za-z]?\d{4}[A-Za-z]{0,3})(?:\s+(.+))?$/);
+      if (!match) continue;
+
+      cpa = match[1];
+      const resto = match[2]?.trim();
+      if (resto) {
+        partes[i] = resto;
+      } else {
+        partes.splice(i, 1);
+      }
+      break;
+    }
+
+    // 🌎 El país no se guarda en vta_cliente: se descarta esté donde esté.
+    const sinPais = partes.filter((p) => !/^(argentina|argentine|arg|ar)$/i.test(p));
+
+    if (sinPais.length >= 3) {
+      provincia = sinPais.pop();
+      localidad = sinPais.pop();
+      direccion = sinPais.join(', ');
+    } else if (sinPais.length === 2) {
+      provincia = sinPais.pop();
+      direccion = sinPais.join(', ');
     } else {
-      direccion = partes.join(', ');
+      direccion = sinPais.join(', ');
     }
 
     return {

@@ -62,8 +62,36 @@ describe('MapsService', () => {
               place_id: 'street-place',
               types: ['street_address'],
               address_components: [
-                { types: ['street_number'] },
-                { types: ['route'] },
+                {
+                  types: ['street_number'],
+                  long_name: '123',
+                  short_name: '123',
+                },
+                {
+                  types: ['route'],
+                  long_name: 'Avenida San Martin',
+                  short_name: 'Av. San Martin',
+                },
+                {
+                  types: ['locality', 'political'],
+                  long_name: 'Las Heras',
+                  short_name: 'Las Heras',
+                },
+                {
+                  types: ['administrative_area_level_1', 'political'],
+                  long_name: 'Mendoza Province',
+                  short_name: 'Mendoza',
+                },
+                {
+                  types: ['country', 'political'],
+                  long_name: 'Argentina',
+                  short_name: 'AR',
+                },
+                {
+                  types: ['postal_code'],
+                  long_name: 'M5539HAN',
+                  short_name: 'M5539HAN',
+                },
               ],
             },
           ],
@@ -98,6 +126,14 @@ describe('MapsService', () => {
       duration: '10 mins',
       destinationResolved: 'Av. San Martin 123, Las Heras, Mendoza',
       originResolved: 'We Tech',
+    });
+    expect((result as any).direccionSeparada).toEqual({
+      calle: 'Avenida San Martin',
+      numero: '123',
+      ciudad: 'Las Heras',
+      provincia: 'Mendoza',
+      codigoPostal: '5539',
+      pais: 'AR',
     });
     expect(mockedAxios.get).toHaveBeenCalledTimes(2);
     expect(mockedAxios.get.mock.calls[1][0]).toContain(

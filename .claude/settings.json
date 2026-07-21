@@ -8,7 +8,13 @@
       "Read(//d/Programador/Proyectos/Web-WeTECH/**)",
       "Bash(grep -v '^$')",
       "Bash(TS_NODE_TRANSPILE_ONLY=1 node -r ts-node/register -r tsconfig-paths/register verify-align.ts)",
-      "Bash(git -C ../Web-WeTECH status --short)"
+      "Bash(git -C ../Web-WeTECH status --short)",
+      "Bash(ls d:/Programador/Proyectos/api-we-tech-v2 && ls d:/Programador/Proyectos/)",
+      "Read(//d/Programador/Proyectos/**)",
+      "Bash(ls -la \"d:/Programador/Proyectos/Web-WeTECH\" 2>/dev/null || echo \"NOT FOUND Web-WeTECH\"; echo \"---\"; ls -la \"d:/Programador/Proyectos/landing-WeTECH-v2\" 2>/dev/null || echo \"NOT FOUND landing\")",
+      "Read(//d/Programador/Proyectos/landing-WeTECH-v2/**)",
+      "Bash(grep -n -i \"km\\\\|costo\\\\|20\\\\|gratis\" \"d:/Programador/Proyectos/Web-WeTECH/src/components/checkout/ShippingInfoModal.tsx\" | head -30; echo \"=== LANDING ===\"; grep -rn -i \"checkout\\\\|direccion\\\\|maps/distance\" \"d:/Programador/Proyectos/landing-WeTECH-v2/index.html\" | head -10)",
+      "Bash(node -e ' *)"
     ],
     "additionalDirectories": [
       "D:\\Programador\\Proyectos\\Web-WeTECH\\src\\utils"

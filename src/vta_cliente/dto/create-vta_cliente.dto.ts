@@ -57,7 +57,7 @@ export class CreateVtaClienteDto {
 
   @IsOptional()
   @IsString()
-  @Length(0, 20)
+  @Length(0, 10)
   cpa?: string;
 
   @IsOptional()

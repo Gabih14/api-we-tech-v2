@@ -348,4 +348,104 @@ describe('VtaComprobanteService crearDesdePedido', () => {
       }),
     );
   });
+
+  it('separa el CPA de la localidad cuando Google los manda pegados', async () => {
+    await service.crearDesdePedido({
+      ...pedidoBase(
+        [
+          {
+            nombre: 'ITEM-SIN-AJUSTE',
+            cantidad: 1,
+            precio_unitario: 100,
+            subtotal: 100,
+            ajuste_porcentaje: null,
+          },
+        ],
+        100,
+      ),
+      cliente_ubicacion: 'Independencia 2094, M5539 Las Heras, Mendoza, Argentina',
+    } as Pedido);
+
+    expect(clienteService.findOrCreateOrUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        direccion: 'Independencia 2094',
+        localidad: 'Las Heras',
+        provincia: 'Mendoza',
+        cpa: 'M5539',
+      }),
+    );
+  });
+
+  it('no deja el formatted_address crudo en direccion cuando vienen 3 partes', async () => {
+    await service.crearDesdePedido({
+      ...pedidoBase(
+        [
+          {
+            nombre: 'ITEM-SIN-AJUSTE',
+            cantidad: 1,
+            precio_unitario: 100,
+            subtotal: 100,
+            ajuste_porcentaje: null,
+          },
+        ],
+        100,
+      ),
+      cliente_ubicacion: '9 de Julio 1779, M5500AMC Mendoza, Argentina',
+    } as Pedido);
+
+    expect(clienteService.findOrCreateOrUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        direccion: '9 de Julio 1779',
+        provincia: 'Mendoza',
+        cpa: 'M5500AMC',
+      }),
+    );
+  });
+
+  it('no confunde la altura con el CPA cuando la calle tiene piso', async () => {
+    await service.crearDesdePedido({
+      ...pedidoBase(
+        [
+          {
+            nombre: 'ITEM-SIN-AJUSTE',
+            cantidad: 1,
+            precio_unitario: 100,
+            subtotal: 100,
+            ajuste_porcentaje: null,
+          },
+        ],
+        100,
+      ),
+      cliente_ubicacion: 'Jujuy 984 4, M5502HAN Mendoza, Argentina',
+    } as Pedido);
+
+    expect(clienteService.findOrCreateOrUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        direccion: 'Jujuy 984 4',
+        provincia: 'Mendoza',
+        cpa: 'M5502HAN',
+      }),
+    );
+  });
+
+  it('usa CUIL como tipo de documento para consumidor final', async () => {
+    await service.crearDesdePedido(
+      pedidoBase(
+        [
+          {
+            nombre: 'ITEM-SIN-AJUSTE',
+            cantidad: 1,
+            precio_unitario: 100,
+            subtotal: 100,
+            ajuste_porcentaje: null,
+          },
+        ],
+        100,
+      ) as Pedido,
+    );
+
+    expect(clienteService.findOrCreateOrUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ tipoDocumento: 'CUIL', condicionIva: 'CF' }),
+    );
+  });
 });
