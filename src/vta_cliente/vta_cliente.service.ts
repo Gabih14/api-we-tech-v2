@@ -130,17 +130,11 @@ export class VtaClienteService {
       return value;
     }
 
-    /* if (digitos.startsWith('549')) {
-      return `+54 9 ${digitos.slice(3)}`;
-    } */
-
     if (digitos.startsWith('54')) {
-      return `+54${digitos.slice(2)}`;
+      return digitos;
     }
 
-    
-
-    return `+54${digitos}`;
+    return `54${digitos}`;
   }
 
   async findAll() {
