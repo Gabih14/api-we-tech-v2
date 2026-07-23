@@ -35,6 +35,14 @@ export class CreateCuponDto {
   max_usos_por_cuit?: number;
 
   @IsOptional()
+  @IsString()
+  cuitHabilitado?: string | null;
+
+  @IsOptional()
+  @IsString()
+  cuit_habilitado?: string | null;
+
+  @IsOptional()
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0.01)

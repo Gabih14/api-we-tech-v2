@@ -22,13 +22,14 @@ export class CuponController {
   constructor(private readonly cuponService: CuponService) {}
 
   @Post()
-  @AuthType('default')
+  @AuthType('write')
   @UsePipes(new ValidationPipe({ transform: true }))
   async crear(@Body() crearCuponDto: CreateCuponDto): Promise<Cupon> {
     return this.cuponService.crear(crearCuponDto);
   }
 
   @Get()
+  @AuthType('read')
   async listarActivos(): Promise<CuponConResumenUsos[]> {
     return this.cuponService.listarActivos();
   }
@@ -39,7 +40,7 @@ export class CuponController {
   }
 
   @Patch(':id')
-  @AuthType('default')
+  @AuthType('write')
   @UsePipes(new ValidationPipe({ transform: true }))
   async actualizar(
     @Param('id') id: string,
@@ -64,12 +65,13 @@ export class CuponController {
   }
 
   @Get(':id/estadisticas')
+  @AuthType('read')
   async obtenerEstadisticas(@Param('id') id: string): Promise<any> {
     return this.cuponService.obtenerEstadisticas(id);
   }
 
   @Delete(':id/desactivar')
-  @AuthType('default')
+  @AuthType('write')
   async desactivar(@Param('id') id: string): Promise<Cupon> {
     return this.cuponService.desactivar(id);
   }

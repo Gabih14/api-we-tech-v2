@@ -1,5 +1,6 @@
 import { Controller, Get, Param, Query } from '@nestjs/common';
 import { VtaComprobanteService } from './vta-comprobante.service';
+import { AuthType } from '../common/decorators/auth-type.decorator';
 
 @Controller('vta-comprobante')
 export class VtaComprobanteController {
@@ -7,6 +8,7 @@ export class VtaComprobanteController {
 
   // 📊 Resumen para dashboard
   @Get('metrics/resumen')
+  @AuthType('read')
   getResumen(
     @Query('from') from?: string,
     @Query('to') to?: string,
@@ -16,6 +18,7 @@ export class VtaComprobanteController {
 
   // 📈 Ventas agrupadas por mes
   @Get('metrics/ventas-mensuales')
+  @AuthType('read')
   getVentasMensuales(
     @Query('from') from?: string,
     @Query('to') to?: string,
@@ -25,6 +28,7 @@ export class VtaComprobanteController {
 
   // 👤 Ventas agrupadas por vendedor
   @Get('metrics/ventas-por-vendedor')
+  @AuthType('read')
   getVentasPorVendedor(
     @Query('from') from?: string,
     @Query('to') to?: string,

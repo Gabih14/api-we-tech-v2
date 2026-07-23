@@ -32,7 +32,13 @@ export class VtaCliente {
   @Column('varchar', { name: 'provincia', nullable: true, length: 20 })
   provincia: string | null;
 
-  @Column('varchar', { name: 'cpa', nullable: true, length: 20 })
+  @Column('varchar', { name: 'pais', nullable: true, length: 20 })
+  pais: string | null;
+
+  // ⚠️ En la base es varchar(10). Estaba declarado 20 y por eso un CPA con la
+  // localidad pegada ("M5539 Las Heras") pasaba la validación y MySQL lo
+  // truncaba en silencio a "M5539 Las ".
+  @Column('varchar', { name: 'cpa', nullable: true, length: 10 })
   cpa: string | null;
 
   @Column('varchar', { name: 'empresa', nullable: true, length: 30 })

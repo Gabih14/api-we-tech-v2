@@ -98,7 +98,7 @@ export class PedidoController {
   }
 
   @Get(':externalId')
-  @AuthType('default')
+  @AuthType('read')
   async getByExternalId(@Param('externalId') externalId: string) {
     const pedido = await this.pedidoService.encontrarPorExternalId(externalId);
     if (!pedido) {
@@ -110,7 +110,7 @@ export class PedidoController {
   }
 
   @Post(':externalId/cancelar')
-  @AuthType('default')
+  @AuthType('write')
   @HttpCode(HttpStatus.OK)
   async cancelarPedido(@Param('externalId') externalId: string) {
     const pedido = await this.pedidoService.cancelarPedidoPendiente(externalId);
@@ -121,7 +121,7 @@ export class PedidoController {
   }
 
   @Post(':externalId/rechazar')
-  @AuthType('default')
+  @AuthType('write')
   @HttpCode(HttpStatus.OK)
   async rechazarTransferencia(@Param('externalId') externalId: string) {
     const pedido = await this.pedidoService.rechazarTransferencia(externalId);

@@ -4,6 +4,19 @@ import axios from 'axios';
 
 type GoogleAddressComponent = {
   types?: string[];
+  long_name?: string;
+  short_name?: string;
+};
+
+// 🏠 Dirección ya separada, con los mismos nombres de campo que usa el
+// checkout, para que el front pueda completar cada input sin parsear strings.
+export type DireccionSeparada = {
+  calle: string;
+  numero: string;
+  ciudad: string;
+  provincia: string;
+  codigoPostal: string;
+  pais: string;
 };
 
 type GoogleGeocodeResult = {
@@ -77,6 +90,7 @@ export class MapsService {
         destinationResolved:
           specificGeocodeResult.formatted_address ||
           data.destination_addresses?.[0],
+        direccionSeparada: this.separarDireccion(specificGeocodeResult),
         originResolved: data.origin_addresses?.[0],
         raw: element,
       };
@@ -117,6 +131,44 @@ export class MapsService {
       .map((part) => part?.trim())
       .filter(Boolean)
       .join(', ');
+  }
+
+  /**
+   * 🏠 Lee los address_components tipados que ya devuelve Google en vez de
+   * partir el formatted_address por comas. Cada dato viene etiquetado por
+   * Google, así que no depende de cuántas comas trajo el string.
+   */
+  private separarDireccion(result: GoogleGeocodeResult): DireccionSeparada {
+    const componentes = result.address_components ?? [];
+
+    const buscar = (tipo: string, corto = false): string => {
+      const componente = componentes.find((c) => c.types?.includes(tipo));
+      if (!componente) return '';
+      return (corto ? componente.short_name : componente.long_name) ?? '';
+    };
+
+    // El ERP guarda el CP corto de 4 dígitos (2.645 de 2.653 registros),
+    // no el CPA extendido: de "M5502HAN" nos quedamos con "5502".
+    const codigoPostalCrudo = buscar('postal_code', true);
+    const codigoPostal = codigoPostalCrudo.match(/\d{4}/)?.[0] ?? '';
+
+    // Google devuelve "Mendoza Province" en long_name; el short_name viene sin
+    // el sufijo y es lo que espera vta_cliente.provincia (varchar 20).
+    const provincia =
+      buscar('administrative_area_level_1', true) ||
+      buscar('administrative_area_level_1');
+
+    return {
+      calle: buscar('route'),
+      numero: buscar('street_number'),
+      ciudad:
+        buscar('locality') ||
+        buscar('sublocality') ||
+        buscar('administrative_area_level_2'),
+      provincia: provincia.replace(/\s+(Province|Provincia)$/i, ''),
+      codigoPostal,
+      pais: buscar('country', true),
+    };
   }
 
   private isSpecificStreetAddress(result: GoogleGeocodeResult | null): boolean {
