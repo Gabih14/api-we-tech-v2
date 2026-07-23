@@ -14,7 +14,12 @@ export class Cupon {
   @Column({ name: 'max_usos_por_cuit', nullable: true })
   maxUsosPorCuit: number;
 
-  @Column({ name: 'cuit_habilitado', length: 20, nullable: true })
+  @Column({
+    name: 'cuit_habilitado',
+    type: 'varchar',
+    length: 20,
+    nullable: true,
+  })
   cuitHabilitado: string | null;
 
   @Column({
