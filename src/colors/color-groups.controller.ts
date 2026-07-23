@@ -22,7 +22,7 @@ export class ColorGroupsController {
   constructor(private readonly colorGroupsService: ColorGroupsService) {}
 
   @Post()
-  @AuthType('default')
+  @AuthType('write')
   @UsePipes(new ValidationPipe({ transform: true }))
   async create(
     @Body() createColorGroupDto: CreateColorGroupDto,
@@ -31,12 +31,13 @@ export class ColorGroupsController {
   }
 
   @Get()
+  @AuthType('read')
   async findAll(): Promise<ColorGroupResponse[]> {
     return this.colorGroupsService.findAll();
   }
 
   @Patch(':id')
-  @AuthType('default')
+  @AuthType('write')
   @UsePipes(new ValidationPipe({ transform: true }))
   async update(
     @Param('id', ParseIntPipe) id: number,

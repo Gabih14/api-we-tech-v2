@@ -48,6 +48,9 @@ export class CuponService {
       ...descuentosNormalizados,
       maxUsosPorCuit:
         crearCuponDto.maxUsosPorCuit ?? crearCuponDto.max_usos_por_cuit,
+      cuitHabilitado: this.normalizarCuitOpcional(
+        crearCuponDto.cuitHabilitado ?? crearCuponDto.cuit_habilitado,
+      ),
     });
 
     return await this.cuponRepository.save(cupon);
@@ -83,6 +86,8 @@ export class CuponService {
     const {
       id: _id,
       max_usos_por_cuit,
+      cuitHabilitado,
+      cuit_habilitado,
       ...datosActualizables
     } = actualizarCuponDto;
 
@@ -93,6 +98,15 @@ export class CuponService {
 
     if (max_usos_por_cuit !== undefined) {
       cupon.maxUsosPorCuit = max_usos_por_cuit;
+    }
+
+    if (
+      cuitHabilitado !== undefined ||
+      cuit_habilitado !== undefined
+    ) {
+      cupon.cuitHabilitado = this.normalizarCuitOpcional(
+        cuitHabilitado ?? cuit_habilitado,
+      );
     }
 
     return await this.cuponRepository.save(cupon);
@@ -162,6 +176,8 @@ export class CuponService {
 
     const cupon = await this.buscarPorId(usarCuponDto.cupon_id);
 
+    this.validarCuitHabilitado(cupon, cuitNormalizado);
+
     // Validar fechas
     if (cupon.fechaDesde && cupon.fechaDesde > new Date()) {
       throw new BadRequestException('Cupón aún no está vigente');
@@ -224,6 +240,8 @@ export class CuponService {
     }
 
     const cupon = await this.buscarPorId(usarCuponDto.cupon_id);
+
+    this.validarCuitHabilitado(cupon, cuitNormalizado);
 
     if (cupon.fechaDesde && cupon.fechaDesde > new Date()) {
       throw new BadRequestException('Cupon aun no esta vigente');
@@ -420,6 +438,30 @@ export class CuponService {
   private normalizarCuit(cuit: string): string {
     const digitos = cuit.replace(/\D/g, '');
     return digitos || cuit.trim();
+  }
+
+  private normalizarCuitOpcional(cuit?: string | null): string | null {
+    if (cuit === null || cuit === undefined) {
+      return null;
+    }
+
+    const cuitNormalizado = this.normalizarCuit(cuit);
+    return cuitNormalizado || null;
+  }
+
+  private validarCuitHabilitado(
+    cupon: Cupon,
+    cuitNormalizado: string,
+  ): void {
+    if (!cupon.cuitHabilitado) {
+      return;
+    }
+
+    if (this.normalizarCuit(cupon.cuitHabilitado) !== cuitNormalizado) {
+      throw new BadRequestException(
+        'Cupon valido solo para el CUIT habilitado',
+      );
+    }
   }
 
   private async contarUsosDelCuit(

@@ -19,19 +19,20 @@ export class ColorsController {
   constructor(private readonly colorsService: ColorsService) {}
 
   @Post()
-  @AuthType('default')
+  @AuthType('write')
   @UsePipes(new ValidationPipe({ transform: true }))
   async create(@Body() createColorDto: CreateColorDto): Promise<ColorResponse> {
     return this.colorsService.create(createColorDto);
   }
 
   @Get()
+  @AuthType('read')
   async findAll(): Promise<ColorResponse[]> {
     return this.colorsService.findAll();
   }
 
   @Patch(':id')
-  @AuthType('default')
+  @AuthType('write')
   @UsePipes(new ValidationPipe({ transform: true }))
   async update(
     @Param('id', ParseIntPipe) id: number,
