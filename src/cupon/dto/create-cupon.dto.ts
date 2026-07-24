@@ -8,7 +8,15 @@ import {
   IsString,
   Max,
   Min,
+  IsIn,
 } from 'class-validator';
+
+const CUPON_CATEGORIAS_PERMITIDAS = [
+  'general',
+  'filamento',
+  'impresora',
+  'repuesto',
+] as const;
 
 export class CreateCuponDto {
   @IsString()
@@ -41,6 +49,16 @@ export class CreateCuponDto {
   @IsOptional()
   @IsString()
   cuit_habilitado?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(CUPON_CATEGORIAS_PERMITIDAS)
+  categoriaAplicable?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(CUPON_CATEGORIAS_PERMITIDAS)
+  categoria_aplicable?: string | null;
 
   @IsOptional()
   @Type(() => Number)

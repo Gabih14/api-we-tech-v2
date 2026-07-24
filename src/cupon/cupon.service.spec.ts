@@ -48,6 +48,71 @@ describe('CuponService', () => {
     );
   });
 
+  it('normaliza categoria general como cupon sin categoria especifica', async () => {
+    const { service, cuponRepository } = createService();
+
+    await service.crear({
+      id: 'GENERAL',
+      porcentajeDescuento: 10,
+      categoria_aplicable: 'general',
+    });
+
+    expect(cuponRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        categoriaAplicable: null,
+      }),
+    );
+  });
+
+  it('normaliza la categoria especifica al crear un cupon', async () => {
+    const { service, cuponRepository } = createService();
+
+    await service.crear({
+      id: 'FILAMENTO',
+      porcentajeDescuento: 10,
+      categoria_aplicable: 'filamento',
+    });
+
+    expect(cuponRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        categoriaAplicable: 'filamento',
+      }),
+    );
+  });
+
+  it('rechaza categorias de cupon invalidas', async () => {
+    const { service } = createService();
+
+    await expect(
+      service.crear({
+        id: 'INVALIDO',
+        porcentajeDescuento: 10,
+        categoria_aplicable: 'servicios',
+      }),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it('permite limpiar la categoria del cupon al actualizar', async () => {
+    const { service, cupones, cuponRepository } = createService();
+    cupones.set('FILAMENTO', {
+      id: 'FILAMENTO',
+      categoriaAplicable: 'filamento',
+      porcentajeDescuento: 10,
+      porcentajeDescuentoTarjeta: 10,
+      porcentajeDescuentoTransferencia: 10,
+    });
+
+    await service.actualizar('FILAMENTO', {
+      categoria_aplicable: 'general',
+    });
+
+    expect(cuponRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        categoriaAplicable: null,
+      }),
+    );
+  });
+
   it('permite usar el cupon si el CUIT coincide aunque venga formateado', async () => {
     const { service, cupones } = createService();
     cupones.set('UNICUIT', {
