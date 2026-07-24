@@ -1133,6 +1133,213 @@ describe('PedidoService recalculo de importes', () => {
     expect(pedido.productos[1].ajuste_porcentaje).toBeNull();
   });
 
+  it('aplica cupon de filamento solo a productos FILAMENTOS', async () => {
+    stkItemRepo.findOne
+      .mockResolvedValueOnce(
+        itemConPrecio(
+          'FIL-1',
+          '100',
+          'PES',
+          '1',
+          'FILAMENTOS',
+          'Filamento PLA 1kg negro',
+        ),
+      )
+      .mockResolvedValueOnce(
+        itemConPrecio('REP-1', '100', 'PES', '1', 'REPUESTOS'),
+      );
+    cuponService.resolverPorcentajePorModalidad.mockResolvedValue({
+      porcentajeAplicado: 20,
+      categoriaAplicable: 'filamento',
+    });
+
+    const dto = dtoBase({
+      codigo_cupon: 'FIL20',
+      descuento_cupon: 20,
+      total: 180,
+      productos: [
+        {
+          nombre: 'FIL-1',
+          cantidad: 1,
+          precio_unitario: 80,
+          subtotal: 80,
+          ajuste_porcentaje: 20,
+        },
+        {
+          nombre: 'REP-1',
+          cantidad: 1,
+          precio_unitario: 100,
+          subtotal: 100,
+        },
+      ],
+    });
+
+    const { pedido } = await service.crear(dto);
+
+    expect(pedido.descuento_cupon).toBe(20);
+    expect(pedido.total).toBe(180);
+    expect(pedido.productos[0].ajuste_porcentaje).toBe(20);
+    expect(pedido.productos[1].ajuste_porcentaje).toBeNull();
+  });
+
+  it('aplica cupon de impresora solo a productos IMPRESORAS', async () => {
+    stkItemRepo.findOne
+      .mockResolvedValueOnce(
+        itemConPrecio('IMP-1', '100', 'PES', '1', 'IMPRESORAS'),
+      )
+      .mockResolvedValueOnce(
+        itemConPrecio('REP-1', '100', 'PES', '1', 'REPUESTOS'),
+      );
+    cuponService.resolverPorcentajePorModalidad.mockResolvedValue({
+      porcentajeAplicado: 20,
+      categoriaAplicable: 'impresora',
+    });
+
+    const dto = dtoBase({
+      codigo_cupon: 'IMP20',
+      descuento_cupon: 20,
+      total: 180,
+      productos: [
+        {
+          nombre: 'IMP-1',
+          cantidad: 1,
+          precio_unitario: 80,
+          subtotal: 80,
+          ajuste_porcentaje: 20,
+        },
+        {
+          nombre: 'REP-1',
+          cantidad: 1,
+          precio_unitario: 100,
+          subtotal: 100,
+        },
+      ],
+    });
+
+    const { pedido } = await service.crear(dto);
+
+    expect(pedido.descuento_cupon).toBe(20);
+    expect(pedido.total).toBe(180);
+    expect(pedido.productos[0].ajuste_porcentaje).toBe(20);
+    expect(pedido.productos[1].ajuste_porcentaje).toBeNull();
+  });
+
+  it('aplica cupon de repuesto a productos que no son filamentos ni impresoras', async () => {
+    stkItemRepo.findOne
+      .mockResolvedValueOnce(
+        itemConPrecio('REP-1', '100', 'PES', '1', 'REPUESTOS'),
+      )
+      .mockResolvedValueOnce(
+        itemConPrecio(
+          'FIL-1',
+          '100',
+          'PES',
+          '1',
+          'FILAMENTOS',
+          'Filamento PLA 1kg blanco',
+        ),
+      );
+    cuponService.resolverPorcentajePorModalidad.mockResolvedValue({
+      porcentajeAplicado: 20,
+      categoriaAplicable: 'repuesto',
+    });
+
+    const dto = dtoBase({
+      codigo_cupon: 'REP20',
+      descuento_cupon: 20,
+      total: 180,
+      productos: [
+        {
+          nombre: 'REP-1',
+          cantidad: 1,
+          precio_unitario: 80,
+          subtotal: 80,
+          ajuste_porcentaje: 20,
+        },
+        {
+          nombre: 'FIL-1',
+          cantidad: 1,
+          precio_unitario: 100,
+          subtotal: 100,
+        },
+      ],
+    });
+
+    const { pedido } = await service.crear(dto);
+
+    expect(pedido.descuento_cupon).toBe(20);
+    expect(pedido.total).toBe(180);
+    expect(pedido.productos[0].ajuste_porcentaje).toBe(20);
+    expect(pedido.productos[1].ajuste_porcentaje).toBeNull();
+  });
+
+  it('mantiene cupon general aplicado a todas las lineas no envio', async () => {
+    stkItemRepo.findOne
+      .mockResolvedValueOnce(
+        itemConPrecio('ITEM-1', '100', 'PES', '1', 'REPUESTOS'),
+      )
+      .mockResolvedValueOnce(
+        itemConPrecio('ITEM-2', '100', 'PES', '1', 'IMPRESORAS'),
+      );
+    cuponService.resolverPorcentajePorModalidad.mockResolvedValue({
+      porcentajeAplicado: 20,
+      categoriaAplicable: null,
+    });
+
+    const dto = dtoBase({
+      codigo_cupon: 'GENERAL20',
+      descuento_cupon: 40,
+      total: 160,
+      productos: [
+        {
+          nombre: 'ITEM-1',
+          cantidad: 1,
+          precio_unitario: 80,
+          subtotal: 80,
+          ajuste_porcentaje: 20,
+        },
+        {
+          nombre: 'ITEM-2',
+          cantidad: 1,
+          precio_unitario: 80,
+          subtotal: 80,
+          ajuste_porcentaje: 20,
+        },
+      ],
+    });
+
+    const { pedido } = await service.crear(dto);
+
+    expect(pedido.descuento_cupon).toBe(40);
+    expect(pedido.total).toBe(160);
+  });
+
+  it('rechaza cupon especifico cuando no hay productos compatibles', async () => {
+    stkItemRepo.findOne.mockResolvedValue(
+      itemConPrecio('REP-1', '100', 'PES', '1', 'REPUESTOS'),
+    );
+    cuponService.resolverPorcentajePorModalidad.mockResolvedValue({
+      porcentajeAplicado: 20,
+      categoriaAplicable: 'filamento',
+    });
+
+    const dto = dtoBase({
+      codigo_cupon: 'FIL20',
+      total: 100,
+      productos: [
+        {
+          nombre: 'REP-1',
+          cantidad: 1,
+        },
+      ],
+    });
+
+    await expect(service.crear(dto)).rejects.toThrow(
+      'Cupon valido solo para productos de categoria filamento',
+    );
+    expect(stockService.reservarStock).not.toHaveBeenCalled();
+  });
+
   it('no cuenta el producto ENV para envio gratis por peso', async () => {
     stkItemRepo.findOne
       .mockResolvedValueOnce(

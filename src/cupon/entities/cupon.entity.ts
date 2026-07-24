@@ -1,5 +1,8 @@
 import { Entity, Column, PrimaryColumn, OneToMany } from 'typeorm';
 import { CuponUso } from '../../cupon_uso/entities/cupon_uso.entity';
+
+export type CuponCategoriaAplicable = 'filamento' | 'impresora' | 'repuesto';
+
 @Entity()
 export class Cupon {
   @PrimaryColumn({ length: 50 })
@@ -21,6 +24,14 @@ export class Cupon {
     nullable: true,
   })
   cuitHabilitado: string | null;
+
+  @Column({
+    name: 'categoria_aplicable',
+    type: 'enum',
+    enum: ['filamento', 'impresora', 'repuesto'],
+    nullable: true,
+  })
+  categoriaAplicable: CuponCategoriaAplicable | null;
 
   @Column({
     name: 'porcentaje_descuento',

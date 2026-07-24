@@ -6,7 +6,10 @@ import {
 import { CreateCuponDto } from './dto/create-cupon.dto';
 import { UpdateCuponDto } from './dto/update-cupon.dto';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Cupon } from './entities/cupon.entity';
+import {
+  Cupon,
+  CuponCategoriaAplicable,
+} from './entities/cupon.entity';
 import { Repository } from 'typeorm';
 import { CuponUso } from 'src/cupon_uso/entities/cupon_uso.entity';
 import { CreateCuponUsoDto } from 'src/cupon_uso/dto/create-cupon_uso.dto';
@@ -16,6 +19,7 @@ export interface CuponDescuentoResolucion {
   modalidadSolicitada: string;
   modalidadAplicada: 'TARJETA' | 'CUENTA' | 'FALLBACK_TARJETA';
   porcentajeAplicado: number;
+  categoriaAplicable: CuponCategoriaAplicable | null;
 }
 
 export type CuponConResumenUsos = Cupon & {
@@ -50,6 +54,10 @@ export class CuponService {
         crearCuponDto.maxUsosPorCuit ?? crearCuponDto.max_usos_por_cuit,
       cuitHabilitado: this.normalizarCuitOpcional(
         crearCuponDto.cuitHabilitado ?? crearCuponDto.cuit_habilitado,
+      ),
+      categoriaAplicable: this.normalizarCategoriaAplicable(
+        crearCuponDto.categoriaAplicable ??
+          crearCuponDto.categoria_aplicable,
       ),
     });
 
@@ -88,6 +96,8 @@ export class CuponService {
       max_usos_por_cuit,
       cuitHabilitado,
       cuit_habilitado,
+      categoriaAplicable,
+      categoria_aplicable,
       ...datosActualizables
     } = actualizarCuponDto;
 
@@ -106,6 +116,15 @@ export class CuponService {
     ) {
       cupon.cuitHabilitado = this.normalizarCuitOpcional(
         cuitHabilitado ?? cuit_habilitado,
+      );
+    }
+
+    if (
+      categoriaAplicable !== undefined ||
+      categoria_aplicable !== undefined
+    ) {
+      cupon.categoriaAplicable = this.normalizarCategoriaAplicable(
+        categoriaAplicable ?? categoria_aplicable,
       );
     }
 
@@ -135,6 +154,7 @@ export class CuponService {
         modalidadSolicitada: modalidadNormalizada,
         modalidadAplicada: 'CUENTA',
         porcentajeAplicado: porcentajeTransferencia,
+        categoriaAplicable: cupon.categoriaAplicable ?? null,
       };
     }
 
@@ -144,6 +164,7 @@ export class CuponService {
         modalidadSolicitada: modalidadNormalizada,
         modalidadAplicada: 'TARJETA',
         porcentajeAplicado: porcentajeTarjeta,
+        categoriaAplicable: cupon.categoriaAplicable ?? null,
       };
     }
 
@@ -152,6 +173,7 @@ export class CuponService {
       modalidadSolicitada: modalidadNormalizada,
       modalidadAplicada: 'FALLBACK_TARJETA',
       porcentajeAplicado: porcentajeTarjeta,
+      categoriaAplicable: cupon.categoriaAplicable ?? null,
     };
   }
 
@@ -447,6 +469,28 @@ export class CuponService {
 
     const cuitNormalizado = this.normalizarCuit(cuit);
     return cuitNormalizado || null;
+  }
+
+  private normalizarCategoriaAplicable(
+    categoria?: string | null,
+  ): CuponCategoriaAplicable | null {
+    const normalizada = categoria?.trim().toLowerCase();
+
+    if (!normalizada || normalizada === 'general') {
+      return null;
+    }
+
+    if (
+      normalizada === 'filamento' ||
+      normalizada === 'impresora' ||
+      normalizada === 'repuesto'
+    ) {
+      return normalizada;
+    }
+
+    throw new BadRequestException(
+      'categoriaAplicable debe ser general, filamento, impresora o repuesto',
+    );
   }
 
   private validarCuitHabilitado(

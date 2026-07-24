@@ -29,6 +29,7 @@ import { TelegramService } from 'src/telegram/telegram.service';
 import { CobrosService } from 'src/vta-comprobante/cobros.service';
 import { GetPedidosDashboardDto } from './dto/get-pedidos-dashboard.dto';
 import { CuponService } from 'src/cupon/cupon.service';
+import { CuponCategoriaAplicable } from 'src/cupon/entities/cupon.entity';
 import {
   getDiscountPercentageForFilament,
   isEligibleForQuantityDiscountByAttributes,
@@ -73,8 +74,14 @@ interface PedidoProductoPrecargado {
   item: StkItem;
   peso?: number;
   esProductoEnvio: boolean;
+  categoriaProducto: CuponCategoriaAplicable;
   aplicaDescuentoDiferencialPorCantidad: boolean;
   identidad: FilamentIdentity;
+}
+
+interface PedidoCuponResolucion {
+  porcentaje: number;
+  categoriaAplicable: CuponCategoriaAplicable | null;
 }
 
 @Injectable()
@@ -138,7 +145,7 @@ export class PedidoService {
         ? dto.factura_tipo
         : null;
     const requiereFactura = facturaTipo !== null;
-    const porcentajeCupon = await this.resolverPorcentajeCupon(
+    const cuponResolucion = await this.resolverCuponPedido(
       dto.codigo_cupon,
       metodoPago,
     );
@@ -163,6 +170,7 @@ export class PedidoService {
 
       const cantidad = this.obtenerCantidadProducto(producto);
       const esProductoEnvio = this.esProductoEnvio(producto.nombre);
+      const categoriaProducto = this.derivarCategoriaProducto(item.grupo);
       const peso = esProductoEnvio
         ? undefined
         : parseProductWeightFromDescription(item.descripcion);
@@ -187,9 +195,23 @@ export class PedidoService {
         item,
         peso,
         esProductoEnvio,
+        categoriaProducto,
         aplicaDescuentoDiferencialPorCantidad,
         identidad,
       });
+    }
+
+    if (
+      cuponResolucion.categoriaAplicable &&
+      !productosPrecargados.some(
+        ({ esProductoEnvio, categoriaProducto }) =>
+          !esProductoEnvio &&
+          categoriaProducto === cuponResolucion.categoriaAplicable,
+      )
+    ) {
+      throw new BadRequestException(
+        `Cupon valido solo para productos de categoria ${cuponResolucion.categoriaAplicable}`,
+      );
     }
 
     for (const {
@@ -197,12 +219,18 @@ export class PedidoService {
       item,
       peso,
       esProductoEnvio,
+      categoriaProducto,
       aplicaDescuentoDiferencialPorCantidad,
       identidad,
     } of productosPrecargados) {
       const cantidadParaDescuento = aplicaDescuentoDiferencialPorCantidad
         ? cantidadTotalDescuentoDiferencial
         : undefined;
+      const porcentajeCupon = this.obtenerPorcentajeCuponAplicable(
+        cuponResolucion,
+        esProductoEnvio,
+        categoriaProducto,
+      );
       const productoCalculado = this.calcularProductoPedido(
         producto,
         item,
@@ -1257,6 +1285,41 @@ export class PedidoService {
     return /^ENV-\d+K-GM-DELIVERY$/i.test(String(nombre ?? ''));
   }
 
+  private derivarCategoriaProducto(
+    grupo: string | null,
+  ): CuponCategoriaAplicable {
+    const normalized = grupo?.trim().toUpperCase();
+
+    if (normalized === 'FILAMENTOS') {
+      return 'filamento';
+    }
+
+    if (normalized === 'IMPRESORAS') {
+      return 'impresora';
+    }
+
+    return 'repuesto';
+  }
+
+  private obtenerPorcentajeCuponAplicable(
+    cuponResolucion: PedidoCuponResolucion,
+    esProductoEnvio: boolean,
+    categoriaProducto: CuponCategoriaAplicable,
+  ): number {
+    if (esProductoEnvio) {
+      return 0;
+    }
+
+    if (
+      cuponResolucion.categoriaAplicable &&
+      cuponResolucion.categoriaAplicable !== categoriaProducto
+    ) {
+      return 0;
+    }
+
+    return cuponResolucion.porcentaje;
+  }
+
   private obtenerCostoEnvioDesdeProductos(productos: PedidoItem[]): number | null {
     const totalEnvio = productos
       .filter((producto) => this.esProductoEnvio(producto.nombre))
@@ -1536,12 +1599,12 @@ export class PedidoService {
     };
   }
 
-  private async resolverPorcentajeCupon(
+  private async resolverCuponPedido(
     codigoCupon: string | undefined,
     metodoPago: PedidoMetodoPago,
-  ): Promise<number> {
+  ): Promise<PedidoCuponResolucion> {
     if (!codigoCupon) {
-      return 0;
+      return { porcentaje: 0, categoriaAplicable: null };
     }
 
     const descuento = await this.cuponService.resolverPorcentajePorModalidad(
@@ -1556,7 +1619,10 @@ export class PedidoService {
       );
     }
 
-    return porcentaje;
+    return {
+      porcentaje,
+      categoriaAplicable: descuento.categoriaAplicable ?? null,
+    };
   }
 
   private async validarTotalesRecibidos(
