@@ -28,6 +28,7 @@ describe('VtaComprobanteService crearDesdePedido', () => {
       cliente_mail: 'cliente@test.com',
       telefono: '1111111111',
       cliente_ubicacion: 'Calle 123, Ciudad, Provincia, AR, 1000',
+      cliente_direccion: null,
       observaciones_direccion: '',
       productos,
       total,
@@ -345,6 +346,35 @@ describe('VtaComprobanteService crearDesdePedido', () => {
         direccion: 'Joaquin V. Gonzalez 450',
         provincia: 'Mendoza',
         cpa: 'M5519',
+      }),
+    );
+  });
+
+  it('crea o actualiza vta_cliente con la direccion declarada por el cliente', async () => {
+    await service.crearDesdePedido({
+      ...pedidoBase(
+        [
+          {
+            nombre: 'ITEM-SIN-AJUSTE',
+            cantidad: 1,
+            precio_unitario: 100,
+            subtotal: 100,
+            ajuste_porcentaje: null,
+          },
+        ],
+        100,
+      ),
+      cliente_ubicacion: 'Dorrego 229, M5539 Las Heras, Mendoza, Argentina',
+      cliente_direccion:
+        'B° Unidad Latinoamérica MC C3, Las Heras, Mendoza, AR, 5539',
+    } as Pedido);
+
+    expect(clienteService.findOrCreateOrUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        direccion: 'B° Unidad Latinoamérica MC C3',
+        localidad: 'Las Heras',
+        provincia: 'Mendoza',
+        cpa: '5539',
       }),
     );
   });

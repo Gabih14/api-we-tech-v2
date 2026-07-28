@@ -72,14 +72,17 @@ export class WhatsappService {
           .join('\n')}`
       : '';
     const ubicacionLimpia = pedido.cliente_ubicacion?.trim();
-    const ubicacion = ubicacionLimpia || 'Sin ubicación proporcionada';
+    const direccionClienteLimpia = pedido.cliente_direccion?.trim();
+    const direccionCliente = direccionClienteLimpia
+      ? `\n *Dirección:* ${direccionClienteLimpia}`
+      : '';
     const costoEnvio = this.formatearCostoEnvio(pedido, 'No especificado');
     const observaciones = pedido.observaciones_direccion ? `\n *Observaciones:* ${pedido.observaciones_direccion}` : '';
     const comprobante = this.formatearComprobante(pedido);
     const mapsLink = this.formatearLinkMaps(ubicacionLimpia);
     const telefono = pedido.telefono || 'No informado';
 
-    return `*Pedido para Delivery ${comprobante}*\n\n *Cliente:* ${pedido.cliente_nombre}\n *Telefono:* ${telefono}\n *Ubicación:* ${ubicacion}${observaciones}${mapsLink}\n *Costo envío:* ${costoEnvio}${productos}\n\nID: ${pedido.external_id}`;
+    return `*Pedido para Delivery ${comprobante}*\n\n *Cliente:* ${pedido.cliente_nombre}\n *Telefono:* ${telefono}${direccionCliente}${observaciones}${mapsLink}\n *Costo envío:* ${costoEnvio}${productos}\n\nID: ${pedido.external_id}`;
   }
 
   private formatearLinkMaps(ubicacion?: string | null): string {
