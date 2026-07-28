@@ -174,7 +174,9 @@ export class VtaComprobanteService {
     if (!pedido) throw new NotFoundException('Pedido no encontrado');
 
     // 👤 Asegurar que el cliente exista (crear/actualizar según corresponda)
-    const ubicacionParsed = this.parseUbicacion(pedido.cliente_ubicacion);
+    const ubicacionParsed = this.parseUbicacion(
+      pedido.cliente_direccion || pedido.cliente_ubicacion,
+    );
 
     // 🧾 Consumidor final tiene CUIL; el CUIT es de quien factura A (RI/monotributo).
     const tipoDocumento = pedido.factura_tipo === 'A' ? 'CUIT' : 'CUIL';

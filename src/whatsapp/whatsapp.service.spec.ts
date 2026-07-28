@@ -7,6 +7,7 @@ describe('WhatsappService', () => {
     cliente_nombre: 'Juan Perez',
     telefono: '+5491123456789',
     cliente_ubicacion: 'Av. Siempre Viva 742, Springfield, Buenos Aires, Argentina, 1000',
+    cliente_direccion: 'Barrio Los Alamos M3 C2, Springfield, Buenos Aires, AR, 1000',
     costo_envio: 1500,
     observaciones_direccion: 'Tocar timbre 2B',
     comprobante_tipo: 'FA',
@@ -51,7 +52,13 @@ describe('WhatsappService', () => {
 
       expect(mensaje).toContain('*Cliente:* Juan Perez');
       expect(mensaje).toContain('*Telefono:* +5491123456789');
-      expect(mensaje).toContain(`*Ubicación:* ${pedidoBase.cliente_ubicacion}`);
+      expect(mensaje).toContain(
+        `*Dirección cliente:* ${pedidoBase.cliente_direccion}`,
+      );
+      expect(mensaje).not.toContain('*Ubicación:*');
+      expect(mensaje).not.toContain(
+        `\n *Ubicación:* ${pedidoBase.cliente_ubicacion}`,
+      );
       expect(mensaje).toContain(`*Maps:* ${linkEsperado}`);
       expect(mensaje).toContain('*Costo envío:* $1500.00');
       expect(mensaje).toContain('*Productos:*');
@@ -90,7 +97,8 @@ describe('WhatsappService', () => {
         cliente_ubicacion: '   ',
       });
 
-      expect(mensaje).toContain('*Ubicación:* Sin ubicación proporcionada');
+      expect(mensaje).not.toContain('*Ubicación:*');
+      expect(mensaje).not.toContain('Sin ubicación proporcionada');
       expect(mensaje).not.toContain('*Maps:*');
       expect(mensaje).not.toContain('google.com/maps');
     });

@@ -545,7 +545,7 @@ describe('PedidoService recalculo de importes', () => {
     expect(stockService.reservarStock).not.toHaveBeenCalled();
   });
 
-  it('arma cliente_ubicacion priorizando la direccion resuelta por Maps', async () => {
+  it('guarda por separado la direccion del cliente y la resuelta por Maps', async () => {
     stkItemRepo.findOne.mockResolvedValue(itemConPrecio('ITEM-1', '10.01'));
 
     const dto = dtoBase({
@@ -578,6 +578,9 @@ describe('PedidoService recalculo de importes', () => {
 
     expect(pedido.cliente_ubicacion).toBe(
       'Direccion Real 456, M2000 Ciudad Real, Argentina',
+    );
+    expect(pedido.cliente_direccion).toBe(
+      'Billing Street 999, Billing City, Billing Region, BR, 9999',
     );
   });
 
