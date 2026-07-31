@@ -13,6 +13,10 @@ export class LoggingInterceptor implements NestInterceptor {
     const req = context.switchToHttp().getRequest();
     const { method, url, body } = req;
     const requestUrl = req.originalUrl ?? url;
+    if (this.shouldIgnoreRequestLog(method, requestUrl)) {
+      return next.handle();
+    }
+
     const now = Date.now();
     const shouldAlwaysLogBody =
       method === 'POST' && this.isPedidoCreateRequest(requestUrl);
@@ -64,5 +68,10 @@ export class LoggingInterceptor implements NestInterceptor {
   private isPedidoCreateRequest(url: string): boolean {
     const path = url.split('?')[0].replace(/\/+$/, '');
     return path === '/pedido' || path.endsWith('/pedido');
+  }
+
+  private shouldIgnoreRequestLog(method: string, url: string): boolean {
+    const path = url.split('?')[0].replace(/\/+$/, '');
+    return method === 'GET' && path.endsWith('/vta-comprobante/metrics');
   }
 }
