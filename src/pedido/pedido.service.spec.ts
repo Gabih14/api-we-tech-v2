@@ -1343,7 +1343,7 @@ describe('PedidoService recalculo de importes', () => {
     expect(stockService.reservarStock).not.toHaveBeenCalled();
   });
 
-  it('no cuenta el producto ENV para envio gratis por peso', async () => {
+  it('cuenta el producto ENV para envio gratis por peso y lo bonifica al 100%', async () => {
     stkItemRepo.findOne
       .mockResolvedValueOnce(
         itemConPrecio(
@@ -1369,7 +1369,7 @@ describe('PedidoService recalculo de importes', () => {
     const dto = dtoBase({
       tipo_envio: 'shipping',
       costo_envio: 3999,
-      total: 4899,
+      total: 900,
       productos: [
         {
           nombre: 'ITEM-9KG',
@@ -1380,16 +1380,20 @@ describe('PedidoService recalculo de importes', () => {
         {
           nombre: 'ENV-07K-GM-DELIVERY',
           cantidad: 1,
-          precio_unitario: 3999,
-          subtotal: 3999,
+          precio_unitario: 0,
+          subtotal: 0,
+          ajuste_porcentaje: 100,
         },
       ],
     });
 
     const { pedido } = await service.crear(dto);
 
-    expect(pedido.costo_envio).toBe(3999);
-    expect(pedido.total).toBe(4899);
+    expect(pedido.costo_envio).toBe(0);
+    expect(pedido.total).toBe(900);
+    expect(pedido.productos[1].precio_unitario).toBe(0);
+    expect(pedido.productos[1].subtotal).toBe(0);
+    expect(pedido.productos[1].ajuste_porcentaje).toBe(100);
   });
 
   it('no aplica envio gratis por peso para pickup', async () => {
