@@ -171,12 +171,8 @@ export class PedidoService {
       const cantidad = this.obtenerCantidadProducto(producto);
       const esProductoEnvio = this.esProductoEnvio(producto.nombre);
       const categoriaProducto = this.derivarCategoriaProducto(item.grupo);
-      const peso = esProductoEnvio
-        ? undefined
-        : parseProductWeightFromDescription(item.descripcion);
-      if (!esProductoEnvio) {
-        pesoTotalKg += (peso ?? 0) * cantidad;
-      }
+      const peso = parseProductWeightFromDescription(item.descripcion);
+      pesoTotalKg += (peso ?? 0) * cantidad;
       // Identidad (Marca+Material) desde atributos: base confiable para el
       // descuento por cantidad, en vez de parsear prefijos del id.
       const identidad: FilamentIdentity = esProductoEnvio
@@ -214,6 +210,10 @@ export class PedidoService {
       );
     }
 
+    const aplicaEnvioGratisPorPeso =
+      dto.tipo_envio === 'shipping' &&
+      pesoTotalKg >= FREE_SHIPPING_MIN_WEIGHT_KG;
+
     for (const {
       producto,
       item,
@@ -241,6 +241,7 @@ export class PedidoService {
         esProductoEnvio,
         requiereFactura,
         identidad,
+        aplicaEnvioGratisPorPeso,
       );
       const diferenciaProducto = this.obtenerDiferenciaProducto(
         producto,
@@ -1339,6 +1340,7 @@ export class PedidoService {
     esProductoEnvio = false,
     incluyeIvaFactura = false,
     identidad: FilamentIdentity = { category: item.grupo },
+    aplicaEnvioGratisPorPeso = false,
   ): PedidoProductoCalculado {
     const cantidad = this.obtenerCantidadProducto(producto);
     const precioBaseUnitario = this.obtenerPrecioListaCotizado(
@@ -1360,10 +1362,10 @@ export class PedidoService {
           ),
         )
       : 0;
-    const descuentoPorcentaje = Math.max(
-      descuentoProductoPorcentaje,
-      porcentajeCuponAplicable,
-    );
+    const descuentoPorcentaje =
+      esProductoEnvio && aplicaEnvioGratisPorPeso
+        ? 100
+        : Math.max(descuentoProductoPorcentaje, porcentajeCuponAplicable);
     if (incluyeIvaFactura) {
       const subtotalBrutoCalculado = this.redondear2(
         precioBaseUnitario *
