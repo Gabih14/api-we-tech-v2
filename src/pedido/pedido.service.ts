@@ -31,6 +31,7 @@ import { GetPedidosDashboardDto } from './dto/get-pedidos-dashboard.dto';
 import { CuponService } from 'src/cupon/cupon.service';
 import { CuponCategoriaAplicable } from 'src/cupon/entities/cupon.entity';
 import {
+  FILAMENT_CATEGORIES,
   getDiscountPercentageForFilament,
   isEligibleForQuantityDiscountByAttributes,
   parseProductWeightFromDescription,
@@ -1298,7 +1299,10 @@ export class PedidoService {
   ): CuponCategoriaAplicable {
     const normalized = grupo?.trim().toUpperCase();
 
-    if (normalized === 'FILAMENTOS') {
+    if (
+      normalized &&
+      (FILAMENT_CATEGORIES as readonly string[]).includes(normalized)
+    ) {
       return 'filamento';
     }
 

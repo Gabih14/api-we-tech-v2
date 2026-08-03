@@ -1185,6 +1185,44 @@ describe('PedidoService recalculo de importes', () => {
     expect(pedido.productos[1].ajuste_porcentaje).toBeNull();
   });
 
+  it('aplica cupon de filamento a productos FILAMENTO 3D del ERP', async () => {
+    stkItemRepo.findOne.mockResolvedValue(
+      itemConPrecio(
+        'GSB-PLA-1KG-AZUL',
+        '100',
+        'PES',
+        '1',
+        'FILAMENTO 3D',
+        'GST3D Black | PLA+ | 1kg | Basico Nacional | Azul',
+      ),
+    );
+    cuponService.resolverPorcentajePorModalidad.mockResolvedValue({
+      porcentajeAplicado: 20,
+      categoriaAplicable: 'filamento',
+    });
+
+    const dto = dtoBase({
+      codigo_cupon: 'FIL20',
+      descuento_cupon: 20,
+      total: 80,
+      productos: [
+        {
+          nombre: 'GSB-PLA-1KG-AZUL',
+          cantidad: 1,
+          precio_unitario: 80,
+          subtotal: 80,
+          ajuste_porcentaje: 20,
+        },
+      ],
+    });
+
+    const { pedido } = await service.crear(dto);
+
+    expect(pedido.descuento_cupon).toBe(20);
+    expect(pedido.total).toBe(80);
+    expect(pedido.productos[0].ajuste_porcentaje).toBe(20);
+  });
+
   it('aplica cupon de impresora solo a productos IMPRESORAS', async () => {
     stkItemRepo.findOne
       .mockResolvedValueOnce(
