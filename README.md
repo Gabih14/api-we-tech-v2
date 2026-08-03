@@ -31,7 +31,13 @@ GOOGLE_API_KEY=tu_google_api_key
 TELEGRAM_BOT_TOKEN=tu_telegram_bot_token
 TELEGRAM_CHAT_ID=tu_telegram_chat_id_secretaria
 DELIVERY_TELEGRAM_CHAT_ID=tu_telegram_chat_id_delivery
+PEDIDO_TRANSFER_APPROVAL_ENABLED=true
 ```
+
+`PEDIDO_TRANSFER_APPROVAL_ENABLED` controla la aprobación automática de
+pedidos por transferencia. Su valor predeterminado es `true`; usar `false`,
+`0`, `no` u `off` pausa el proceso antes de que consulte o modifique pedidos.
+Reiniciar la aplicación después de cambiarla.
 
 ⚠️ Otros tokens, como el de Nave, están embebidos por ahora.
 **Se recomienda externalizarlos a `.env` por seguridad.**

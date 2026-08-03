@@ -86,7 +86,7 @@ export class CuponService {
       throw new BadRequestException('No se puede cambiar el id del cupón');
     }
 
-    const cupon = await this.buscarPorId(id);
+    const cupon = await this.buscarPorIdIncluyendoInactivos(id);
     const descuentosNormalizados = this.normalizarDescuentosParaEdicion(
       actualizarCuponDto,
       cupon,
@@ -129,6 +129,19 @@ export class CuponService {
     }
 
     return await this.cuponRepository.save(cupon);
+  }
+
+  private async buscarPorIdIncluyendoInactivos(id: string): Promise<Cupon> {
+    const cupon = await this.cuponRepository.findOne({
+      where: { id },
+      relations: ['usos'],
+    });
+
+    if (!cupon) {
+      throw new NotFoundException(`Cupón ${id} no encontrado`);
+    }
+
+    return cupon;
   }
 
   async resolverPorcentajePorModalidad(

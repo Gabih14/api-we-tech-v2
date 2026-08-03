@@ -10,6 +10,7 @@ import { PedidoService } from './pedido.service';
 @Injectable()
 export class PedidoExpirationService {
   private readonly logger = new Logger(PedidoExpirationService.name);
+  private transferApprovalPauseLogged = false;
 
   constructor(
     @InjectRepository(Pedido, 'back')
@@ -107,6 +108,18 @@ export class PedidoExpirationService {
 
   @Cron(process.env.PEDIDO_TRANSFER_APPROVAL_CRON || '*/5 * * * *')
   async scheduledTransferApproval() {
+    if (!this.isTransferApprovalEnabled()) {
+      if (!this.transferApprovalPauseLogged) {
+        this.logger.warn(
+          'Aprobacion automatica de transferencias pausada por PEDIDO_TRANSFER_APPROVAL_ENABLED',
+        );
+        this.transferApprovalPauseLogged = true;
+      }
+      return;
+    }
+
+    this.transferApprovalPauseLogged = false;
+
     const pendientes = await this.pedidoRepo.find({
       where: {
         estado: 'PENDIENTE',
@@ -137,5 +150,13 @@ export class PedidoExpirationService {
         );
       }
     }
+  }
+
+  private isTransferApprovalEnabled(): boolean {
+    const value = process.env.PEDIDO_TRANSFER_APPROVAL_ENABLED
+      ?.trim()
+      .toLowerCase();
+
+    return !['false', '0', 'no', 'off'].includes(value ?? '');
   }
 }
