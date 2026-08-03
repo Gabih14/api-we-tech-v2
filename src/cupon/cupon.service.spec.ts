@@ -6,10 +6,19 @@ describe('CuponService', () => {
   const createService = () => {
     const cupones = new Map<string, Partial<Cupon>>();
     const cuponRepository = {
-      findOne: jest.fn(async ({ where }: { where: { id: string } }) => {
-        const cupon = cupones.get(where.id);
-        return cupon ? ({ activo: true, usos: [], ...cupon } as Cupon) : null;
-      }),
+      findOne: jest.fn(
+        async ({ where }: { where: { id: string; activo?: boolean } }) => {
+          const cupon = cupones.get(where.id);
+          if (!cupon) {
+            return null;
+          }
+
+          const resultado = { activo: true, usos: [], ...cupon } as Cupon;
+          return where.activo === undefined || resultado.activo === where.activo
+            ? resultado
+            : null;
+        },
+      ),
       create: jest.fn((dto) => dto),
       save: jest.fn(async (cupon) => {
         cupones.set(cupon.id, cupon);
@@ -110,6 +119,44 @@ describe('CuponService', () => {
       expect.objectContaining({
         categoriaAplicable: null,
       }),
+    );
+  });
+
+  it('permite reactivar un cupon inactivo mediante PATCH', async () => {
+    const { service, cupones, cuponRepository } = createService();
+    cupones.set('BVVD20OFF', {
+      id: 'BVVD20OFF',
+      activo: false,
+      porcentajeDescuento: 20,
+      porcentajeDescuentoTarjeta: 20,
+      porcentajeDescuentoTransferencia: 20,
+    });
+
+    await expect(
+      service.actualizar('BVVD20OFF', { activo: true }),
+    ).resolves.toEqual(expect.objectContaining({ activo: true }));
+
+    expect(cuponRepository.findOne).toHaveBeenCalledWith({
+      where: { id: 'BVVD20OFF' },
+      relations: ['usos'],
+    });
+    expect(cuponRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'BVVD20OFF',
+        activo: true,
+      }),
+    );
+  });
+
+  it('mantiene los cupones inactivos fuera de la busqueda publica', async () => {
+    const { service, cupones } = createService();
+    cupones.set('BVVD20OFF', {
+      id: 'BVVD20OFF',
+      activo: false,
+    });
+
+    await expect(service.buscarPorId('BVVD20OFF')).rejects.toThrow(
+      'Cupón BVVD20OFF no encontrado o inactivo',
     );
   });
 
