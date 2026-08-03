@@ -171,8 +171,14 @@ export class PedidoService {
       const cantidad = this.obtenerCantidadProducto(producto);
       const esProductoEnvio = this.esProductoEnvio(producto.nombre);
       const categoriaProducto = this.derivarCategoriaProducto(item.grupo);
-      const peso = parseProductWeightFromDescription(item.descripcion);
-      pesoTotalKg += (peso ?? 0) * cantidad;
+      // En ENV-<n>K-GM-DELIVERY, la K representa kilometros de delivery,
+      // no kilos. Estos productos no participan del peso para envio gratis.
+      const peso = esProductoEnvio
+        ? undefined
+        : parseProductWeightFromDescription(item.descripcion);
+      if (!esProductoEnvio) {
+        pesoTotalKg += (peso ?? 0) * cantidad;
+      }
       // Identidad (Marca+Material) desde atributos: base confiable para el
       // descuento por cantidad, en vez de parsear prefijos del id.
       const identidad: FilamentIdentity = esProductoEnvio

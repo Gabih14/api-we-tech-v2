@@ -86,11 +86,25 @@ No es necesario enviar `external_id`; se genera internamente.
 
 Los descuentos automáticos de productos, incluyendo el descuento base de filamentos y los descuentos diferenciales por cantidad o marca elegible, se aplican solo cuando `metodo_pago` es `transfer`. Para pagos `online`, el backend no aplica descuentos automáticos de producto; solo considera cupones válidos para la modalidad correspondiente.
 
+Si se envia `factura_tipo` con valor `A` o `B`, el backend valida los importes de cada producto con IVA incluido y guarda internamente el neto mas el IVA discriminado. Actualmente la alicuota aplicada es 21% por linea. Cuando se incorporen impresoras a la venta web, no se debe reutilizar ese porcentaje: las impresoras deben calcularse con IVA 10.5%, resolviendo la alicuota por producto.
+
+#### Envio gratis por peso y productos `ENV`
+
+El envio gratis aplica solo para pedidos `tipo_envio: "shipping"` cuando el peso total de productos reales es mayor o igual a 10 kg. Los productos de envio con formato `ENV-<n>K-GM-DELIVERY` no suman peso: la `K` del codigo representa kilometros de delivery, no kilos.
+
+Si los productos reales llegan al umbral de envio gratis, el producto `ENV` debe seguir dentro de `productos`, pero bonificado al 100%:
+
 ```json
 {
-`subtotal` en cada producto es obligatorio y representa el importe bruto de la línea (sin descuento), mientras que `precio_unitario` representa el valor neto por unidad (con descuento aplicado).
+  "nombre": "ENV-11K-GM-DELIVERY",
+  "cantidad": 1,
+  "precio_unitario": 0,
+  "subtotal": 0,
+  "ajuste_porcentaje": 100
+}
+```
 
-Si se envia `factura_tipo` con valor `A` o `B`, el backend valida los importes de cada producto con IVA incluido y guarda internamente el neto mas el IVA discriminado. Actualmente la alicuota aplicada es 21% por linea. Cuando se incorporen impresoras a la venta web, no se debe reutilizar ese porcentaje: las impresoras deben calcularse con IVA 10.5%, resolviendo la alicuota por producto.
+En ese caso `costo_envio` debe enviarse como `0` y el `total` no debe incluir el envio. Si los productos reales pesan menos de 10 kg, el `ENV` mantiene su precio normal aunque el codigo indique, por ejemplo, `11K`.
 
 ```json
 {

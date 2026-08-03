@@ -1343,11 +1343,11 @@ describe('PedidoService recalculo de importes', () => {
     expect(stockService.reservarStock).not.toHaveBeenCalled();
   });
 
-  it('cuenta el producto ENV para envio gratis por peso y lo bonifica al 100%', async () => {
+  it('bonifica el producto ENV al 100% cuando los productos llegan al peso de envio gratis', async () => {
     stkItemRepo.findOne
       .mockResolvedValueOnce(
         itemConPrecio(
-          'ITEM-9KG',
+          'ITEM-10KG',
           '100',
           'PES',
           '1',
@@ -1369,13 +1369,13 @@ describe('PedidoService recalculo de importes', () => {
     const dto = dtoBase({
       tipo_envio: 'shipping',
       costo_envio: 3999,
-      total: 900,
+      total: 1000,
       productos: [
         {
-          nombre: 'ITEM-9KG',
-          cantidad: 9,
+          nombre: 'ITEM-10KG',
+          cantidad: 10,
           precio_unitario: 100,
-          subtotal: 900,
+          subtotal: 1000,
         },
         {
           nombre: 'ENV-07K-GM-DELIVERY',
@@ -1390,10 +1390,63 @@ describe('PedidoService recalculo de importes', () => {
     const { pedido } = await service.crear(dto);
 
     expect(pedido.costo_envio).toBe(0);
-    expect(pedido.total).toBe(900);
+    expect(pedido.total).toBe(1000);
     expect(pedido.productos[1].precio_unitario).toBe(0);
     expect(pedido.productos[1].subtotal).toBe(0);
     expect(pedido.productos[1].ajuste_porcentaje).toBe(100);
+  });
+
+  it('no usa los kilometros del producto ENV como peso para envio gratis', async () => {
+    stkItemRepo.findOne
+      .mockResolvedValueOnce(
+        itemConPrecio(
+          'ITEM-1KG',
+          '19999',
+          'PES',
+          '1',
+          null,
+          'Producto 1kg',
+        ),
+      )
+      .mockResolvedValueOnce(
+        itemConPrecio(
+          'ENV-11K-GM-DELIVERY',
+          '5599',
+          'PES',
+          '1',
+          null,
+          'Envio 11km delivery',
+        ),
+      );
+
+    const dto = dtoBase({
+      tipo_envio: 'shipping',
+      costo_envio: 5599,
+      total: 25598,
+      productos: [
+        {
+          nombre: 'ITEM-1KG',
+          cantidad: 1,
+          precio_unitario: 19999,
+          subtotal: 19999,
+        },
+        {
+          nombre: 'ENV-11K-GM-DELIVERY',
+          cantidad: 1,
+          precio_unitario: 5599,
+          subtotal: 5599,
+          ajuste_porcentaje: 0,
+        },
+      ],
+    });
+
+    const { pedido } = await service.crear(dto);
+
+    expect(pedido.costo_envio).toBe(5599);
+    expect(pedido.total).toBe(25598);
+    expect(pedido.productos[1].precio_unitario).toBe(5599);
+    expect(pedido.productos[1].subtotal).toBe(5599);
+    expect(pedido.productos[1].ajuste_porcentaje).toBeNull();
   });
 
   it('no aplica envio gratis por peso para pickup', async () => {
