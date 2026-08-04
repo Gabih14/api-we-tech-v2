@@ -28,20 +28,12 @@ export class StkPrecio {
   precio: string | null;
 
   @Column("decimal", {
-    name: "precio_vta",
+    name: "preciovta",
     nullable: true,
     precision: 14,
     scale: 4,
   })
   precioVta: string | null;
-
-  @Column("decimal", {
-    name: "precio_aux",
-    nullable: true,
-    precision: 14,
-    scale: 4,
-  })
-  precioAux: string | null;
 
   @Column("decimal", {
     name: "ganancia",

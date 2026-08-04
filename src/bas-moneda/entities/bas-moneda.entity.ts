@@ -12,9 +12,6 @@ export class BasMoneda {
   @Column("char", { name: "simbolo", nullable: true, length: 3 })
   simbolo: string | null;
 
-  @Column("varchar", { name: "simbolos", nullable: true, length: 20 })
-  simbolos: string | null;
-
   @Column("decimal", {
     name: "cotizacion",
     nullable: true,
