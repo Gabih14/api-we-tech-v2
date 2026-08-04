@@ -32,7 +32,15 @@ export class CntAsiento {
 
   @Column({
     type: 'enum',
-    enum: ['APERTURA', 'OPERATIVO', 'AJUSTE', 'REGULARIZACION', 'CIERRE', 'AUTO', 'MANUAL'],
+    enum: [
+      'APERTURA',
+      'OPERATIVO',
+      'AJUSTE',
+      'REGULARIZACION',
+      'CIERRE',
+      'AUTO',
+      'MANUAL',
+    ],
     nullable: true,
   })
   tipo:
@@ -48,7 +56,12 @@ export class CntAsiento {
   @Column({ type: 'varchar', length: 5, nullable: true })
   moneda: string | null;
 
-  @Column({ type: 'decimal', precision: 10, scale: 4, default: () => "'1.0000'" })
+  @Column({
+    type: 'decimal',
+    precision: 10,
+    scale: 4,
+    default: () => "'1.0000'",
+  })
   cotizacion: string;
 
   @Column({ type: 'varchar', length: 20, nullable: true })
@@ -63,10 +76,12 @@ export class CntAsiento {
   @Column({ type: 'int', nullable: true })
   asiento_union: number | null;
 
-  @Column({ type: 'bit', width: 1, default: () => "b'0'", transformer: bitToBoolTransformer })
-  union_asiento: boolean;
-
-  @Column({ type: 'bit', width: 1, default: () => "b'1'", transformer: bitToBoolTransformer })
+  @Column({
+    type: 'bit',
+    width: 1,
+    default: () => "b'1'",
+    transformer: bitToBoolTransformer,
+  })
   visible: boolean;
 
   @OneToMany(() => CntMovimiento, (m) => m.asientoRef)

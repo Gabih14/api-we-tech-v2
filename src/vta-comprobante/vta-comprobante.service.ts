@@ -196,9 +196,8 @@ export class VtaComprobanteService {
       condicionIva: pedido.factura_tipo === 'A' ? 'RI' : 'CF',
       visible: true,
     };
-    const cliente = await this.clienteService.findOrCreateOrUpdate(
-      clientePayload,
-    );
+    const cliente =
+      await this.clienteService.findOrCreateOrUpdate(clientePayload);
     const razonSocial = cliente.razonSocial || pedido.cliente_nombre;
 
     const tipoComprobante = this.obtenerTipoComprobantePedido(pedido);
@@ -226,16 +225,14 @@ export class VtaComprobanteService {
         ? this.redondear2(importeFinal / (1 - ajustePorcentaje / 100))
         : this.redondear2(Number(producto.subtotal ?? importeFinal));
       const ajusteNetoCalculado = this.redondear2(importeFinal - base);
-      const ajusteNeto =
-        ajusteNetoCalculado !== 0 ? ajusteNetoCalculado : null;
+      const ajusteNeto = ajusteNetoCalculado !== 0 ? ajusteNetoCalculado : null;
       const precioBaseUnitario =
         cantidad > 0
           ? this.redondear2(base / cantidad)
           : this.redondear2(precioFinalUnitario);
-      const ajuste =
-        tieneAjustePorcentaje
-          ? this.redondear2(-ajustePorcentaje)
-          : base !== 0 && ajusteNeto !== null
+      const ajuste = tieneAjustePorcentaje
+        ? this.redondear2(-ajustePorcentaje)
+        : base !== 0 && ajusteNeto !== null
           ? this.redondear2((ajusteNeto / base) * 100)
           : null;
 
@@ -327,52 +324,82 @@ export class VtaComprobanteService {
       visible: true,
     };
 
-    const nuevoComprobante = this.comprobanteRepository.create(
-      nuevoComprobanteData,
-    );
+    const nuevoComprobante =
+      this.comprobanteRepository.create(nuevoComprobanteData);
 
     const comprobanteGuardado =
       await this.comprobanteRepository.save(nuevoComprobante);
 
-    // 🧮 Crear ítems asociados
-    let linea = 1;
-    const ajustesIva = tipoComprobante.facturaTipo
-      ? this.calcularAjustesIvaItems(itemsCalculo.map((item) => item.importe))
-      : [];
-    const ivasItems = tipoComprobante.facturaTipo
-      ? this.calcularIvasItems(
-          itemsCalculo.map((item) => item.importe),
-          ivaImporte,
-        )
-      : [];
-    for (const item of itemsCalculo) {
-      const producto = item.producto;
-      await this.comprobanteItemService.create({
-        tipo: comprobanteGuardado.tipo,
-        comprobante: comprobanteGuardado.comprobante,
-        linea,
-        cantidad: producto.cantidad,
-        precio: item.precioBaseUnitario,
-        importe: item.importe,
-        ivainc: tipoComprobante.facturaTipo === 'B' ? true : undefined,
-        alicuota: tipoComprobante.facturaTipo ? 21 : undefined,
-        iva: ivasItems[linea - 1] ?? undefined,
-        ajuste: item.ajuste ?? undefined,
-        ajuste_neto: item.ajusteNeto ?? undefined,
-        ajuste_iva: ajustesIva[linea - 1] ?? undefined,
-        itemId: producto.nombre, // el ID del producto
-      } as any);
-      linea++;
+    try {
+      // 🧮 Crear ítems asociados
+      let linea = 1;
+      const ajustesIva = tipoComprobante.facturaTipo
+        ? this.calcularAjustesIvaItems(itemsCalculo.map((item) => item.importe))
+        : [];
+      const ivasItems = tipoComprobante.facturaTipo
+        ? this.calcularIvasItems(
+            itemsCalculo.map((item) => item.importe),
+            ivaImporte,
+          )
+        : [];
+      for (const item of itemsCalculo) {
+        const producto = item.producto;
+        await this.comprobanteItemService.create({
+          tipo: comprobanteGuardado.tipo,
+          comprobante: comprobanteGuardado.comprobante,
+          linea,
+          cantidad: producto.cantidad,
+          precio: item.precioBaseUnitario,
+          importe: item.importe,
+          ivainc: tipoComprobante.facturaTipo === 'B' ? true : undefined,
+          alicuota: tipoComprobante.facturaTipo ? 21 : undefined,
+          iva: ivasItems[linea - 1] ?? undefined,
+          ajuste: item.ajuste ?? undefined,
+          ajuste_neto: item.ajusteNeto ?? undefined,
+          ajuste_iva: ajustesIva[linea - 1] ?? undefined,
+          itemId: producto.nombre,
+        } as any);
+        linea++;
+      }
+
+      // 📝 Generar asiento contable y vínculo
+      await this.vtaComprobanteAsientoService.createAsientoForComprobante(
+        comprobanteGuardado.tipo,
+        comprobanteGuardado.comprobante,
+        pedido.metodo_pago ?? 'online',
+      );
+
+      return comprobanteGuardado;
+    } catch (error) {
+      try {
+        await this.eliminarComprobanteIncompleto(
+          comprobanteGuardado.tipo,
+          comprobanteGuardado.comprobante,
+        );
+      } catch (cleanupError) {
+        console.error(
+          `No se pudo eliminar el comprobante incompleto ${comprobanteGuardado.tipo} ${comprobanteGuardado.comprobante}:`,
+          cleanupError,
+        );
+      }
+      throw error;
     }
+  }
 
-    // 📝 Generar asiento contable y vínculo
-    await this.vtaComprobanteAsientoService.createAsientoForComprobante(
-      comprobanteGuardado.tipo,
-      comprobanteGuardado.comprobante,
-      pedido.metodo_pago ?? 'online', // Pasar método de pago para seleccionar cuenta correcta
-    );
-
-    return comprobanteGuardado;
+  private async eliminarComprobanteIncompleto(
+    tipo: string,
+    comprobante: string,
+  ): Promise<void> {
+    await this.dataSource.transaction(async (manager) => {
+      await manager.getRepository(VtaComprobanteItem).delete({
+        tipo,
+        comprobante,
+      });
+      await manager.getRepository(VtaComprobante).delete({
+        tipo,
+        comprobante,
+      });
+    });
   }
 
   // 🔢 Genera el número en formato "X 00001 00000227"
@@ -388,16 +415,12 @@ export class VtaComprobanteService {
     return { tipo: 'FX', letra: 'X', facturaTipo: null };
   }
 
-  private calcularAjustesIvaItems(
-    importes: number[],
-  ): number[] {
+  private calcularAjustesIvaItems(importes: number[]): number[] {
     if (importes.length === 0) {
       return [];
     }
 
-    return importes.map((importe) =>
-      Math.round(Number(importe ?? 0) * 0.21),
-    );
+    return importes.map((importe) => Math.round(Number(importe ?? 0) * 0.21));
   }
 
   private calcularIvasItems(importes: number[], ivaTotal: number): number[] {
@@ -482,7 +505,9 @@ export class VtaComprobanteService {
     // o pegado a la localidad como lo devuelve Google ("M5519 Las Heras").
     // Se recorre de atrás hacia adelante y nunca desde el índice 0 (la calle).
     for (let i = partes.length - 1; i >= 1; i--) {
-      const match = partes[i].match(/^([A-Za-z]?\d{4}[A-Za-z]{0,3})(?:\s+(.+))?$/);
+      const match = partes[i].match(
+        /^([A-Za-z]?\d{4}[A-Za-z]{0,3})(?:\s+(.+))?$/,
+      );
       if (!match) continue;
 
       cpa = match[1];
@@ -496,7 +521,9 @@ export class VtaComprobanteService {
     }
 
     // 🌎 El país no se guarda en vta_cliente: se descarta esté donde esté.
-    const sinPais = partes.filter((p) => !/^(argentina|argentine|arg|ar)$/i.test(p));
+    const sinPais = partes.filter(
+      (p) => !/^(argentina|argentine|arg|ar)$/i.test(p),
+    );
 
     if (sinPais.length >= 3) {
       provincia = sinPais.pop();
@@ -556,7 +583,10 @@ export class VtaComprobanteService {
     return Math.round(valor * 100) / 100;
   }
 
-  private parseDateRange(from?: string, to?: string): {
+  private parseDateRange(
+    from?: string,
+    to?: string,
+  ): {
     fromDate?: Date;
     toDate?: Date;
   } {
@@ -570,7 +600,10 @@ export class VtaComprobanteService {
     };
   }
 
-  async getResumenMetricas(from?: string, to?: string): Promise<{
+  async getResumenMetricas(
+    from?: string,
+    to?: string,
+  ): Promise<{
     totalVentas: number;
     cantidadComprobantes: number;
     ticketPromedio: number;
@@ -652,7 +685,10 @@ export class VtaComprobanteService {
 
     const qb = this.comprobanteRepository.createQueryBuilder('c');
 
-    qb.select("COALESCE(NULLIF(TRIM(c.trabajador), ''), 'SIN_VENDEDOR')", 'vendedor')
+    qb.select(
+      "COALESCE(NULLIF(TRIM(c.trabajador), ''), 'SIN_VENDEDOR')",
+      'vendedor',
+    )
       .addSelect('COALESCE(SUM(c.total), 0)', 'totalVentas')
       .addSelect('COUNT(*)', 'cantidadComprobantes')
       .where('(c.anulado IS NULL OR c.anulado = :anulado)', { anulado: false })

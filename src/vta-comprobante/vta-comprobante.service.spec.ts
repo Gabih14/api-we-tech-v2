@@ -1,8 +1,21 @@
 import { VtaComprobanteService } from './vta-comprobante.service';
 import { Pedido } from 'src/pedido/entities/pedido.entity';
+import { VtaComprobante } from './entities/vta-comprobante.entity';
+import { VtaComprobanteItem } from 'src/vta-comprobante-item/entities/vta-comprobante-item.entity';
 
 describe('VtaComprobanteService crearDesdePedido', () => {
-  const dataSource = {};
+  const comprobanteDelete = jest.fn(async () => undefined);
+  const itemDelete = jest.fn(async () => undefined);
+  const dataSource = {
+    transaction: jest.fn(async (callback) =>
+      callback({
+        getRepository: (target: unknown) => ({
+          delete:
+            target === VtaComprobanteItem ? itemDelete : comprobanteDelete,
+        }),
+      }),
+    ),
+  };
   const comprobanteRepository = {
     create: jest.fn((data) => data),
     save: jest.fn(async (data) => data),
@@ -393,7 +406,8 @@ describe('VtaComprobanteService crearDesdePedido', () => {
         ],
         100,
       ),
-      cliente_ubicacion: 'Independencia 2094, M5539 Las Heras, Mendoza, Argentina',
+      cliente_ubicacion:
+        'Independencia 2094, M5539 Las Heras, Mendoza, Argentina',
     } as Pedido);
 
     expect(clienteService.findOrCreateOrUpdate).toHaveBeenCalledWith(
@@ -477,5 +491,37 @@ describe('VtaComprobanteService crearDesdePedido', () => {
     expect(clienteService.findOrCreateOrUpdate).toHaveBeenCalledWith(
       expect.objectContaining({ tipoDocumento: 'CUIL', condicionIva: 'CF' }),
     );
+  });
+
+  it('elimina comprobante e items si falla la creacion del asiento', async () => {
+    vtaComprobanteAsientoService.createAsientoForComprobante.mockRejectedValueOnce(
+      new Error('fallo de asiento'),
+    );
+
+    await expect(
+      service.crearDesdePedido(
+        pedidoBase(
+          [
+            {
+              nombre: 'ITEM-1',
+              cantidad: 1,
+              precio_unitario: 100,
+              subtotal: 100,
+              ajuste_porcentaje: null,
+            },
+          ],
+          100,
+        ),
+      ),
+    ).rejects.toThrow('fallo de asiento');
+
+    expect(itemDelete).toHaveBeenCalledWith({
+      tipo: 'FX',
+      comprobante: 'X 00001 00000001',
+    });
+    expect(comprobanteDelete).toHaveBeenCalledWith({
+      tipo: 'FX',
+      comprobante: 'X 00001 00000001',
+    });
   });
 });
