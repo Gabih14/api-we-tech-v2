@@ -72,6 +72,10 @@ export class LoggingInterceptor implements NestInterceptor {
 
   private shouldIgnoreRequestLog(method: string, url: string): boolean {
     const path = url.split('?')[0].replace(/\/+$/, '');
-    return method === 'GET' && path.endsWith('/vta-comprobante/metrics');
+    return (
+      method === 'GET' &&
+      (path.endsWith('/vta-comprobante/metrics') ||
+        path.endsWith('/vta-comprobante/metrics/ventas-por-vendedor'))
+    );
   }
 }
