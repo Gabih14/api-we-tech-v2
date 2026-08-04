@@ -24,15 +24,15 @@ export class StkItem {
   @Column('varchar', { name: 'presentacion', nullable: true, length: 100 })
   presentacion: string | null;
 
-  @Column('text', { name: 'observaciones', nullable: true })
+  @Column('text', { name: 'notas', nullable: true })
   observaciones: string | null;
 
   @Column('enum', {
     name: 'tipo',
     nullable: true,
-    enum: ['PT', 'SE', 'MP', 'CP', 'BU', 'S', 'C'],
+    enum: ['PT', 'SE', 'MP', 'CP', 'BU', 'S', 'C', 'E', 'X'],
   })
-  tipo: 'PT' | 'SE' | 'MP' | 'CP' | 'BU' | 'S' | 'C' | null;
+  tipo: 'PT' | 'SE' | 'MP' | 'CP' | 'BU' | 'S' | 'C' | 'E' | 'X' | null;
 
   @Column('varchar', { name: 'grupo', nullable: true, length: 50 })
   grupo: string | null;
