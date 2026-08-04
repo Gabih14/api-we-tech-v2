@@ -42,12 +42,6 @@ export class VtaComprobante {
   @Column({ type: 'varchar', length: 20, nullable: true })
   numero_aux: string;
 
-  @Column({ type: 'varchar', length: 16, nullable: true })
-  comprobante_aux: string;
-
-  @Column({ type: 'varchar', length: 64, nullable: true })
-  comprobante_adj: string;
-
   @Column({ type: 'varchar', length: 5, nullable: true })
   moneda: string;
 
@@ -57,7 +51,12 @@ export class VtaComprobante {
   @Column({ type: 'varchar', length: 20, nullable: true })
   lista: string;
 
-  @Column({ type: 'tinyint', width: 1, nullable: true, transformer: bitToBoolTransformer })
+  @Column({
+    type: 'tinyint',
+    width: 1,
+    nullable: true,
+    transformer: bitToBoolTransformer,
+  })
   ivainc: boolean;
 
   @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true })
@@ -69,40 +68,33 @@ export class VtaComprobante {
   @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true })
   ajuste_precio: number;
 
-  @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true })
-  ajuste_financiero: number;
-
   @Column({
-    type: 'enum',
-    enum: ['PORCENTAJE', 'UTILIDAD', 'AJUSTE_GANANCIA', 'AJUSTE_UTILIDAD'],
+    name: 'anclar_iva',
+    type: 'tinyint',
+    width: 1,
     nullable: true,
+    transformer: bitToBoolTransformer,
   })
-  ajuste_calculo: 'PORCENTAJE' | 'UTILIDAD' | 'AJUSTE_GANANCIA' | 'AJUSTE_UTILIDAD';
-
-  @Column({ type: 'tinyint', width: 1, nullable: true, transformer: bitToBoolTransformer })
   anclar_precio: boolean;
 
   @Column({
     type: 'enum',
-    enum: ['PRODUCTO', 'SERVICIO', 'PRODSERV', 'BIENDEUSO', 'LOCACION'],
+    enum: ['PRODUCTO', 'SERVICIO', 'PRODYSERV', 'BIENDEUSO', 'LOCACION'],
     nullable: true,
   })
-  concepto: 'PRODUCTO' | 'SERVICIO' | 'PRODSERV' | 'BIENDEUSO' | 'LOCACION';
+  concepto: 'PRODUCTO' | 'SERVICIO' | 'PRODYSERV' | 'BIENDEUSO' | 'LOCACION';
 
-  @Column({ type: 'varchar', length: 20, nullable: true })
+  @Column({ type: 'varchar', length: 30, nullable: true })
   rubro: string;
 
   @Column({ type: 'varchar', length: 20, nullable: true })
   provincia: string;
 
-  @Column({ type: 'varchar', length: 20, nullable: true })
+  @Column({ name: 'condventa', type: 'varchar', length: 20, nullable: true })
   condicion_venta: string;
 
   @Column({ type: 'varchar', length: 20, nullable: true })
   deposito: string;
-
-  @Column({ type: 'varchar', length: 20, nullable: true })
-  sucursal: string;
 
   @Column({ type: 'varchar', length: 20, nullable: true })
   transporte: string;
@@ -119,25 +111,36 @@ export class VtaComprobante {
   @Column({ type: 'decimal', precision: 6, scale: 3, nullable: true })
   comision: number;
 
-  @Column({ name: 'comision$', type: 'decimal', precision: 10, scale: 2, nullable: true })
+  @Column({
+    name: 'comision$',
+    type: 'decimal',
+    precision: 10,
+    scale: 2,
+    nullable: true,
+  })
   comision$: number;
 
-  @Column({ type: 'tinyint', width: 1, nullable: true, transformer: bitToBoolTransformer })
+  @Column({
+    name: 'comisionx',
+    type: 'tinyint',
+    width: 1,
+    nullable: true,
+    transformer: bitToBoolTransformer,
+  })
   comisionliq: boolean;
 
   @Column({ type: 'varchar', length: 20, nullable: true })
   proyecto: string;
 
   @Column({ type: 'varchar', length: 20, nullable: true })
-  existencia_flujo: string;
-
-  @Column({ type: 'varchar', length: 20, nullable: true })
   cuota_sistema: string;
 
-  @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true })
-  prorrateo: number;
-
-  @Column({ type: 'tinyint', width: 1, nullable: true, transformer: bitToBoolTransformer })
+  @Column({
+    type: 'tinyint',
+    width: 1,
+    nullable: true,
+    transformer: bitToBoolTransformer,
+  })
   anulado: boolean;
 
   @Column({ type: 'varchar', length: 100, nullable: true })
@@ -173,94 +176,121 @@ export class VtaComprobante {
   @Column({ type: 'varchar', length: 50, nullable: true })
   contacto: string;
 
-  @Column({ type: 'text', nullable: true })
+  @Column({ name: 'notas', type: 'text', nullable: true })
   observaciones: string;
 
-  @Column({ type: 'text', nullable: true })
+  @Column({ name: 'notas_int', type: 'text', nullable: true })
   observaciones_int: string;
 
-  @Column({ type: 'decimal', precision: 14, scale: 2, nullable: true })
+  @Column({ type: 'decimal', precision: 17, scale: 2, nullable: true })
   subtotal: number;
 
-  @Column({ type: 'decimal', precision: 12, scale: 2, nullable: true })
+  @Column({ type: 'decimal', precision: 17, scale: 2, nullable: true })
   neto: number;
 
-  @Column({ type: 'decimal', precision: 12, scale: 2, nullable: true })
+  @Column({ type: 'decimal', precision: 17, scale: 2, nullable: true })
   exento: number;
 
-  @Column({ type: 'decimal', precision: 12, scale: 2, nullable: true })
+  @Column({ type: 'decimal', precision: 17, scale: 2, nullable: true })
   nogravado: number;
 
   @Column({ type: 'varchar', length: 30, nullable: true })
   alicuotas: string;
 
-  @Column({ type: 'decimal', precision: 12, scale: 2, nullable: true })
+  @Column({ type: 'decimal', precision: 17, scale: 2, nullable: true })
   iva: number;
 
-  @Column({ type: 'decimal', precision: 12, scale: 2, nullable: true })
+  @Column({ type: 'decimal', precision: 17, scale: 2, nullable: true })
   impuesto_1: number;
 
-  @Column({ type: 'decimal', precision: 12, scale: 2, nullable: true })
+  @Column({ type: 'decimal', precision: 17, scale: 2, nullable: true })
   impuesto_2: number;
 
-  @Column({ type: 'decimal', precision: 12, scale: 2, nullable: true })
+  @Column({ type: 'decimal', precision: 17, scale: 2, nullable: true })
   impuesto_3: number;
 
-  @Column({ type: 'decimal', precision: 12, scale: 2, nullable: true })
+  @Column({ type: 'decimal', precision: 17, scale: 2, nullable: true })
   impuesto_4: number;
 
-  @Column({ type: 'decimal', precision: 12, scale: 2, nullable: true })
+  @Column({ type: 'decimal', precision: 17, scale: 2, nullable: true })
   impuesto_5: number;
 
-  @Column({ type: 'decimal', precision: 12, scale: 2, nullable: true })
+  @Column({ type: 'decimal', precision: 17, scale: 2, nullable: true })
   impuesto_6: number;
 
-  @Column({ type: 'decimal', precision: 12, scale: 2, nullable: true })
+  @Column({ type: 'decimal', precision: 17, scale: 2, nullable: true })
   impuesto_7: number;
 
-  @Column({ type: 'decimal', precision: 12, scale: 2, nullable: true })
+  @Column({ type: 'decimal', precision: 17, scale: 2, nullable: true })
   impuesto_8: number;
 
-  @Column({ type: 'decimal', precision: 12, scale: 2, nullable: true })
+  @Column({ type: 'decimal', precision: 17, scale: 2, nullable: true })
   impuesto_9: number;
 
-  @Column({ type: 'decimal', precision: 14, scale: 2, nullable: true })
+  @Column({ type: 'decimal', precision: 17, scale: 2, nullable: true })
   total: number;
 
   @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true })
   ajuste: number;
 
-  @Column({ type: 'decimal', precision: 12, scale: 2, nullable: true })
+  @Column({
+    name: 'ajuste$',
+    type: 'decimal',
+    precision: 17,
+    scale: 2,
+    nullable: true,
+  })
   ajuste_neto: number;
 
-  @Column({ type: 'decimal', precision: 12, scale: 2, nullable: true })
+  @Column({
+    name: 'ajuste$iva',
+    type: 'decimal',
+    precision: 17,
+    scale: 2,
+    nullable: true,
+  })
   ajuste_iva: number;
 
   @Column({ type: 'decimal', precision: 6, scale: 2, nullable: true })
   ganancia: number;
 
-  @Column({ name: 'ganancia$', type: 'decimal', precision: 12, scale: 2, nullable: true })
+  @Column({
+    name: 'ganancia$',
+    type: 'decimal',
+    precision: 17,
+    scale: 2,
+    nullable: true,
+  })
   ganancia$: number;
 
-  @Column({ type: 'decimal', precision: 12, scale: 2, nullable: true })
-  costo_financiero: number;
-
-  @Column({ type: 'decimal', precision: 4, scale: 2, nullable: true })
+  @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true })
   cargos: number;
 
-  @Column({ name: 'cargos$', type: 'decimal', precision: 12, scale: 2, nullable: true })
+  @Column({
+    name: 'cargos$',
+    type: 'decimal',
+    precision: 17,
+    scale: 2,
+    nullable: true,
+  })
   cargos$: number;
 
-  @Column({ type: 'decimal', precision: 12, scale: 4, nullable: true })
+  @Column({ type: 'decimal', precision: 13, scale: 4, nullable: true })
   cantidad: number;
 
-  @Column({ type: 'decimal', precision: 12, scale: 4, nullable: true })
+  @Column({ type: 'decimal', precision: 13, scale: 4, nullable: true })
   entregado: number;
 
-  @Column({ name: 'entregado$', type: 'decimal', precision: 14, scale: 2, nullable: true })
+  @Column({
+    name: 'entregado$',
+    type: 'decimal',
+    precision: 17,
+    scale: 2,
+    nullable: true,
+  })
   entregado$: number;
 
-  @Column({ type: 'decimal', precision: 14, scale: 2, nullable: true })
+  @Column({ type: 'decimal', precision: 17, scale: 2, nullable: true })
   cobrado: number;
 
   @Column({ type: 'varchar', length: 14, nullable: true })
@@ -269,7 +299,11 @@ export class VtaComprobante {
   @Column({ type: 'date', nullable: true })
   vto_cae: Date;
 
-  @Column({ type: 'enum', enum: ['APROBADO', 'RECHAZADO', 'PARCIAL'], nullable: true })
+  @Column({
+    type: 'enum',
+    enum: ['APROBADO', 'RECHAZADO', 'PARCIAL'],
+    nullable: true,
+  })
   resultado: 'APROBADO' | 'RECHAZADO' | 'PARCIAL';
 
   @Column({ type: 'varchar', length: 20, nullable: true })
@@ -281,22 +315,44 @@ export class VtaComprobante {
   @Column({ type: 'varchar', length: 20, nullable: true })
   terminal: string;
 
-  @Column({ type: 'varchar', length: 20, nullable: true })
+  @Column({ name: 'usuario', type: 'varchar', length: 20, nullable: true })
   user: string;
 
-  @Column({ type: 'bit', width: 1, nullable: true, transformer: bitToBoolTransformer })
+  @Column({
+    type: 'tinyint',
+    width: 1,
+    nullable: true,
+    transformer: bitToBoolTransformer,
+  })
   adjuntos: boolean;
 
-  @Column({ type: 'bit', width: 1, nullable: true, transformer: bitToBoolTransformer })
+  @Column({
+    type: 'tinyint',
+    width: 1,
+    nullable: true,
+    transformer: bitToBoolTransformer,
+  })
   adjuntado: boolean;
 
-  @Column({ type: 'bit', width: 1, nullable: true, transformer: bitToBoolTransformer })
+  @Column({
+    type: 'tinyint',
+    width: 1,
+    nullable: true,
+    transformer: bitToBoolTransformer,
+  })
   mail: boolean;
 
-  @Column({ type: 'bit', width: 1, nullable: true, transformer: bitToBoolTransformer })
+  @Column({
+    type: 'tinyint',
+    width: 1,
+    nullable: true,
+    transformer: bitToBoolTransformer,
+  })
   visible: boolean;
 
-  @OneToMany(() => VtaComprobanteItem, (item) => item.comprobanteRef, { cascade: true })
+  @OneToMany(() => VtaComprobanteItem, (item) => item.comprobanteRef, {
+    cascade: true,
+  })
   items: VtaComprobanteItem[];
 
   // ✅ Link a asientos contables (tabla puente)

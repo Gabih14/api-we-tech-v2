@@ -1,4 +1,10 @@
-import { IsInt, IsNumber, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import {
+  IsInt,
+  IsNumber,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+} from 'class-validator';
 
 export class CreateVtaComprobanteItemDto {
   @IsString()
@@ -13,11 +19,11 @@ export class CreateVtaComprobanteItemDto {
   @IsNotEmpty()
   linea: number; // 👈 Clave primaria compuesta
 
-  @IsInt()
+  @IsNumber({ maxDecimalPlaces: 4 })
   @IsNotEmpty()
   cantidad: number;
 
-  @IsNumber({ maxDecimalPlaces: 2 })
+  @IsNumber({ maxDecimalPlaces: 4 })
   @IsNotEmpty()
   precio: number;
 
