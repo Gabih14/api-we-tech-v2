@@ -1,10 +1,4 @@
-import {
-  Entity,
-  Column,
-  ManyToOne,
-  JoinColumn,
-  PrimaryColumn,
-} from 'typeorm';
+import { Entity, Column, ManyToOne, JoinColumn, PrimaryColumn } from 'typeorm';
 import { VtaComprobante } from '../../vta-comprobante/entities/vta-comprobante.entity';
 import { StkItem } from '../../stk-item/entities/stk-item.entity';
 
@@ -19,31 +13,61 @@ export class VtaComprobanteItem {
   @PrimaryColumn({ type: 'int' })
   linea: number;
 
-  @Column('decimal', { name: 'cantidad', precision: 11, scale: 4 })
+  @Column('decimal', {
+    name: 'cantidad',
+    precision: 13,
+    scale: 4,
+    nullable: true,
+  })
   cantidad: number;
 
-  @Column('decimal', { name: 'precio', precision: 14, scale: 4 })
+  @Column('decimal', {
+    name: 'precio',
+    precision: 14,
+    scale: 4,
+    nullable: true,
+  })
   precio: number;
 
   @Column('tinyint', { name: 'ivainc', nullable: true, width: 1 })
   ivainc: boolean | null;
 
-  @Column('decimal', { name: 'alicuota', precision: 5, scale: 2, nullable: true })
+  @Column('decimal', {
+    name: 'alicuota',
+    precision: 5,
+    scale: 2,
+    nullable: true,
+  })
   alicuota: number | null;
 
-  @Column('decimal', { name: 'importe', precision: 12, scale: 2 })
+  @Column('decimal', {
+    name: 'importe',
+    precision: 17,
+    scale: 2,
+    nullable: true,
+  })
   importe: number;
 
-  @Column('decimal', { name: 'iva', precision: 12, scale: 2, nullable: true })
+  @Column('decimal', { name: 'iva', precision: 17, scale: 2, nullable: true })
   iva: number | null;
 
   @Column('decimal', { name: 'ajuste', precision: 5, scale: 2, nullable: true })
   ajuste: number | null;
 
-  @Column('decimal', { name: 'ajuste_neto', precision: 12, scale: 2, nullable: true })
+  @Column('decimal', {
+    name: 'ajuste$',
+    precision: 17,
+    scale: 2,
+    nullable: true,
+  })
   ajuste_neto: number | null;
 
-  @Column('decimal', { name: 'ajuste_iva', precision: 12, scale: 2, nullable: true })
+  @Column('decimal', {
+    name: 'ajuste$iva',
+    precision: 17,
+    scale: 2,
+    nullable: true,
+  })
   ajuste_iva: number | null;
 
   @ManyToOne(() => VtaComprobante, (comprobante) => comprobante.items)
