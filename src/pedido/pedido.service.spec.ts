@@ -10,12 +10,16 @@ describe('PedidoService recalculo de importes', () => {
   const createRepo = {
     create: jest.fn((pedido) => pedido),
     save: jest.fn(async (pedido) => ({ ...pedido, id: pedido.id ?? 1 })),
+    findOne: jest.fn(),
   };
   const stkItemRepo = {
     findOne: jest.fn(),
   };
   // Atributos (Marca+Material) por ítem para la elegibilidad de descuento por cantidad.
-  const ATRIBUTOS_POR_ITEM: Record<string, { marca: string; material: string }> = {
+  const ATRIBUTOS_POR_ITEM: Record<
+    string,
+    { marca: string; material: string }
+  > = {
     '3N-PLA-1KG-AMAR': { marca: '3n3', material: 'PLA' },
     'EG-PLA-1KG-AZOS': { marca: 'Elegoo', material: 'PLA' },
     'FM-PLA-1KG-GRMA': { marca: 'Fremover', material: 'High Speed PLA' },
@@ -53,6 +57,8 @@ describe('PedidoService recalculo de importes', () => {
   const stockService = {
     reservarStock: jest.fn(async () => undefined),
     liberarStock: jest.fn(async () => undefined),
+    confirmarStock: jest.fn(async () => 'DEPOSITO'),
+    restaurarStockConfirmado: jest.fn(async () => undefined),
   };
   const vtaComprobanteService = {
     crearDesdePedido: jest.fn(),
@@ -77,7 +83,9 @@ describe('PedidoService recalculo de importes', () => {
   const telegramService = {
     enviarMensaje: jest.fn(async () => undefined),
   };
-  const cobrosService = {};
+  const cobrosService = {
+    cobrarFactura: jest.fn(async () => undefined),
+  };
   const cuponService = {
     validarUsoCupon: jest.fn(async () => undefined),
     resolverPorcentajePorModalidad: jest.fn(),
@@ -228,9 +236,15 @@ describe('PedidoService recalculo de importes', () => {
 
   it('suma 21% al total y guarda factura A', async () => {
     stkItemRepo.findOne.mockResolvedValue(
-      itemConPrecio('ITEM-FAC-A', '100', 'PES', '1', null, 'Descripcion ITEM-FAC-A', [
-        { lista: 'MINORISTA CON IVA', precioVta: '100' },
-      ]),
+      itemConPrecio(
+        'ITEM-FAC-A',
+        '100',
+        'PES',
+        '1',
+        null,
+        'Descripcion ITEM-FAC-A',
+        [{ lista: 'MINORISTA CON IVA', precioVta: '100' }],
+      ),
     );
 
     const dto = dtoBase({
@@ -261,9 +275,15 @@ describe('PedidoService recalculo de importes', () => {
 
   it('suma 21% al total y guarda factura B', async () => {
     stkItemRepo.findOne.mockResolvedValue(
-      itemConPrecio('ITEM-FAC-B', '100', 'PES', '1', null, 'Descripcion ITEM-FAC-B', [
-        { lista: 'MINORISTA CON IVA', precioVta: '100' },
-      ]),
+      itemConPrecio(
+        'ITEM-FAC-B',
+        '100',
+        'PES',
+        '1',
+        null,
+        'Descripcion ITEM-FAC-B',
+        [{ lista: 'MINORISTA CON IVA', precioVta: '100' }],
+      ),
     );
 
     const dto = dtoBase({
@@ -290,14 +310,26 @@ describe('PedidoService recalculo de importes', () => {
   it('calcula el IVA de cabecera sobre productos y envio', async () => {
     stkItemRepo.findOne
       .mockResolvedValueOnce(
-        itemConPrecio('ITEM-FAC-1', '100', 'PES', '1', null, 'Descripcion ITEM-FAC-1', [
-          { lista: 'MINORISTA CON IVA', precioVta: '100' },
-        ]),
+        itemConPrecio(
+          'ITEM-FAC-1',
+          '100',
+          'PES',
+          '1',
+          null,
+          'Descripcion ITEM-FAC-1',
+          [{ lista: 'MINORISTA CON IVA', precioVta: '100' }],
+        ),
       )
       .mockResolvedValueOnce(
-        itemConPrecio('ITEM-FAC-2', '100', 'PES', '1', null, 'Descripcion ITEM-FAC-2', [
-          { lista: 'MINORISTA CON IVA', precioVta: '100' },
-        ]),
+        itemConPrecio(
+          'ITEM-FAC-2',
+          '100',
+          'PES',
+          '1',
+          null,
+          'Descripcion ITEM-FAC-2',
+          [{ lista: 'MINORISTA CON IVA', precioVta: '100' }],
+        ),
       );
 
     const dto = dtoBase({
@@ -503,10 +535,7 @@ describe('PedidoService recalculo de importes', () => {
     const { pedido } = await service.crear(dto);
 
     expect(pedido.productos.map((producto) => producto.subtotal)).toEqual([
-      39056,
-      26852,
-      25388,
-      25388,
+      39056, 26852, 25388, 25388,
     ]);
     expect(pedido.factura_iva_importe).toBe(24503.64);
     expect(pedido.total).toBe(141187.64);
@@ -514,9 +543,15 @@ describe('PedidoService recalculo de importes', () => {
 
   it('rechaza total sin IVA cuando se requiere factura', async () => {
     stkItemRepo.findOne.mockResolvedValue(
-      itemConPrecio('ITEM-FAC-MAL', '100', 'PES', '1', null, 'Descripcion ITEM-FAC-MAL', [
-        { lista: 'MINORISTA CON IVA', precioVta: '100' },
-      ]),
+      itemConPrecio(
+        'ITEM-FAC-MAL',
+        '100',
+        'PES',
+        '1',
+        null,
+        'Descripcion ITEM-FAC-MAL',
+        [{ lista: 'MINORISTA CON IVA', precioVta: '100' }],
+      ),
     );
 
     const dto = dtoBase({
@@ -944,14 +979,7 @@ describe('PedidoService recalculo de importes', () => {
 
   it('deja envio gratis para shipping desde 10 kg aunque reciba costo de envio', async () => {
     stkItemRepo.findOne.mockResolvedValue(
-      itemConPrecio(
-        'ITEM-10KG',
-        '100',
-        'PES',
-        '1',
-        null,
-        'Producto 1kg',
-      ),
+      itemConPrecio('ITEM-10KG', '100', 'PES', '1', null, 'Producto 1kg'),
     );
 
     const dto = dtoBase({
@@ -982,14 +1010,7 @@ describe('PedidoService recalculo de importes', () => {
 
   it('conserva costo de envio para shipping con menos de 10 kg', async () => {
     stkItemRepo.findOne.mockResolvedValue(
-      itemConPrecio(
-        'ITEM-9KG',
-        '100',
-        'PES',
-        '1',
-        null,
-        'Producto 1kg',
-      ),
+      itemConPrecio('ITEM-9KG', '100', 'PES', '1', null, 'Producto 1kg'),
     );
 
     const dto = dtoBase({
@@ -1384,14 +1405,7 @@ describe('PedidoService recalculo de importes', () => {
   it('bonifica el producto ENV al 100% cuando los productos llegan al peso de envio gratis', async () => {
     stkItemRepo.findOne
       .mockResolvedValueOnce(
-        itemConPrecio(
-          'ITEM-10KG',
-          '100',
-          'PES',
-          '1',
-          null,
-          'Producto 1kg',
-        ),
+        itemConPrecio('ITEM-10KG', '100', 'PES', '1', null, 'Producto 1kg'),
       )
       .mockResolvedValueOnce(
         itemConPrecio(
@@ -1437,14 +1451,7 @@ describe('PedidoService recalculo de importes', () => {
   it('no usa los kilometros del producto ENV como peso para envio gratis', async () => {
     stkItemRepo.findOne
       .mockResolvedValueOnce(
-        itemConPrecio(
-          'ITEM-1KG',
-          '19999',
-          'PES',
-          '1',
-          null,
-          'Producto 1kg',
-        ),
+        itemConPrecio('ITEM-1KG', '19999', 'PES', '1', null, 'Producto 1kg'),
       )
       .mockResolvedValueOnce(
         itemConPrecio(
@@ -1834,5 +1841,52 @@ describe('PedidoService recalculo de importes', () => {
       expect.stringContaining('&quot;total&quot;: 90'),
     );
     expect(stockService.reservarStock).not.toHaveBeenCalled();
+  });
+
+  it('restaura el stock confirmado si falla la generacion del comprobante', async () => {
+    const pedido = {
+      id: 892,
+      external_id: 'pedido-webhook',
+      estado: 'PENDIENTE',
+      metodo_pago: 'online',
+      productos: [{ nombre: 'ITEM-1', cantidad: 1 }],
+    };
+    createRepo.findOne.mockResolvedValue(pedido);
+    jest.spyOn(service, 'obtenerTokenDeNave').mockResolvedValue('token');
+    const fetchSpy = jest.spyOn(global, 'fetch').mockResolvedValue({
+      headers: new Headers({ 'content-type': 'application/json' }),
+      json: async () => ({ status: { name: 'APPROVED' } }),
+    } as Response);
+    vtaComprobanteService.crearDesdePedido.mockRejectedValueOnce(
+      new Error('fallo de comprobante'),
+    );
+
+    await expect(
+      service.procesarNotificacionDeNave({
+        payment_check_url: 'https://api.ranty.io/payment',
+        external_payment_id: pedido.external_id,
+      }),
+    ).rejects.toThrow('fallo de comprobante');
+
+    expect(stockService.confirmarStock).toHaveBeenCalledWith('ITEM-1', 1);
+    expect(stockService.restaurarStockConfirmado).toHaveBeenCalledWith(
+      'ITEM-1',
+      1,
+      'DEPOSITO',
+    );
+    fetchSpy.mockRestore();
+  });
+
+  it('rechaza una URL de verificacion ajena antes de obtener el token', async () => {
+    const tokenSpy = jest.spyOn(service, 'obtenerTokenDeNave');
+
+    await expect(
+      service.procesarNotificacionDeNave({
+        payment_check_url: 'https://example.com/robar-token',
+        external_payment_id: 'pedido-webhook',
+      }),
+    ).rejects.toThrow(BadRequestException);
+
+    expect(tokenSpy).not.toHaveBeenCalled();
   });
 });

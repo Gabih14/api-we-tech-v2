@@ -284,9 +284,8 @@ export class PedidoService {
     const costoEnvioCalculado =
       costoEnvioDesdeProducto ??
       this.calcularCostoEnvioPedido(dto, pesoTotalKg);
-    const costoEnvioAdicional = costoEnvioDesdeProducto == null
-      ? costoEnvioCalculado
-      : 0;
+    const costoEnvioAdicional =
+      costoEnvioDesdeProducto == null ? costoEnvioCalculado : 0;
     const subtotalSinIva = requiereFactura
       ? this.redondear2(productosNetos + costoEnvioAdicional)
       : this.redondearPrecio(productosNetos + costoEnvioAdicional);
@@ -676,10 +675,11 @@ export class PedidoService {
 
   // 🔔 Procesar notificación (nuevo flujo)
   async procesarNotificacionDeNave(data: any) {
-    const { payment_check_url, external_payment_id } = data;
+    const { external_payment_id } = data;
+    const payment_check_url = this.validarUrlVerificacionNave(
+      data?.payment_check_url,
+    );
     const token = await this.obtenerTokenDeNave();
-
-    console.log('📡 Token de Nave obtenido:', token);
 
     const pedido = await this.pedidoRepo.findOne({
       where: { external_id: external_payment_id },
@@ -696,7 +696,10 @@ export class PedidoService {
       );
     }
 
-    console.log('Pedido encontrado para notificación: ', pedido);
+    console.log('Pedido encontrado para notificación:', {
+      external_id: pedido.external_id,
+      estado: pedido.estado,
+    });
 
     // 🚫 Bloquear webhooks para pagos por transferencia
     if (pedido.metodo_pago === 'transfer') {
@@ -729,12 +732,7 @@ export class PedidoService {
         Accept: 'application/json',
       },
     });
-    console.log(
-      '📡 Verificando estado de pago en Nave...',
-      payment_check_url,
-      token,
-    );
-    console.log('Respuesta de verificación de pago Nave: ', resp);
+    console.log('📡 Verificando estado de pago en Nave...', payment_check_url);
     const contentType = resp.headers.get('content-type') || '';
     let pago: any = null;
     if (contentType.includes('application/json')) {
@@ -772,78 +770,116 @@ export class PedidoService {
         HttpStatus.BAD_GATEWAY,
       );
     }
-    console.log('Datos de pago obtenidos: ', pago);
     const estado = pago.status?.name ?? 'PENDING';
+    console.log('Estado de pago Nave obtenido:', {
+      payment_id: pago.id,
+      estado,
+    });
 
     switch (estado) {
       case 'APPROVED': {
-        if (pedido.estado === 'CANCELADO') {
-          console.log(
-            `🔄 Pedido ${pedido.external_id} estaba CANCELADO. Re-reservando stock...`,
-          );
+        const stockConfirmado: Array<{
+          item: string;
+          cantidad: number;
+          deposito: string;
+        }> = [];
+
+        try {
+          if (pedido.estado === 'CANCELADO') {
+            console.log(
+              `🔄 Pedido ${pedido.external_id} estaba CANCELADO. Re-reservando stock...`,
+            );
+            for (const p of pedido.productos) {
+              try {
+                await this.stockService.reservarStock(p.nombre, p.cantidad);
+              } catch (err) {
+                console.error(
+                  `❌ No se pudo re-reservar stock para ${p.nombre}`,
+                  err,
+                );
+                throw new ConflictException(
+                  `No se pudo reactivar el pedido ${pedido.external_id}: stock insuficiente para ${p.nombre}`,
+                );
+              }
+            }
+          }
+
+          pedido.estado = 'APROBADO';
+          pedido.aprobado = new Date();
+
           for (const p of pedido.productos) {
+            const deposito = await this.stockService.confirmarStock(
+              p.nombre,
+              p.cantidad,
+            );
+            stockConfirmado.push({
+              item: p.nombre,
+              cantidad: p.cantidad,
+              deposito,
+            });
+          }
+
+          let comprobanteCreado: { tipo: string; comprobante: string };
+
+          try {
+            const comp =
+              await this.vtaComprobanteService.crearDesdePedido(pedido);
+            comprobanteCreado = {
+              tipo: comp.tipo,
+              comprobante: comp.comprobante,
+            };
+            pedido.comprobante_tipo = comp.tipo;
+            pedido.comprobante_numero = comp.comprobante;
+            console.log(
+              `🧾 Comprobante generado para pedido ${pedido.external_id}:`,
+              comprobanteCreado,
+            );
+          } catch (err) {
+            console.error(
+              `❌ Error al generar comprobante para pedido ${pedido.external_id}:`,
+              err,
+            );
+            throw err; // crítico => reintento Nave
+          }
+
+          try {
+            const cuentaNave =
+              this.configService.get<string>('NAVE_CUENTA_ID') ??
+              'BANCOGALICIA';
+            await this.cobrosService.cobrarFactura(
+              comprobanteCreado.tipo,
+              comprobanteCreado.comprobante,
+              { modalidad: 'CUENTA', medioId: cuentaNave, puntoVenta: '00001' },
+            );
+            console.log(
+              `💰 Cobro generado OK para comprobante:`,
+              comprobanteCreado,
+            );
+          } catch (err) {
+            console.error(
+              `❌ Error al generar cobro automático para pedido ${pedido.external_id}:`,
+              err,
+            );
+            throw err; // crítico => reintento Nave
+          }
+        } catch (err) {
+          // El webhook sera reintentado. Restaurar existencia y compromiso evita
+          // que el siguiente intento descuente el mismo pedido dos veces.
+          for (const confirmado of stockConfirmado.reverse()) {
             try {
-              await this.stockService.reservarStock(p.nombre, p.cantidad);
-            } catch (err) {
-              console.error(
-                `❌ No se pudo re-reservar stock para ${p.nombre}`,
-                err,
+              await this.stockService.restaurarStockConfirmado(
+                confirmado.item,
+                confirmado.cantidad,
+                confirmado.deposito,
               );
-              throw new ConflictException(
-                `No se pudo reactivar el pedido ${pedido.external_id}: stock insuficiente para ${p.nombre}`,
+            } catch (rollbackError) {
+              console.error(
+                `Error restaurando stock de ${confirmado.item}:`,
+                rollbackError,
               );
             }
           }
-        }
-
-        pedido.estado = 'APROBADO';
-        pedido.aprobado = new Date();
-
-        for (const p of pedido.productos) {
-          await this.stockService.confirmarStock(p.nombre, p.cantidad);
-        }
-
-        let comprobanteCreado: { tipo: string; comprobante: string };
-
-        try {
-          const comp =
-            await this.vtaComprobanteService.crearDesdePedido(pedido);
-          comprobanteCreado = {
-            tipo: comp.tipo,
-            comprobante: comp.comprobante,
-          };
-          pedido.comprobante_tipo = comp.tipo;
-          pedido.comprobante_numero = comp.comprobante;
-          console.log(
-            `🧾 Comprobante generado para pedido ${pedido.external_id}:`,
-            comprobanteCreado,
-          );
-        } catch (err) {
-          console.error(
-            `❌ Error al generar comprobante para pedido ${pedido.external_id}:`,
-            err,
-          );
-          throw err; // crítico => reintento Nave
-        }
-
-        try {
-          const cuentaNave =
-            this.configService.get<string>('NAVE_CUENTA_ID') ?? 'BANCOGALICIA';
-          await this.cobrosService.cobrarFactura(
-            comprobanteCreado.tipo,
-            comprobanteCreado.comprobante,
-            { modalidad: 'CUENTA', medioId: cuentaNave, puntoVenta: '00001' },
-          );
-          console.log(
-            `💰 Cobro generado OK para comprobante:`,
-            comprobanteCreado,
-          );
-        } catch (err) {
-          console.error(
-            `❌ Error al generar cobro automático para pedido ${pedido.external_id}:`,
-            err,
-          );
-          throw err; // crítico => reintento Nave
+          throw err;
         }
 
         // No críticos
@@ -921,6 +957,40 @@ export class PedidoService {
       message: `Pedido ${pedido.external_id} procesado correctamente`,
       estado: pedido.estado,
     };
+  }
+
+  private validarUrlVerificacionNave(value: unknown): string {
+    if (typeof value !== 'string' || !value.trim()) {
+      throw new BadRequestException('payment_check_url es obligatorio');
+    }
+
+    let url: URL;
+    try {
+      url = new URL(value);
+    } catch {
+      throw new BadRequestException('payment_check_url no es una URL valida');
+    }
+
+    const hostsConfigurados = this.configService.get<string>(
+      'NAVE_PAYMENT_CHECK_ALLOWED_HOSTS',
+    );
+    const hostsPermitidos = new Set(
+      (hostsConfigurados ?? 'api.ranty.io,api-sandbox.ranty.io')
+        .split(',')
+        .map((host) => host.trim().toLowerCase())
+        .filter(Boolean),
+    );
+
+    if (
+      url.protocol !== 'https:' ||
+      !hostsPermitidos.has(url.hostname.toLowerCase())
+    ) {
+      throw new BadRequestException(
+        'payment_check_url no pertenece a un host permitido de Nave',
+      );
+    }
+
+    return url.toString();
   }
 
   async encontrarPorExternalId(externalId: string): Promise<Pedido | null> {
@@ -1332,7 +1402,9 @@ export class PedidoService {
     return cuponResolucion.porcentaje;
   }
 
-  private obtenerCostoEnvioDesdeProductos(productos: PedidoItem[]): number | null {
+  private obtenerCostoEnvioDesdeProductos(
+    productos: PedidoItem[],
+  ): number | null {
     const totalEnvio = productos
       .filter((producto) => this.esProductoEnvio(producto.nombre))
       .reduce((acc, producto) => acc + Number(producto.subtotal ?? 0), 0);
@@ -1357,7 +1429,8 @@ export class PedidoService {
       item,
       incluyeIvaFactura ? 'MINORISTA CON IVA' : 'MINORISTA',
     );
-    const pesoProducto = peso ?? parseProductWeightFromDescription(item.descripcion);
+    const pesoProducto =
+      peso ?? parseProductWeightFromDescription(item.descripcion);
     const cantidadDescuentoProducto = cantidadParaDescuento ?? cantidad;
     // Los descuentos automaticos de producto solo corresponden a transferencias.
     const aplicaDescuentoProducto =
@@ -1378,9 +1451,7 @@ export class PedidoService {
         : Math.max(descuentoProductoPorcentaje, porcentajeCuponAplicable);
     if (incluyeIvaFactura) {
       const subtotalBrutoCalculado = this.redondear2(
-        precioBaseUnitario *
-          cantidad *
-          (1 + FACTURA_IVA_PORCENTAJE / 100),
+        precioBaseUnitario * cantidad * (1 + FACTURA_IVA_PORCENTAJE / 100),
       );
       const subtotalBruto = this.obtenerSubtotalBrutoFactura(
         producto,
@@ -1422,9 +1493,7 @@ export class PedidoService {
     const precioUnitario = this.redondearPrecio(subtotal / cantidad);
     const descuentoCuponAplicado =
       porcentajeCuponAplicable > descuentoProductoPorcentaje
-        ? this.redondearPrecio(
-            precioBaseUnitario * cantidad - subtotal,
-          )
+        ? this.redondearPrecio(precioBaseUnitario * cantidad - subtotal)
         : 0;
 
     return {
@@ -1494,8 +1563,10 @@ export class PedidoService {
 
     // El valor propio del ítem gana sobre el heredado del padre.
     const valor = (clase: string): string | null =>
-      (rows.find((r) => r.arbol === item.id && r.clase === clase) ??
-        rows.find((r) => r.clase === clase))?.valor ?? null;
+      (
+        rows.find((r) => r.arbol === item.id && r.clase === clase) ??
+        rows.find((r) => r.clase === clase)
+      )?.valor ?? null;
 
     return {
       category: item.grupo,
@@ -1528,9 +1599,7 @@ export class PedidoService {
       !Number.isFinite(cotizacion) ||
       cotizacion <= 0
     ) {
-      throw new BadRequestException(
-        `Precio ${lista} invalido para ${item.id}`,
-      );
+      throw new BadRequestException(`Precio ${lista} invalido para ${item.id}`);
     }
 
     return this.redondearPrecio(precioVta * cotizacion);
@@ -1567,13 +1636,13 @@ export class PedidoService {
       calculado.precio_base_unitario * calculado.cantidad,
     );
     const subtotalEsperado = incluyeIvaFactura
-      ? calculado.subtotal_bruto ?? calculado.subtotal
+      ? (calculado.subtotal_bruto ?? calculado.subtotal)
       : calculado.subtotal;
     const precioUnitarioEsperado = incluyeIvaFactura
-      ? calculado.precio_unitario_bruto ?? calculado.precio_unitario
+      ? (calculado.precio_unitario_bruto ?? calculado.precio_unitario)
       : calculado.precio_unitario;
     const subtotalBrutoEsperado = incluyeIvaFactura
-      ? calculado.subtotal_bruto ?? subtotalEsperado
+      ? (calculado.subtotal_bruto ?? subtotalEsperado)
       : subtotalBruto;
 
     const difierePrecio =
@@ -1668,7 +1737,10 @@ export class PedidoService {
     if (
       dto.total !== undefined &&
       !this.montosIguales(Number(dto.total), calculado.total) &&
-      !this.montosIguales(Number(dto.total), this.redondearPrecio(calculado.total))
+      !this.montosIguales(
+        Number(dto.total),
+        this.redondearPrecio(calculado.total),
+      )
     ) {
       diferencias.expected.total = calculado.total;
       diferencias.received.total = Number(dto.total);
@@ -1676,7 +1748,10 @@ export class PedidoService {
 
     if (
       dto.descuento_cupon !== undefined &&
-      !this.montosIguales(Number(dto.descuento_cupon), calculado.descuento_cupon)
+      !this.montosIguales(
+        Number(dto.descuento_cupon),
+        calculado.descuento_cupon,
+      )
     ) {
       diferencias.expected.descuento_cupon = calculado.descuento_cupon;
       diferencias.received.descuento_cupon = Number(dto.descuento_cupon);
@@ -1724,7 +1799,8 @@ export class PedidoService {
 
     throw new BadRequestException({
       code: 'ERR_ORDER_TOTAL_MISMATCH',
-      message: 'Los importes recibidos no coinciden con el calculo del servidor.',
+      message:
+        'Los importes recibidos no coinciden con el calculo del servidor.',
       expected: diferencias.expected,
       received: diferencias.received,
       productos: diferencias.productos,
