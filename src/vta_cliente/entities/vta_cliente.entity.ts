@@ -50,15 +50,17 @@ export class VtaCliente {
   @Column('varchar', { name: 'lista', nullable: true, length: 20 })
   lista: string | null;
 
-  @Column('varchar', { name: 'rubro', nullable: true, length: 20 })
+  @Column('varchar', { name: 'rubro', nullable: true, length: 30 })
   rubro: string | null;
 
-  @Column('text', { name: 'observaciones', nullable: true })
+  // La API conserva `observaciones`, pero el esquema actual del ERP la guarda
+  // en la columna `notas`.
+  @Column('text', { name: 'notas', nullable: true })
   observaciones: string | null;
 
-  @Column('bit', { name: 'visible', nullable: true, default: () => "'b'1''" })
+  @Column('tinyint', { name: 'visible', nullable: true, default: 1 })
   visible: boolean | null;
 
-  @Column("varchar", { name: "contacto", nullable: true, length: 512 })
+  @Column('varchar', { name: 'contacto', nullable: true, length: 512 })
   contacto: string | null;
 }
