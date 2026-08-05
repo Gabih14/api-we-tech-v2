@@ -215,7 +215,10 @@ export class VtaComprobanteService {
     const itemsCalculo = (pedido.productos ?? []).map((producto) => {
       const cantidad = Number(producto.cantidad ?? 0);
       const precioFinalUnitario = Number(producto.precio_unitario ?? 0);
-      const importeFinal = this.redondear2(cantidad * precioFinalUnitario);
+      const subtotalProducto = Number(producto.subtotal);
+      const importeFinal = Number.isFinite(subtotalProducto)
+        ? this.redondear2(subtotalProducto)
+        : this.redondear2(cantidad * precioFinalUnitario);
       const ajustePorcentaje = Number(producto.ajuste_porcentaje ?? 0);
       const tieneAjustePorcentaje =
         Number.isFinite(ajustePorcentaje) &&
