@@ -105,6 +105,59 @@ describe('VtaComprobanteService crearDesdePedido', () => {
     );
   });
 
+  it('respeta el subtotal de linea cuando el precio unitario redondeado no multiplica exacto', async () => {
+    await service.crearDesdePedido(
+      pedidoBase(
+        [
+          {
+            nombre: 'HB-PLA-1KG-NEGR',
+            cantidad: 3,
+            precio_unitario: 17882,
+            subtotal: 53645,
+            ajuste_porcentaje: 20,
+          },
+          {
+            nombre: 'HB-PLA-1KG-BLAN',
+            cantidad: 2,
+            precio_unitario: 17882,
+            subtotal: 35763,
+            ajuste_porcentaje: 20,
+          },
+        ],
+        89408,
+      ),
+    );
+
+    expect(comprobanteRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        total: 89408,
+        subtotal: 89408,
+      }),
+    );
+    expect(comprobanteItemService.create).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        itemId: 'HB-PLA-1KG-NEGR',
+        cantidad: 3,
+        precio: 22352.08,
+        importe: 53645,
+        ajuste: -20,
+        ajuste_neto: -13411.25,
+      }),
+    );
+    expect(comprobanteItemService.create).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        itemId: 'HB-PLA-1KG-BLAN',
+        cantidad: 2,
+        precio: 22351.88,
+        importe: 35763,
+        ajuste: -20,
+        ajuste_neto: -8940.75,
+      }),
+    );
+  });
+
   it('no registra ajuste cuando el producto no tiene ajuste_porcentaje', async () => {
     await service.crearDesdePedido(
       pedidoBase(
