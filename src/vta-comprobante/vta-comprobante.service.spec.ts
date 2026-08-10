@@ -36,6 +36,8 @@ describe('VtaComprobanteService crearDesdePedido', () => {
 
   const pedidoBase = (productos: any[], total: number): Pedido =>
     ({
+      external_id: 'pedido-test-123',
+      creado: new Date('2026-08-04T12:00:00Z'),
       cliente_cuit: '20123456789',
       cliente_nombre: 'Cliente Test',
       cliente_mail: 'cliente@test.com',
@@ -63,6 +65,28 @@ describe('VtaComprobanteService crearDesdePedido', () => {
         const puntoDeVenta = letra === 'X' ? '00001' : '00005';
         return `${letra} ${puntoDeVenta} 00000001`;
       });
+  });
+
+  it('vincula internamente el comprobante con el pedido', async () => {
+    await service.crearDesdePedido(
+      pedidoBase(
+        [
+          {
+            nombre: 'ITEM-REFERENCIA',
+            cantidad: 1,
+            precio_unitario: 100,
+            subtotal: 100,
+          },
+        ],
+        100,
+      ),
+    );
+
+    expect(comprobanteRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        observaciones_int: 'PEDIDO_WEB:pedido-test-123',
+      }),
+    );
   });
 
   it('registra ajuste de descuento usando ajuste_porcentaje del pedido', async () => {

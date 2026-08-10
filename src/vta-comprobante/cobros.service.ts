@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { DataSource, Repository } from "typeorm";
 
@@ -7,11 +7,18 @@ import { VtaCobro } from "../vta-cobro/entities/vta-cobro.entity";
 import { VtaCobroMedio } from "../vta-cobro-medio/entities/vta-cobro-medio.entity";
 import { VtaCobroFactura } from "../vta-cobro-factura/entities/vta-cobro-factura.entity";
 import { CobrarFacturaDto } from "./dto/cobrar-factura.dto";
+import { Pedido } from "../pedido/entities/pedido.entity";
+import {
+  buildPedidoComprobanteReference,
+  PEDIDO_COMPROBANTE_REFERENCE_PREFIX,
+} from "../pedido/pedido-comprobante-reference";
 
 type Modalidad = CobrarFacturaDto["modalidad"];
 
 @Injectable()
 export class CobrosService {
+  private readonly logger = new Logger(CobrosService.name);
+
   constructor(
     private readonly dataSource: DataSource,
 
@@ -169,6 +176,77 @@ export class CobrosService {
       where: { tipo, factura: comprobante },
     });
     return !!cobro;
+  }
+
+  async tieneCobroFacturaDelPedido(
+    tipo: string,
+    comprobante: string,
+    pedido: Pick<
+      Pedido,
+      "external_id" | "cliente_cuit" | "cliente_mail" | "total" | "creado"
+    >,
+  ): Promise<boolean> {
+    const factura = await this.comprobanteRepo.findOne({
+      where: { tipo, comprobante },
+    });
+
+    if (!factura || factura.anulado) {
+      return false;
+    }
+
+    if (!this.comprobantePerteneceAlPedido(factura, pedido)) {
+      this.logger.warn(
+        `[${pedido.external_id}] Se ignora cobro de ${tipo} ${comprobante}: el comprobante no corresponde al pedido`,
+      );
+      return false;
+    }
+
+    return this.tieneCobroFactura(tipo, comprobante);
+  }
+
+  private comprobantePerteneceAlPedido(
+    factura: VtaComprobante,
+    pedido: Pick<
+      Pedido,
+      "external_id" | "cliente_cuit" | "cliente_mail" | "total" | "creado"
+    >,
+  ): boolean {
+    const referencia = factura.observaciones_int?.trim();
+    const referenciaEsperada = buildPedidoComprobanteReference(
+      pedido.external_id,
+    );
+    const clienteFactura = (factura.cliente || factura.numero_documento || "")
+      .trim()
+      .toLowerCase();
+    const clientePedido = pedido.cliente_cuit.trim().toLowerCase();
+    const totalFactura = Number(factura.total);
+    const totalPedido = Number(pedido.total);
+    const datosPrincipalesCoinciden =
+      clienteFactura === clientePedido &&
+      Number.isFinite(totalFactura) &&
+      Number.isFinite(totalPedido) &&
+      Math.abs(totalFactura - totalPedido) < 0.01;
+
+    if (referencia?.startsWith(PEDIDO_COMPROBANTE_REFERENCE_PREFIX)) {
+      return referencia === referenciaEsperada && datosPrincipalesCoinciden;
+    }
+
+    // Compatibilidad para comprobantes creados antes de incorporar la referencia.
+    // Además de cliente y total, deben haberse creado cerca del pedido original;
+    // así un número eliminado y reutilizado no puede aprobar un pedido antiguo.
+    const fechaFactura = factura.fecha?.getTime();
+    const fechaPedido = pedido.creado?.getTime();
+    const fechasCoinciden =
+      Number.isFinite(fechaFactura) &&
+      Number.isFinite(fechaPedido) &&
+      Math.abs((fechaFactura as number) - (fechaPedido as number)) <=
+        60 * 60_000;
+    const emailFactura = factura.email?.trim().toLowerCase();
+    const emailPedido = pedido.cliente_mail?.trim().toLowerCase();
+    const emailsCoinciden =
+      !emailFactura || !emailPedido || emailFactura === emailPedido;
+
+    return datosPrincipalesCoinciden && fechasCoinciden && emailsCoinciden;
   }
 
   private buildBuckets(modalidad: Modalidad, total: number) {
