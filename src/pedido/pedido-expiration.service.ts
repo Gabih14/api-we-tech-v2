@@ -53,7 +53,8 @@ export class PedidoExpirationService {
     let fallos = 0;
 
     for (const pedido of pendientes) {
-      const liberacionesExitosas: Array<{ nombre: string; cantidad: number }> = [];
+      const liberacionesExitosas: Array<{ nombre: string; cantidad: number }> =
+        [];
       let tieneErrores = false;
 
       try {
@@ -61,7 +62,10 @@ export class PedidoExpirationService {
         for (const p of pedido.productos) {
           try {
             await this.existenciaService.liberarStock(p.nombre, p.cantidad);
-            liberacionesExitosas.push({ nombre: p.nombre, cantidad: p.cantidad });
+            liberacionesExitosas.push({
+              nombre: p.nombre,
+              cantidad: p.cantidad,
+            });
           } catch (stockError) {
             tieneErrores = true;
             this.logger.warn(
@@ -139,11 +143,17 @@ export class PedidoExpirationService {
       if (!tipo || !comprobante) continue;
 
       try {
-        const tieneCobro = await this.cobrosService.tieneCobroFactura(tipo, comprobante);
+        const tieneCobro = await this.cobrosService.tieneCobroFacturaDelPedido(
+          tipo,
+          comprobante,
+          pedido,
+        );
         if (!tieneCobro) continue;
 
         await this.pedidoService.aprobarTransferencia(pedido.external_id);
-        this.logger.log(`[${pedido.external_id}] Pedido transferencia aprobado por cobro registrado`);
+        this.logger.log(
+          `[${pedido.external_id}] Pedido transferencia aprobado por cobro registrado`,
+        );
       } catch (e) {
         this.logger.error(
           `[${pedido.external_id}] Error en aprobación automática: ${e?.message || e}`,
@@ -153,9 +163,8 @@ export class PedidoExpirationService {
   }
 
   private isTransferApprovalEnabled(): boolean {
-    const value = process.env.PEDIDO_TRANSFER_APPROVAL_ENABLED
-      ?.trim()
-      .toLowerCase();
+    const value =
+      process.env.PEDIDO_TRANSFER_APPROVAL_ENABLED?.trim().toLowerCase();
 
     return !['false', '0', 'no', 'off'].includes(value ?? '');
   }
