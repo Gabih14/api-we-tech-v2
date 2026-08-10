@@ -4,6 +4,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, DeepPartial, Repository } from 'typeorm';
 import { VtaComprobante } from './entities/vta-comprobante.entity';
 import { Pedido } from 'src/pedido/entities/pedido.entity';
+import { buildPedidoComprobanteReference } from 'src/pedido/pedido-comprobante-reference';
 import { VtaComprobanteItemService } from 'src/vta-comprobante-item/vta-comprobante-item.service';
 import { VtaClienteService } from 'src/vta_cliente/vta_cliente.service';
 import { CreateVtaClienteDto } from 'src/vta_cliente/dto/create-vta_cliente.dto';
@@ -317,6 +318,7 @@ export class VtaComprobanteService {
       entregado: 0,
       entregado$: 0,
       trabajador: 'WEB',
+      observaciones_int: buildPedidoComprobanteReference(pedido.external_id),
       ...cobroFields,
       adjuntos: false,
       adjuntado: false,

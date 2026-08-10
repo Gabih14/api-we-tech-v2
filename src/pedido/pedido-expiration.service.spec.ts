@@ -15,19 +15,25 @@ describe('PedidoExpirationService', () => {
     }
   });
 
-  function createService() {
+  function createService(pedidos: any[] = []) {
     const pedidoRepo = {
-      find: jest.fn().mockResolvedValue([]),
+      find: jest.fn().mockResolvedValue(pedidos),
+    };
+    const cobrosService = {
+      tieneCobroFacturaDelPedido: jest.fn().mockResolvedValue(false),
+    };
+    const pedidoService = {
+      aprobarTransferencia: jest.fn(),
     };
 
     const service = new PedidoExpirationService(
       pedidoRepo as any,
       {} as any,
-      {} as any,
-      {} as any,
+      cobrosService as any,
+      pedidoService as any,
     );
 
-    return { service, pedidoRepo };
+    return { service, pedidoRepo, cobrosService, pedidoService };
   }
 
   it.each(['false', '0', 'no', 'off', ' FALSE '])(
@@ -49,5 +55,24 @@ describe('PedidoExpirationService', () => {
     await service.scheduledTransferApproval();
 
     expect(pedidoRepo.find).toHaveBeenCalledTimes(1);
+  });
+
+  it('no aprueba cuando el comprobante cobrado no pertenece al pedido', async () => {
+    delete process.env.PEDIDO_TRANSFER_APPROVAL_ENABLED;
+    const pedido = {
+      external_id: 'pedido-eliminado',
+      comprobante_tipo: 'FX',
+      comprobante_numero: 'X 00001 00000001',
+    };
+    const { service, cobrosService, pedidoService } = createService([pedido]);
+
+    await service.scheduledTransferApproval();
+
+    expect(cobrosService.tieneCobroFacturaDelPedido).toHaveBeenCalledWith(
+      'FX',
+      'X 00001 00000001',
+      pedido,
+    );
+    expect(pedidoService.aprobarTransferencia).not.toHaveBeenCalled();
   });
 });
