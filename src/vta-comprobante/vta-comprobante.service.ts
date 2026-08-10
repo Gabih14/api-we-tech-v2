@@ -117,7 +117,7 @@ export class VtaComprobanteService {
           SELECT
             EXISTS(SELECT 1 FROM cmp_comprobante_asiento WHERE ejercicio = ? AND asiento = ?) AS in_cmp_comp,
             EXISTS(SELECT 1 FROM cmp_pago_asiento WHERE ejercicio = ? AND asiento = ?) AS in_cmp_pago,
-            EXISTS(SELECT 1 FROM fnd_movimiento_asiento WHERE ejercicio = ? AND asiento = ?) AS in_fnd,
+            EXISTS(SELECT 1 FROM tsr_movimiento_asiento WHERE ejercicio = ? AND asiento = ?) AS in_tsr,
             EXISTS(SELECT 1 FROM vta_cobro_asiento WHERE ejercicio = ? AND asiento = ?) AS in_vta_cobro
           `,
           [
@@ -136,7 +136,7 @@ export class VtaComprobanteService {
         const usadoEnOtrosModulos =
           Number(row.in_cmp_comp) > 0 ||
           Number(row.in_cmp_pago) > 0 ||
-          Number(row.in_fnd) > 0 ||
+          Number(row.in_tsr) > 0 ||
           Number(row.in_vta_cobro) > 0;
 
         if (!usadoEnOtrosModulos) {
