@@ -45,13 +45,13 @@ export class CobrosService {
     return this.dataSource.transaction(async (manager) => {
       if (modalidad === "CUENTA") {
         const cuentaExiste = await manager.query(
-          "SELECT 1 FROM fnd_cuenta WHERE id = ? LIMIT 1",
+          "SELECT 1 FROM tsr_cuenta WHERE id = ? LIMIT 1",
           [medioId],
         );
 
         if (!Array.isArray(cuentaExiste) || cuentaExiste.length === 0) {
           throw new NotFoundException(
-            `CUENTA '${medioId}' no existe en fnd_cuenta. Revisa NAVE_CUENTA_ID.`,
+            `CUENTA '${medioId}' no existe en tsr_cuenta. Revisa NAVE_CUENTA_ID.`,
           );
         }
       }

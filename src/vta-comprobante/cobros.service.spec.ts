@@ -87,3 +87,31 @@ describe('CobrosService tieneCobroFacturaDelPedido', () => {
     expect(cobroFacturaRepo.findOne).not.toHaveBeenCalled();
   });
 });
+
+describe('CobrosService cobrarFactura', () => {
+  it('valida las cuentas contra la tabla tsr_cuenta de la nueva estructura', async () => {
+    const query = jest.fn().mockResolvedValue([]);
+    const dataSource = {
+      transaction: jest.fn(async (callback) => callback({ query })),
+    };
+    const service = new CobrosService(
+      dataSource as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+    );
+
+    await expect(
+      service.cobrarFactura('FX', 'X 00001 00000001', {
+        modalidad: 'CUENTA',
+        medioId: 'BANCOGALICIA',
+      }),
+    ).rejects.toThrow('no existe en tsr_cuenta');
+
+    expect(query).toHaveBeenCalledWith(
+      'SELECT 1 FROM tsr_cuenta WHERE id = ? LIMIT 1',
+      ['BANCOGALICIA'],
+    );
+  });
+});

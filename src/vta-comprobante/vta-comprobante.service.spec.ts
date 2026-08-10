@@ -2,6 +2,11 @@ import { VtaComprobanteService } from './vta-comprobante.service';
 import { Pedido } from 'src/pedido/entities/pedido.entity';
 import { VtaComprobante } from './entities/vta-comprobante.entity';
 import { VtaComprobanteItem } from 'src/vta-comprobante-item/entities/vta-comprobante-item.entity';
+import { VtaCobro } from 'src/vta-cobro/entities/vta-cobro.entity';
+import { VtaCobroMedio } from 'src/vta-cobro-medio/entities/vta-cobro-medio.entity';
+import { VtaCobroFactura } from 'src/vta-cobro-factura/entities/vta-cobro-factura.entity';
+import { VtaComprobanteAsiento } from 'src/vta_comprobante_asiento/entities/vta_comprobante_asiento.entity';
+import { CntAsiento } from 'src/cnt-asiento/entities/cnt-asiento.entity';
 
 describe('VtaComprobanteService crearDesdePedido', () => {
   const comprobanteDelete = jest.fn(async () => undefined);
@@ -600,5 +605,77 @@ describe('VtaComprobanteService crearDesdePedido', () => {
       tipo: 'FX',
       comprobante: 'X 00001 00000001',
     });
+  });
+});
+
+describe('VtaComprobanteService eliminarComprobantePorPedido', () => {
+  it('consulta tsr_movimiento_asiento al validar usos externos', async () => {
+    const comprobanteRepo = {
+      findOne: jest.fn().mockResolvedValue({
+        tipo: 'FX',
+        comprobante: 'X 00001 00000001',
+      }),
+      delete: jest.fn(),
+    };
+    const cobroFacturaRepo = {
+      find: jest.fn().mockResolvedValue([]),
+      delete: jest.fn(),
+    };
+    const cobroMedioRepo = {};
+    const cobroRepo = {};
+    const asientoLinkRepo = {
+      find: jest.fn().mockResolvedValue([
+        {
+          tipo: 'FX',
+          comprobante: 'X 00001 00000001',
+          ejercicio: '2026',
+          asiento: 10,
+        },
+      ]),
+      delete: jest.fn(),
+    };
+    const asientoRepo = { delete: jest.fn() };
+    const comprobanteItemRepo = { delete: jest.fn() };
+    const query = jest.fn().mockResolvedValue([
+      {
+        in_cmp_comp: 0,
+        in_cmp_pago: 0,
+        in_tsr: 1,
+        in_vta_cobro: 0,
+      },
+    ]);
+    const repositories = new Map<unknown, unknown>([
+      [VtaComprobante, comprobanteRepo],
+      [VtaCobroFactura, cobroFacturaRepo],
+      [VtaCobroMedio, cobroMedioRepo],
+      [VtaCobro, cobroRepo],
+      [VtaComprobanteAsiento, asientoLinkRepo],
+      [CntAsiento, asientoRepo],
+      [VtaComprobanteItem, comprobanteItemRepo],
+    ]);
+    const manager = {
+      getRepository: jest.fn((target) => repositories.get(target)),
+      query,
+    };
+    const dataSource = {
+      transaction: jest.fn(async (callback) => callback(manager)),
+    };
+    const service = new VtaComprobanteService(
+      dataSource as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+    );
+
+    await service.eliminarComprobantePorPedido(
+      'FX',
+      'X 00001 00000001',
+    );
+
+    const sql = query.mock.calls[0][0] as string;
+    expect(sql).toContain('FROM tsr_movimiento_asiento');
+    expect(sql).not.toContain('fnd_movimiento_asiento');
+    expect(asientoRepo.delete).not.toHaveBeenCalled();
   });
 });
