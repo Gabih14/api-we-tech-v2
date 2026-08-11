@@ -9,6 +9,24 @@ import { StkExistencia } from './entities/stk-existencia.entity';
 import { CreateStkExistenciaDto } from './dto/create-stk-existencia.dto';
 import { UpdateStkExistenciaDto } from './dto/update-stk-existencia.dto';
 
+export interface StockSolicitud {
+  item: string;
+  cantidad: number;
+  deposito?: string;
+}
+
+export interface StockSalida {
+  deposito: string;
+  cantidad: number;
+}
+
+export interface StockConfirmado {
+  item: string;
+  cantidad: number;
+  depositoReserva: string;
+  salidas: StockSalida[];
+}
+
 @Injectable()
 export class StkExistenciaService {
   constructor(
@@ -180,6 +198,189 @@ export class StkExistenciaService {
   }
 
   /**
+   * Confirma todas las reservas como una unica operacion. Las filas quedan
+   * bloqueadas hasta validar y guardar el lote completo; si una linea falla,
+   * la transaccion revierte cualquier cambio anterior.
+   */
+  async confirmarStockLote(
+    solicitudes: StockSolicitud[],
+  ): Promise<StockConfirmado[]> {
+    const agrupadas = this.agruparSolicitudes(solicitudes);
+
+    return this.stkExistenciaRepository.manager.transaction(async (manager) => {
+      const repo = manager.getRepository(StkExistencia);
+      const confirmaciones: Array<{
+        existencia: StkExistencia;
+        item: string;
+        cantidad: number;
+        depositoReserva: string;
+        salidas: Array<{
+          existencia: StkExistencia;
+          deposito: string;
+          cantidad: number;
+        }>;
+      }> = [];
+      const virtuales: StockConfirmado[] = [];
+      const compromisoPlanificado = new Map<StkExistencia, number>();
+      const salidaPlanificada = new Map<StkExistencia, number>();
+
+      for (const solicitud of agrupadas) {
+        if (solicitud.item.startsWith('ENV')) {
+          virtuales.push({
+            item: solicitud.item,
+            cantidad: solicitud.cantidad,
+            depositoReserva: 'ENV',
+            salidas: [{ deposito: 'ENV', cantidad: solicitud.cantidad }],
+          });
+          continue;
+        }
+
+        const existencias = await repo.find({
+          where: { item: solicitud.item },
+          lock: { mode: 'pessimistic_write' },
+        });
+
+        if (!existencias.length) {
+          throw new NotFoundException(
+            `Stock no encontrado para ${solicitud.item}${
+              solicitud.deposito ? ` en ${solicitud.deposito}` : ''
+            }`,
+          );
+        }
+
+        const reservaPreferida = solicitud.deposito
+          ? existencias.find((row) => row.deposito === solicitud.deposito)
+          : undefined;
+        const compromisoDisponible = (row: StkExistencia) =>
+          Number(row.comprometido || 0) - (compromisoPlanificado.get(row) ?? 0);
+        const existencia =
+          (reservaPreferida &&
+          compromisoDisponible(reservaPreferida) >= solicitud.cantidad
+            ? reservaPreferida
+            : undefined) ??
+          existencias
+            .filter((row) => compromisoDisponible(row) >= solicitud.cantidad)
+            .sort(
+              (a, b) => compromisoDisponible(b) - compromisoDisponible(a),
+            )[0];
+
+        if (!existencia) {
+          const compromisoMaximo = Math.max(
+            0,
+            ...existencias.map((row) => compromisoDisponible(row)),
+          );
+          throw new ConflictException(
+            `Reserva insuficiente para ${solicitud.item}. Comprometido maximo: ${compromisoMaximo}, Solicitado: ${solicitud.cantidad}`,
+          );
+        }
+
+        const comprometido = compromisoDisponible(existencia);
+        if (comprometido < solicitud.cantidad) {
+          throw new ConflictException(
+            `Reserva insuficiente para ${solicitud.item} en ${existencia.deposito}. Comprometido: ${comprometido}, Solicitado: ${solicitud.cantidad}`,
+          );
+        }
+
+        const obtenerStockUtilizable = (row: StkExistencia) => {
+          const cantidadRestante =
+            Number(row.cantidad || 0) - (salidaPlanificada.get(row) ?? 0);
+          const compromisoRestante =
+            Number(row.comprometido || 0) -
+            (compromisoPlanificado.get(row) ?? 0) -
+            (row === existencia ? solicitud.cantidad : 0);
+          return Math.max(0, cantidadRestante - compromisoRestante);
+        };
+        const candidatosSalida = [...existencias].sort((a, b) => {
+          if (a.deposito === existencia.deposito) return -1;
+          if (b.deposito === existencia.deposito) return 1;
+          return obtenerStockUtilizable(b) - obtenerStockUtilizable(a);
+        });
+        const salidas: Array<{
+          existencia: StkExistencia;
+          deposito: string;
+          cantidad: number;
+        }> = [];
+        let cantidadPendiente = solicitud.cantidad;
+
+        for (const candidato of candidatosSalida) {
+          if (cantidadPendiente <= 0) break;
+
+          const utilizable = obtenerStockUtilizable(candidato);
+          const cantidadSalida = Math.min(utilizable, cantidadPendiente);
+          if (cantidadSalida <= 0) continue;
+
+          salidas.push({
+            existencia: candidato,
+            deposito: candidato.deposito,
+            cantidad: cantidadSalida,
+          });
+          cantidadPendiente -= cantidadSalida;
+        }
+
+        if (cantidadPendiente > 0) {
+          const stockUtilizable = solicitud.cantidad - cantidadPendiente;
+          throw new ConflictException(
+            `Stock fisico insuficiente para ${solicitud.item}. Utilizable entre depositos: ${stockUtilizable}, Solicitado: ${solicitud.cantidad}, Reserva en ${existencia.deposito}: ${comprometido}`,
+          );
+        }
+
+        confirmaciones.push({
+          existencia,
+          item: solicitud.item,
+          cantidad: solicitud.cantidad,
+          depositoReserva: existencia.deposito,
+          salidas,
+        });
+        compromisoPlanificado.set(
+          existencia,
+          (compromisoPlanificado.get(existencia) ?? 0) + solicitud.cantidad,
+        );
+        for (const salida of salidas) {
+          salidaPlanificada.set(
+            salida.existencia,
+            (salidaPlanificada.get(salida.existencia) ?? 0) + salida.cantidad,
+          );
+        }
+      }
+
+      const existenciasModificadas = new Set<StkExistencia>();
+      for (const confirmacion of confirmaciones) {
+        const comprometido = Number(confirmacion.existencia.comprometido || 0);
+        confirmacion.existencia.comprometido = (
+          comprometido - confirmacion.cantidad
+        ).toString();
+        existenciasModificadas.add(confirmacion.existencia);
+
+        for (const salida of confirmacion.salidas) {
+          salida.existencia.cantidad = (
+            Number(salida.existencia.cantidad || 0) - salida.cantidad
+          ).toString();
+          existenciasModificadas.add(salida.existencia);
+        }
+      }
+
+      if (existenciasModificadas.size) {
+        await repo.save([...existenciasModificadas]);
+      }
+
+      return [
+        ...confirmaciones.map(
+          ({ item, cantidad, depositoReserva, salidas }) => ({
+            item,
+            cantidad,
+            depositoReserva,
+            salidas: salidas.map(({ deposito, cantidad: salidaCantidad }) => ({
+              deposito,
+              cantidad: salidaCantidad,
+            })),
+          }),
+        ),
+        ...virtuales,
+      ];
+    });
+  }
+
+  /**
    * Compensa una confirmacion cuando falla una operacion critica posterior.
    * Repone tanto la existencia como la reserva que habia antes de confirmar.
    */
@@ -207,6 +408,91 @@ export class StkExistenciaService {
     ).toString();
 
     await this.stkExistenciaRepository.save(existencia);
+  }
+
+  async restaurarStockConfirmadoLote(
+    confirmaciones: StockConfirmado[],
+  ): Promise<void> {
+    await this.stkExistenciaRepository.manager.transaction(async (manager) => {
+      const repo = manager.getRepository(StkExistencia);
+      const existenciasRestauradas = new Set<StkExistencia>();
+
+      for (const confirmacion of confirmaciones) {
+        if (
+          confirmacion.item.startsWith('ENV') ||
+          confirmacion.depositoReserva === 'ENV'
+        ) {
+          continue;
+        }
+
+        const existencias = await repo.find({
+          where: { item: confirmacion.item },
+          lock: { mode: 'pessimistic_write' },
+        });
+        const existenciaReserva = existencias.find(
+          (row) => row.deposito === confirmacion.depositoReserva,
+        );
+        if (!existenciaReserva) {
+          throw new NotFoundException(
+            `No se pudo restaurar la reserva de ${confirmacion.item} en ${confirmacion.depositoReserva}`,
+          );
+        }
+
+        existenciaReserva.comprometido = (
+          Number(existenciaReserva.comprometido || 0) + confirmacion.cantidad
+        ).toString();
+        existenciasRestauradas.add(existenciaReserva);
+
+        for (const salida of confirmacion.salidas) {
+          if (salida.deposito === 'ENV') continue;
+          const existenciaSalida = existencias.find(
+            (row) => row.deposito === salida.deposito,
+          );
+          if (!existenciaSalida) {
+            throw new NotFoundException(
+              `No se pudo restaurar la salida de ${confirmacion.item} en ${salida.deposito}`,
+            );
+          }
+
+          existenciaSalida.cantidad = (
+            Number(existenciaSalida.cantidad || 0) + salida.cantidad
+          ).toString();
+          existenciasRestauradas.add(existenciaSalida);
+        }
+      }
+
+      if (existenciasRestauradas.size) {
+        await repo.save([...existenciasRestauradas]);
+      }
+    });
+  }
+
+  private agruparSolicitudes(solicitudes: StockSolicitud[]): StockSolicitud[] {
+    const agrupadas = new Map<string, StockSolicitud>();
+
+    for (const solicitud of solicitudes) {
+      const cantidad = Number(solicitud.cantidad);
+      if (!Number.isFinite(cantidad) || cantidad <= 0) {
+        throw new ConflictException(
+          `Cantidad invalida para ${solicitud.item}: ${solicitud.cantidad}`,
+        );
+      }
+
+      const key = `${solicitud.item}\u0000${solicitud.deposito ?? ''}`;
+      const existente = agrupadas.get(key);
+      if (existente) {
+        existente.cantidad += cantidad;
+      } else {
+        agrupadas.set(key, { ...solicitud, cantidad });
+      }
+    }
+
+    return [...agrupadas.values()].sort((a, b) => {
+      const itemComparison = a.item.localeCompare(b.item);
+      return (
+        itemComparison || (a.deposito ?? '').localeCompare(b.deposito ?? '')
+      );
+    });
   }
 
   async liberarStock(item: string, cantidad: number, deposito?: string) {

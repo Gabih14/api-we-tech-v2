@@ -15,7 +15,10 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Pedido } from './entities/pedido.entity';
 import { Brackets, Repository } from 'typeorm';
 import { CreatePedidoDto } from './dto/create-pedido.dto';
-import { StkExistenciaService } from 'src/stk-existencia/stk-existencia.service';
+import {
+  StkExistenciaService,
+  StockConfirmado,
+} from 'src/stk-existencia/stk-existencia.service';
 import { StkItem } from 'src/stk-item/entities/stk-item.entity';
 import { StkAtributo } from 'src/stk-item/entities/stk-atributo.entity';
 import { StkAtributoNodo } from 'src/stk-item/entities/stk-atributo-nodo.entity';
@@ -88,6 +91,7 @@ interface PedidoCuponResolucion {
 @Injectable()
 export class PedidoService {
   private readonly logger = new Logger(PedidoService.name);
+  private readonly transferenciasEnAprobacion = new Set<string>();
 
   constructor(
     @InjectRepository(Pedido, 'back') // 👈 Base de datos propia
@@ -303,8 +307,34 @@ export class PedidoService {
       factura_iva_importe: facturaIvaImporte,
     });
 
-    for (const p of productosValidados) {
-      await this.stockService.reservarStock(p.nombre, p.cantidad);
+    const reservasRealizadas: PedidoItem[] = [];
+    try {
+      for (const p of productosValidados) {
+        p.deposito_reserva = await this.stockService.reservarStock(
+          p.nombre,
+          p.cantidad,
+        );
+        reservasRealizadas.push(p);
+      }
+    } catch (error) {
+      for (const reservado of reservasRealizadas.reverse()) {
+        try {
+          await this.stockService.liberarStock(
+            reservado.nombre,
+            reservado.cantidad,
+            reservado.deposito_reserva ?? undefined,
+          );
+        } catch (rollbackError) {
+          this.logger.error(
+            `Error liberando reserva incompleta de ${reservado.nombre}: ${
+              rollbackError instanceof Error
+                ? rollbackError.message
+                : String(rollbackError)
+            }`,
+          );
+        }
+      }
+      throw error;
     }
 
     const externalId = uuidv4().replace(/-/g, '');
@@ -351,7 +381,29 @@ export class PedidoService {
       factura_iva_importe: facturaIvaImporte,
     });
 
-    const pedidoGuardado = await this.pedidoRepo.save(pedido);
+    let pedidoGuardado: Pedido;
+    try {
+      pedidoGuardado = await this.pedidoRepo.save(pedido);
+    } catch (error) {
+      for (const reservado of reservasRealizadas.reverse()) {
+        try {
+          await this.stockService.liberarStock(
+            reservado.nombre,
+            reservado.cantidad,
+            reservado.deposito_reserva ?? undefined,
+          );
+        } catch (rollbackError) {
+          this.logger.error(
+            `Error liberando reserva de ${reservado.nombre} luego de fallar el guardado del pedido: ${
+              rollbackError instanceof Error
+                ? rollbackError.message
+                : String(rollbackError)
+            }`,
+          );
+        }
+      }
+      throw error;
+    }
 
     // Para transferencias, generar comprobante pendiente sin cobro
     if (pedidoGuardado.metodo_pago === 'transfer') {
@@ -364,7 +416,11 @@ export class PedidoService {
       } catch (err) {
         for (const p of productosValidados) {
           try {
-            await this.stockService.liberarStock(p.nombre, p.cantidad);
+            await this.stockService.liberarStock(
+              p.nombre,
+              p.cantidad,
+              p.deposito_reserva ?? undefined,
+            );
           } catch (e) {
             console.error(
               `Error liberando stock de ${p.nombre}:`,
@@ -427,7 +483,11 @@ export class PedidoService {
       // Rollback: liberar stock y marcar pedido como cancelado
       for (const p of productosValidados) {
         try {
-          await this.stockService.liberarStock(p.nombre, p.cantidad);
+          await this.stockService.liberarStock(
+            p.nombre,
+            p.cantidad,
+            p.deposito_reserva ?? undefined,
+          );
         } catch (e) {
           // log y continuar intentando liberar el resto
           console.error(
@@ -791,7 +851,10 @@ export class PedidoService {
             );
             for (const p of pedido.productos) {
               try {
-                await this.stockService.reservarStock(p.nombre, p.cantidad);
+                p.deposito_reserva = await this.stockService.reservarStock(
+                  p.nombre,
+                  p.cantidad,
+                );
               } catch (err) {
                 console.error(
                   `❌ No se pudo re-reservar stock para ${p.nombre}`,
@@ -811,6 +874,7 @@ export class PedidoService {
             const deposito = await this.stockService.confirmarStock(
               p.nombre,
               p.cantidad,
+              p.deposito_reserva ?? undefined,
             );
             stockConfirmado.push({
               item: p.nombre,
@@ -927,7 +991,11 @@ export class PedidoService {
       case 'REFUNDED':
         pedido.estado = 'CANCELADO';
         for (const p of pedido.productos) {
-          await this.stockService.liberarStock(p.nombre, p.cantidad);
+          await this.stockService.liberarStock(
+            p.nombre,
+            p.cantidad,
+            p.deposito_reserva ?? undefined,
+          );
         }
         await this.eliminarComprobanteSiExiste(pedido);
         try {
@@ -1099,6 +1167,7 @@ export class PedidoService {
         await this.stockService.liberarStock(
           producto.nombre,
           producto.cantidad,
+          producto.deposito_reserva ?? undefined,
         );
       } catch (err) {
         console.error(`❌ Error liberando stock de ${producto.nombre}:`, err);
@@ -1125,74 +1194,137 @@ export class PedidoService {
   async aprobarTransferencia(
     externalId: string,
   ): Promise<{ pedido: Pedido; comprobante: any }> {
-    const pedido = await this.pedidoRepo.findOne({
-      where: { external_id: externalId },
-      relations: ['productos'],
-    });
-
-    if (!pedido) {
-      throw new NotFoundException(`Pedido ${externalId} no encontrado`);
-    }
-
-    if (pedido.metodo_pago !== 'transfer') {
-      throw new BadRequestException(
-        `Pedido ${externalId} no es de tipo transferencia`,
-      );
-    }
-
-    if (pedido.estado !== 'PENDIENTE') {
+    if (this.transferenciasEnAprobacion.has(externalId)) {
       throw new ConflictException(
-        `Pedido ${externalId} ya fue procesado (estado: ${pedido.estado})`,
+        `Pedido ${externalId} ya se esta aprobando en esta instancia`,
       );
     }
 
-    // Verificar y confirmar stock
-    for (const p of pedido.productos) {
-      try {
-        await this.stockService.confirmarStock(p.nombre, p.cantidad);
-      } catch (err) {
-        console.error(`❌ No se pudo confirmar stock para ${p.nombre}`, err);
-        throw new ConflictException(
-          `Stock insuficiente para ${p.nombre}. El pedido no puede ser aprobado.`,
+    this.transferenciasEnAprobacion.add(externalId);
+
+    let pedido!: Pedido;
+    let comprobanteCreado!: { tipo: string; comprobante: string };
+    let aprobacionNueva = false;
+
+    try {
+      await this.pedidoRepo.manager.transaction(async (manager) => {
+        const pedidoRepo = manager.getRepository(Pedido);
+        const pedidoEncontrado = await pedidoRepo.findOne({
+          where: { external_id: externalId },
+          relations: ['productos'],
+          lock: { mode: 'pessimistic_write' },
+        });
+
+        if (!pedidoEncontrado) {
+          throw new NotFoundException(`Pedido ${externalId} no encontrado`);
+        }
+
+        pedido = pedidoEncontrado;
+
+        if (pedido.metodo_pago !== 'transfer') {
+          throw new BadRequestException(
+            `Pedido ${externalId} no es de tipo transferencia`,
+          );
+        }
+
+        if (pedido.estado === 'APROBADO') {
+          if (!pedido.comprobante_tipo || !pedido.comprobante_numero) {
+            throw new ConflictException(
+              `Pedido ${externalId} esta aprobado pero no tiene comprobante asociado`,
+            );
+          }
+
+          comprobanteCreado = {
+            tipo: pedido.comprobante_tipo,
+            comprobante: pedido.comprobante_numero,
+          };
+          return;
+        }
+
+        if (pedido.estado !== 'PENDIENTE') {
+          throw new ConflictException(
+            `Pedido ${externalId} no puede aprobarse (estado: ${pedido.estado})`,
+          );
+        }
+
+        if (!pedido.productos?.length) {
+          throw new BadRequestException(
+            `Pedido ${externalId} no tiene productos para confirmar`,
+          );
+        }
+
+        if (!pedido.comprobante_tipo || !pedido.comprobante_numero) {
+          throw new ConflictException(
+            `Pedido ${externalId} no tiene comprobante asociado`,
+          );
+        }
+
+        const tieneCobro = await this.cobrosService.tieneCobroFacturaDelPedido(
+          pedido.comprobante_tipo,
+          pedido.comprobante_numero,
+          pedido,
         );
+        if (!tieneCobro) {
+          throw new ConflictException(
+            `Pedido ${externalId} no tiene un cobro valido asociado`,
+          );
+        }
+
+        comprobanteCreado = {
+          tipo: pedido.comprobante_tipo,
+          comprobante: pedido.comprobante_numero,
+        };
+
+        let stockConfirmado: StockConfirmado[] = [];
+        try {
+          stockConfirmado = await this.stockService.confirmarStockLote(
+            pedido.productos.map((producto) => ({
+              item: producto.nombre,
+              cantidad: producto.cantidad,
+              deposito: producto.deposito_reserva ?? undefined,
+            })),
+          );
+
+          pedido.estado = 'APROBADO';
+          pedido.aprobado = new Date();
+          pedido = await pedidoRepo.save(pedido);
+          aprobacionNueva = true;
+        } catch (error) {
+          if (stockConfirmado.length) {
+            try {
+              await this.stockService.restaurarStockConfirmadoLote(
+                stockConfirmado,
+              );
+            } catch (rollbackError) {
+              this.logger.error(
+                `[${externalId}] Fallo critico restaurando stock luego de una aprobacion fallida`,
+                rollbackError instanceof Error
+                  ? rollbackError.stack
+                  : String(rollbackError),
+              );
+              throw new InternalServerErrorException(
+                `Pedido ${externalId} requiere reconciliacion manual de stock`,
+              );
+            }
+          }
+
+          this.logger.error(
+            `[${externalId}] No se pudo completar la aprobacion de transferencia: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          );
+          throw error;
+        }
+      });
+
+      if (!aprobacionNueva) {
+        return { pedido, comprobante: comprobanteCreado };
       }
+
+      await this.registrarUsoCuponSiCorresponde(pedido);
+    } finally {
+      this.transferenciasEnAprobacion.delete(externalId);
     }
-
-    // Actualizar estado
-    pedido.estado = 'APROBADO';
-    pedido.aprobado = new Date();
-
-    // Crear comprobante con método de pago 'transfer'
-    let comprobanteCreado: { tipo: string; comprobante: string };
-    if (pedido.comprobante_tipo && pedido.comprobante_numero) {
-      comprobanteCreado = {
-        tipo: pedido.comprobante_tipo,
-        comprobante: pedido.comprobante_numero,
-      };
-    } else {
-      try {
-        const comp = await this.vtaComprobanteService.crearDesdePedido(pedido);
-        comprobanteCreado = { tipo: comp.tipo, comprobante: comp.comprobante };
-        pedido.comprobante_tipo = comp.tipo;
-        pedido.comprobante_numero = comp.comprobante;
-        console.log(
-          `🧾 Comprobante generado para pedido transferencia ${pedido.external_id}:`,
-          comprobanteCreado,
-        );
-      } catch (err) {
-        console.error(
-          `❌ Error al generar comprobante para pedido ${pedido.external_id}:`,
-          err,
-        );
-        throw err;
-      }
-    }
-
-    // NO generar cobro para transferencias
-
-    // Guardar pedido actualizado
-    await this.pedidoRepo.save(pedido);
-    await this.registrarUsoCuponSiCorresponde(pedido);
 
     // Notificaciones no críticas
     try {
@@ -1616,6 +1748,7 @@ export class PedidoService {
       precio_unitario: producto.precio_unitario,
       subtotal: producto.subtotal,
       ajuste_porcentaje: producto.ajuste_porcentaje,
+      deposito_reserva: null,
     } as PedidoItem;
   }
 
