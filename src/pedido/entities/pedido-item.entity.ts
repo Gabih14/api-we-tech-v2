@@ -4,27 +4,30 @@ import { Pedido } from './pedido.entity';
 
 @Entity('pedido_item')
 export class PedidoItem {
-    @PrimaryGeneratedColumn()
-    id: number;
+  @PrimaryGeneratedColumn()
+  id: number;
 
-    @Column()
-    nombre: string;
+  @Column()
+  nombre: string;
 
-    @Column({ nullable: true })
-    descripcion: string;
+  @Column({ nullable: true })
+  descripcion: string;
 
-    @Column()
-    cantidad: number;
+  @Column()
+  cantidad: number;
 
-    @Column()
-    precio_unitario: number;
+  @Column()
+  precio_unitario: number;
 
-    @Column({ type: 'decimal', precision: 12, scale: 2 })
-    subtotal: number;
+  @Column({ type: 'decimal', precision: 12, scale: 2 })
+  subtotal: number;
 
-    @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true })
-    ajuste_porcentaje: number | null;
+  @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true })
+  ajuste_porcentaje: number | null;
 
-    @ManyToOne(() => Pedido, pedido => pedido.productos)
-    pedido: Pedido;
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  deposito_reserva: string | null;
+
+  @ManyToOne(() => Pedido, (pedido) => pedido.productos)
+  pedido: Pedido;
 }

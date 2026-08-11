@@ -61,7 +61,11 @@ export class PedidoExpirationService {
         // 1️⃣ Intentar liberar cada producto
         for (const p of pedido.productos) {
           try {
-            await this.existenciaService.liberarStock(p.nombre, p.cantidad);
+            await this.existenciaService.liberarStock(
+              p.nombre,
+              p.cantidad,
+              p.deposito_reserva ?? undefined,
+            );
             liberacionesExitosas.push({
               nombre: p.nombre,
               cantidad: p.cantidad,

@@ -11,6 +11,11 @@ describe('PedidoService recalculo de importes', () => {
     create: jest.fn((pedido) => pedido),
     save: jest.fn(async (pedido) => ({ ...pedido, id: pedido.id ?? 1 })),
     findOne: jest.fn(),
+    manager: {
+      transaction: jest.fn(async (callback) =>
+        callback({ getRepository: () => createRepo }),
+      ),
+    },
   };
   const stkItemRepo = {
     findOne: jest.fn(),
@@ -55,10 +60,28 @@ describe('PedidoService recalculo de importes', () => {
     }),
   };
   const stockService = {
-    reservarStock: jest.fn(async () => undefined),
+    reservarStock: jest.fn(async () => 'DEPOSITO'),
     liberarStock: jest.fn(async () => undefined),
     confirmarStock: jest.fn(async () => 'DEPOSITO'),
     restaurarStockConfirmado: jest.fn(async () => undefined),
+    confirmarStockLote: jest.fn(async (solicitudes) =>
+      solicitudes.map((solicitud) => ({
+        item: solicitud.item,
+        cantidad: solicitud.cantidad,
+        depositoReserva: solicitud.item.startsWith('ENV')
+          ? 'ENV'
+          : (solicitud.deposito ?? 'DEPOSITO'),
+        salidas: [
+          {
+            deposito: solicitud.item.startsWith('ENV')
+              ? 'ENV'
+              : (solicitud.deposito ?? 'DEPOSITO'),
+            cantidad: solicitud.cantidad,
+          },
+        ],
+      })),
+    ),
+    restaurarStockConfirmadoLote: jest.fn(async () => undefined),
   };
   const vtaComprobanteService = {
     crearDesdePedido: jest.fn(),
@@ -85,6 +108,7 @@ describe('PedidoService recalculo de importes', () => {
   };
   const cobrosService = {
     cobrarFactura: jest.fn(async () => undefined),
+    tieneCobroFacturaDelPedido: jest.fn(async () => true),
   };
   const cuponService = {
     validarUsoCupon: jest.fn(async () => undefined),
@@ -1868,7 +1892,11 @@ describe('PedidoService recalculo de importes', () => {
       }),
     ).rejects.toThrow('fallo de comprobante');
 
-    expect(stockService.confirmarStock).toHaveBeenCalledWith('ITEM-1', 1);
+    expect(stockService.confirmarStock).toHaveBeenCalledWith(
+      'ITEM-1',
+      1,
+      undefined,
+    );
     expect(stockService.restaurarStockConfirmado).toHaveBeenCalledWith(
       'ITEM-1',
       1,
@@ -1888,5 +1916,159 @@ describe('PedidoService recalculo de importes', () => {
     ).rejects.toThrow(BadRequestException);
 
     expect(tokenSpy).not.toHaveBeenCalled();
+  });
+
+  it('aprueba una transferencia confirmando el stock como un unico lote', async () => {
+    const pedido = {
+      id: 900,
+      external_id: 'pedido-transferencia',
+      estado: 'PENDIENTE',
+      metodo_pago: 'transfer',
+      comprobante_tipo: 'FX',
+      comprobante_numero: 'X 00001 00000001',
+      codigo_cupon: null,
+      delivery_method: 'pickup',
+      productos: [
+        { nombre: 'ITEM-1', cantidad: 1, deposito_reserva: 'DEPOSITO' },
+        { nombre: 'ITEM-2', cantidad: 2, deposito_reserva: 'DEPOSITO' },
+      ],
+    };
+    createRepo.findOne.mockResolvedValue(pedido);
+
+    const resultado = await service.aprobarTransferencia(pedido.external_id);
+
+    expect(createRepo.findOne).toHaveBeenCalledWith(
+      expect.objectContaining({
+        lock: { mode: 'pessimistic_write' },
+      }),
+    );
+    expect(cobrosService.tieneCobroFacturaDelPedido).toHaveBeenCalledWith(
+      'FX',
+      'X 00001 00000001',
+      pedido,
+    );
+    expect(stockService.confirmarStockLote).toHaveBeenCalledWith([
+      { item: 'ITEM-1', cantidad: 1, deposito: 'DEPOSITO' },
+      { item: 'ITEM-2', cantidad: 2, deposito: 'DEPOSITO' },
+    ]);
+    expect(createRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({ estado: 'APROBADO' }),
+    );
+    expect(resultado.pedido.estado).toBe('APROBADO');
+  });
+
+  it('no toca stock si el cobro no pertenece al pedido', async () => {
+    const pedido = {
+      id: 901,
+      external_id: 'pedido-cobro-invalido',
+      estado: 'PENDIENTE',
+      metodo_pago: 'transfer',
+      comprobante_tipo: 'FX',
+      comprobante_numero: 'X 00001 00000002',
+      productos: [{ nombre: 'ITEM-1', cantidad: 1 }],
+    };
+    createRepo.findOne.mockResolvedValue(pedido);
+    cobrosService.tieneCobroFacturaDelPedido.mockResolvedValueOnce(false);
+
+    await expect(
+      service.aprobarTransferencia(pedido.external_id),
+    ).rejects.toThrow('no tiene un cobro valido asociado');
+
+    expect(stockService.confirmarStockLote).not.toHaveBeenCalled();
+    expect(createRepo.save).not.toHaveBeenCalled();
+  });
+
+  it('restaura el lote confirmado si falla el guardado del pedido', async () => {
+    const pedido = {
+      id: 902,
+      external_id: 'pedido-save-fallido',
+      estado: 'PENDIENTE',
+      metodo_pago: 'transfer',
+      comprobante_tipo: 'FX',
+      comprobante_numero: 'X 00001 00000003',
+      productos: [{ nombre: 'ITEM-1', cantidad: 1 }],
+    };
+    const confirmaciones = [
+      {
+        item: 'ITEM-1',
+        cantidad: 1,
+        depositoReserva: 'DEPOSITO',
+        salidas: [{ deposito: 'DEPOSITO', cantidad: 1 }],
+      },
+    ];
+    createRepo.findOne.mockResolvedValue(pedido);
+    stockService.confirmarStockLote.mockResolvedValueOnce(confirmaciones);
+    createRepo.save.mockRejectedValueOnce(new Error('fallo guardando pedido'));
+
+    await expect(
+      service.aprobarTransferencia(pedido.external_id),
+    ).rejects.toThrow('fallo guardando pedido');
+
+    expect(stockService.restaurarStockConfirmadoLote).toHaveBeenCalledWith(
+      confirmaciones,
+    );
+  });
+
+  it('es idempotente cuando la transferencia ya esta aprobada', async () => {
+    const pedido = {
+      id: 903,
+      external_id: 'pedido-ya-aprobado',
+      estado: 'APROBADO',
+      metodo_pago: 'transfer',
+      comprobante_tipo: 'FX',
+      comprobante_numero: 'X 00001 00000004',
+      productos: [{ nombre: 'ITEM-1', cantidad: 1 }],
+    };
+    createRepo.findOne.mockResolvedValue(pedido);
+
+    await expect(
+      service.aprobarTransferencia(pedido.external_id),
+    ).resolves.toMatchObject({
+      pedido,
+      comprobante: {
+        tipo: 'FX',
+        comprobante: 'X 00001 00000004',
+      },
+    });
+
+    expect(cobrosService.tieneCobroFacturaDelPedido).not.toHaveBeenCalled();
+    expect(stockService.confirmarStockLote).not.toHaveBeenCalled();
+    expect(createRepo.save).not.toHaveBeenCalled();
+  });
+
+  it('rechaza una segunda aprobacion concurrente en la misma instancia', async () => {
+    const pedido = {
+      id: 904,
+      external_id: 'pedido-concurrente',
+      estado: 'PENDIENTE',
+      metodo_pago: 'transfer',
+      comprobante_tipo: 'FX',
+      comprobante_numero: 'X 00001 00000005',
+      codigo_cupon: null,
+      delivery_method: 'pickup',
+      productos: [{ nombre: 'ITEM-1', cantidad: 1 }],
+    };
+    createRepo.findOne.mockResolvedValue(pedido);
+
+    let resolverCobro: (value: boolean) => void = () => undefined;
+    cobrosService.tieneCobroFacturaDelPedido.mockImplementationOnce(
+      () =>
+        new Promise<boolean>((resolve) => {
+          resolverCobro = resolve;
+        }),
+    );
+
+    const primeraAprobacion = service.aprobarTransferencia(pedido.external_id);
+    await Promise.resolve();
+
+    await expect(
+      service.aprobarTransferencia(pedido.external_id),
+    ).rejects.toThrow('ya se esta aprobando en esta instancia');
+
+    resolverCobro(true);
+    await expect(primeraAprobacion).resolves.toMatchObject({
+      pedido: expect.objectContaining({ estado: 'APROBADO' }),
+    });
+    expect(stockService.confirmarStockLote).toHaveBeenCalledTimes(1);
   });
 });
