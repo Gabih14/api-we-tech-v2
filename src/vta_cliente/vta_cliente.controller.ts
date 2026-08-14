@@ -4,6 +4,7 @@ import {
   Post,
   Body,
   Patch,
+  Put,
   Param,
   Delete,
   NotFoundException,
@@ -11,6 +12,7 @@ import {
 import { VtaClienteService } from './vta_cliente.service';
 import { CreateVtaClienteDto } from './dto/create-vta_cliente.dto';
 import { UpdateVtaClienteDto } from './dto/update-vta_cliente.dto';
+import { CreateClienteDireccionLinkDto } from './dto/create-cliente-direccion-link.dto';
 
 @Controller('vta-cliente')
 export class VtaClienteController {
@@ -40,6 +42,19 @@ export class VtaClienteController {
     return cliente;
   }
 
+  @Get(':id/direccion-link')
+  async findDireccionLink(@Param('id') id: string) {
+    return this.vtaClienteService.findDireccionLink(id);
+  }
+
+  @Put(':id/direccion-link')
+  async saveDireccionLink(
+    @Param('id') id: string,
+    @Body() dto: CreateClienteDireccionLinkDto,
+  ) {
+    return this.vtaClienteService.saveDireccionLink(id, dto);
+  }
+
   @Patch(':id')
   async update(@Param('id') id: string, @Body() dto: UpdateVtaClienteDto) {
     const cliente = await this.vtaClienteService.update(id, dto);
@@ -52,5 +67,10 @@ export class VtaClienteController {
   @Delete(':id')
   async remove(@Param('id') id: string) {
     return this.vtaClienteService.remove(id);
+  }
+
+  @Delete(':id/direccion-link')
+  async removeDireccionLink(@Param('id') id: string) {
+    return this.vtaClienteService.removeDireccionLink(id);
   }
 }
