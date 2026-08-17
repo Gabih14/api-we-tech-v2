@@ -120,6 +120,18 @@ export class PedidoController {
     };
   }
 
+  @Post(':externalId/error-stock/notificar-delivery')
+  @AuthType('write')
+  @HttpCode(HttpStatus.OK)
+  async notificarDeliveryErrorStock(@Param('externalId') externalId: string) {
+    const pedido =
+      await this.pedidoService.notificarDeliveryPedidoErrorStock(externalId);
+    return {
+      message: 'Mensaje de delivery enviado correctamente',
+      pedido,
+    };
+  }
+
   @Post(':externalId/rechazar')
   @AuthType('write')
   @HttpCode(HttpStatus.OK)

@@ -9,12 +9,22 @@ describe('VtaClienteService', () => {
     save: jest.fn(async (data) => data),
     update: jest.fn(async () => undefined),
   };
+  const direccionLinkRepo = {
+    find: jest.fn(),
+    findOne: jest.fn(),
+    create: jest.fn((data) => data),
+    save: jest.fn(async (data) => data),
+    update: jest.fn(async () => undefined),
+    delete: jest.fn(async () => ({ affected: 1 })),
+  };
 
   let service: VtaClienteService;
 
   beforeEach(() => {
     jest.clearAllMocks();
-    service = new VtaClienteService(repo as any);
+    direccionLinkRepo.find.mockResolvedValue([]);
+    direccionLinkRepo.findOne.mockResolvedValue(null);
+    service = new VtaClienteService(repo as any, direccionLinkRepo as any);
   });
 
   describe('findOne -> direccionSeparada', () => {
@@ -110,6 +120,24 @@ describe('VtaClienteService', () => {
     it('usa CUIL por defecto para consumidor final', async () => {
       const saved = await crear({ id: '20432802281' });
       expect(saved.tipoDocumento).toBe('CUIL');
+    });
+  });
+
+  describe('link de direccion', () => {
+    it('guarda un unico link por cliente y sobreescribe por clienteId', async () => {
+      const saved = await service.saveDireccionLink('20432802281', {
+        link: 'https://maps.app.goo.gl/test',
+        direccionTexto: ' Jujuy 984 ',
+        etiqueta: ' Casa ',
+      });
+
+      expect(direccionLinkRepo.update).not.toHaveBeenCalled();
+      expect(saved).toMatchObject({
+        clienteId: '20432802281',
+        link: 'https://maps.app.goo.gl/test',
+        direccionTexto: 'Jujuy 984',
+        etiqueta: 'Casa',
+      });
     });
   });
 });

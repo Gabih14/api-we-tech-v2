@@ -4,6 +4,8 @@ import { Repository } from 'typeorm';
 import { VtaCliente } from './entities/vta_cliente.entity';
 import { CreateVtaClienteDto } from './dto/create-vta_cliente.dto';
 import { UpdateVtaClienteDto } from './dto/update-vta_cliente.dto';
+import { CreateClienteDireccionLinkDto } from './dto/create-cliente-direccion-link.dto';
+import { ClienteDireccionLink } from './entities/cliente-direccion-link.entity';
 import type { DireccionSeparada } from '../maps/maps.service';
 
 @Injectable()
@@ -13,6 +15,8 @@ export class VtaClienteService {
   constructor(
     @InjectRepository(VtaCliente)
     private readonly repo: Repository<VtaCliente>,
+    @InjectRepository(ClienteDireccionLink, 'back')
+    private readonly direccionLinkRepo: Repository<ClienteDireccionLink>,
   ) {}
 
   /**
@@ -208,6 +212,7 @@ export class VtaClienteService {
   async findOne(id: string) {
     const cliente = await this.repo.findOne({ where: { id } });
     if (!cliente) return null;
+    const direccionLink = await this.findDireccionLink(id);
 
     return {
       ...cliente,
@@ -215,7 +220,41 @@ export class VtaClienteService {
       // 🏠 Misma forma que devuelve /maps/distance, para que el checkout use un
       // solo mapeo al autocompletar (cliente que vuelve vs. dirección nueva).
       direccionSeparada: this.separarDireccionCliente(cliente),
+      direccionLink,
     };
+  }
+
+  async findDireccionLink(
+    clienteId: string,
+  ): Promise<ClienteDireccionLink | null> {
+    return this.direccionLinkRepo.findOne({ where: { clienteId } });
+  }
+
+  async saveDireccionLink(
+    clienteId: string,
+    dto: CreateClienteDireccionLinkDto,
+  ): Promise<ClienteDireccionLink> {
+    const direccionLink = this.direccionLinkRepo.create({
+      clienteId,
+      link: dto.link.trim(),
+      direccionTexto: this.nullIfBlank(dto.direccionTexto),
+      etiqueta: this.nullIfBlank(dto.etiqueta),
+    });
+
+    return this.direccionLinkRepo.save(direccionLink);
+  }
+
+  async removeDireccionLink(clienteId: string) {
+    const result = await this.direccionLinkRepo.delete(clienteId);
+    return typeof result.affected === 'number' && result.affected > 0
+      ? { message: `Link de direccion del cliente ${clienteId} eliminado.` }
+      : { message: `Link de direccion del cliente ${clienteId} no encontrado.` };
+  }
+
+  private nullIfBlank(value?: string): string | null {
+    if (value === undefined || value === null) return null;
+    const trimmed = value.trim();
+    return trimmed === '' ? null : trimmed;
   }
 
   /**

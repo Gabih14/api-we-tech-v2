@@ -2,12 +2,16 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { VtaClienteService } from './vta_cliente.service';
 import { VtaClienteController } from './vta_cliente.controller';
-import { VtaCliente } from './entities/vta_cliente.entity'; // 👈 Importá la entidad
+import { ClienteDireccionLink } from './entities/cliente-direccion-link.entity';
+import { VtaCliente } from './entities/vta_cliente.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([VtaCliente])], // 👈 IMPORTANTE
+  imports: [
+    TypeOrmModule.forFeature([VtaCliente]),
+    TypeOrmModule.forFeature([ClienteDireccionLink], 'back'),
+  ],
   controllers: [VtaClienteController],
   providers: [VtaClienteService],
-  exports: [VtaClienteService], // opcional si lo vas a usar desde otros módulos
+  exports: [VtaClienteService],
 })
 export class VtaClienteModule {}

@@ -1081,7 +1081,11 @@ export class PedidoService {
     const qb = this.pedidoRepo.createQueryBuilder('pedido');
 
     if (query.estado) {
-      if (!['PENDIENTE', 'APROBADO', 'CANCELADO'].includes(query.estado)) {
+      if (
+        !['PENDIENTE', 'APROBADO', 'CANCELADO', 'ERROR_STOCK'].includes(
+          query.estado,
+        )
+      ) {
         throw new BadRequestException('Estado inválido');
       }
       qb.andWhere('pedido.estado = :estado', { estado: query.estado });
@@ -1156,7 +1160,7 @@ export class PedidoService {
       throw new NotFoundException(`Pedido ${externalId} no encontrado`);
     }
 
-    if (pedido.estado !== 'PENDIENTE') {
+    if (pedido.estado !== 'PENDIENTE' && pedido.estado !== 'ERROR_STOCK') {
       throw new ConflictException(
         `Pedido ${externalId} no puede cancelarse (estado: ${pedido.estado})`,
       );
@@ -1188,6 +1192,34 @@ export class PedidoService {
     }
 
     return pedidoCancelado;
+  }
+
+  async notificarDeliveryPedidoErrorStock(externalId: string): Promise<Pedido> {
+    const pedido = await this.pedidoRepo.findOne({
+      where: { external_id: externalId },
+      relations: ['productos'],
+    });
+
+    if (!pedido) {
+      throw new NotFoundException(`Pedido ${externalId} no encontrado`);
+    }
+
+    if (pedido.estado !== 'ERROR_STOCK') {
+      throw new ConflictException(
+        `Pedido ${externalId} no tiene error de stock (estado: ${pedido.estado})`,
+      );
+    }
+
+    if (pedido.delivery_method !== 'shipping') {
+      throw new BadRequestException(
+        `Pedido ${externalId} no es de tipo delivery`,
+      );
+    }
+
+    const msg = this.whatsappService.formatearMensajeParaDelivery(pedido);
+    await this.telegramService.enviarMensajeDelivery(msg);
+
+    return pedido;
   }
 
   // 💳 Aprobar pedido por transferencia
@@ -1306,6 +1338,11 @@ export class PedidoService {
                 `Pedido ${externalId} requiere reconciliacion manual de stock`,
               );
             }
+          }
+
+          if (!stockConfirmado.length) {
+            pedido.estado = 'ERROR_STOCK';
+            pedido = await pedidoRepo.save(pedido);
           }
 
           this.logger.error(
