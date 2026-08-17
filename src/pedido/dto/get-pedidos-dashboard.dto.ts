@@ -1,5 +1,7 @@
+import { PedidoEstado } from '../entities/pedido.entity';
+
 export class GetPedidosDashboardDto {
-  estado?: 'PENDIENTE' | 'APROBADO' | 'CANCELADO';
+  estado?: PedidoEstado;
   from?: string;
   to?: string;
   q?: string;

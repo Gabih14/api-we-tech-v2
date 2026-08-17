@@ -2,6 +2,12 @@
 import { Column, Entity, PrimaryGeneratedColumn, OneToMany } from 'typeorm';
 import { PedidoItem } from './pedido-item.entity';
 
+export type PedidoEstado =
+  | 'PENDIENTE'
+  | 'APROBADO'
+  | 'CANCELADO'
+  | 'ERROR_STOCK';
+
 @Entity('pedido')
 export class Pedido {
   @PrimaryGeneratedColumn()
@@ -20,7 +26,7 @@ export class Pedido {
   total: number;
 
   @Column({ default: 'PENDIENTE' })
-  estado: 'PENDIENTE' | 'APROBADO' | 'CANCELADO';
+  estado: PedidoEstado;
 
   @OneToMany(() => PedidoItem, item => item.pedido, { cascade: true })
   productos: PedidoItem[];

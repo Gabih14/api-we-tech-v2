@@ -2009,6 +2009,55 @@ describe('PedidoService recalculo de importes', () => {
     );
   });
 
+  it('marca ERROR_STOCK cuando una transferencia cobrada no puede confirmar stock', async () => {
+    const pedido = {
+      id: 905,
+      external_id: 'pedido-error-stock',
+      estado: 'PENDIENTE',
+      metodo_pago: 'transfer',
+      comprobante_tipo: 'FX',
+      comprobante_numero: 'X 00001 00000006',
+      productos: [
+        { nombre: 'ITEM-SIN-STOCK', cantidad: 2, deposito_reserva: 'GARAGE' },
+      ],
+    };
+    createRepo.findOne.mockResolvedValue(pedido);
+    stockService.confirmarStockLote.mockRejectedValueOnce(
+      new Error('Stock fisico insuficiente para ITEM-SIN-STOCK'),
+    );
+
+    await expect(
+      service.aprobarTransferencia(pedido.external_id),
+    ).rejects.toThrow('Stock fisico insuficiente para ITEM-SIN-STOCK');
+
+    expect(createRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({ estado: 'ERROR_STOCK' }),
+    );
+    expect(pedido.estado).toBe('ERROR_STOCK');
+  });
+
+  it('permite cancelar un pedido marcado con ERROR_STOCK', async () => {
+    const pedido = {
+      id: 906,
+      external_id: 'pedido-error-stock-cancelable',
+      estado: 'ERROR_STOCK',
+      productos: [
+        { nombre: 'ITEM-1', cantidad: 1, deposito_reserva: 'DEPOSITO' },
+      ],
+    };
+    createRepo.findOne.mockResolvedValue(pedido);
+
+    await expect(
+      service.cancelarPedidoPendiente(pedido.external_id),
+    ).resolves.toMatchObject({ estado: 'CANCELADO' });
+
+    expect(stockService.liberarStock).toHaveBeenCalledWith(
+      'ITEM-1',
+      1,
+      'DEPOSITO',
+    );
+  });
+
   it('es idempotente cuando la transferencia ya esta aprobada', async () => {
     const pedido = {
       id: 903,
