@@ -1194,6 +1194,34 @@ export class PedidoService {
     return pedidoCancelado;
   }
 
+  async notificarDeliveryPedidoErrorStock(externalId: string): Promise<Pedido> {
+    const pedido = await this.pedidoRepo.findOne({
+      where: { external_id: externalId },
+      relations: ['productos'],
+    });
+
+    if (!pedido) {
+      throw new NotFoundException(`Pedido ${externalId} no encontrado`);
+    }
+
+    if (pedido.estado !== 'ERROR_STOCK') {
+      throw new ConflictException(
+        `Pedido ${externalId} no tiene error de stock (estado: ${pedido.estado})`,
+      );
+    }
+
+    if (pedido.delivery_method !== 'shipping') {
+      throw new BadRequestException(
+        `Pedido ${externalId} no es de tipo delivery`,
+      );
+    }
+
+    const msg = this.whatsappService.formatearMensajeParaDelivery(pedido);
+    await this.telegramService.enviarMensajeDelivery(msg);
+
+    return pedido;
+  }
+
   // 💳 Aprobar pedido por transferencia
   async aprobarTransferencia(
     externalId: string,

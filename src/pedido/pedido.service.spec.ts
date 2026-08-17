@@ -105,6 +105,7 @@ describe('PedidoService recalculo de importes', () => {
   };
   const telegramService = {
     enviarMensaje: jest.fn(async () => undefined),
+    enviarMensajeDelivery: jest.fn(async () => undefined),
   };
   const cobrosService = {
     cobrarFactura: jest.fn(async () => undefined),
@@ -2056,6 +2057,57 @@ describe('PedidoService recalculo de importes', () => {
       1,
       'DEPOSITO',
     );
+  });
+
+  it('envia a delivery un pedido shipping marcado con ERROR_STOCK', async () => {
+    const pedido = {
+      id: 907,
+      external_id: 'pedido-error-stock-delivery',
+      estado: 'ERROR_STOCK',
+      delivery_method: 'shipping',
+      cliente_nombre: 'Cliente Delivery',
+      cliente_cuit: '20123456789',
+      cliente_ubicacion: 'Calle 123, Mendoza',
+      cliente_direccion: 'Calle 123',
+      telefono: '2611234567',
+      costo_envio: 1000,
+      total: 5000,
+      productos: [
+        {
+          nombre: 'ITEM-1',
+          cantidad: 1,
+          precio_unitario: 4000,
+          subtotal: 4000,
+        },
+      ],
+    };
+    createRepo.findOne.mockResolvedValue(pedido);
+
+    await expect(
+      service.notificarDeliveryPedidoErrorStock(pedido.external_id),
+    ).resolves.toBe(pedido);
+
+    expect(whatsappService.formatearMensajeParaDelivery).toHaveBeenCalledWith(
+      pedido,
+    );
+    expect(telegramService.enviarMensajeDelivery).toHaveBeenCalledWith('msg');
+  });
+
+  it('no envia a delivery si el pedido no esta en ERROR_STOCK', async () => {
+    const pedido = {
+      id: 908,
+      external_id: 'pedido-pendiente-delivery',
+      estado: 'PENDIENTE',
+      delivery_method: 'shipping',
+      productos: [],
+    };
+    createRepo.findOne.mockResolvedValue(pedido);
+
+    await expect(
+      service.notificarDeliveryPedidoErrorStock(pedido.external_id),
+    ).rejects.toThrow('no tiene error de stock');
+
+    expect(telegramService.enviarMensajeDelivery).not.toHaveBeenCalled();
   });
 
   it('es idempotente cuando la transferencia ya esta aprobada', async () => {
