@@ -562,13 +562,11 @@ export class StkExistenciaService {
           ? existencias.find((row) => row.deposito === solicitud.deposito)
           : existencias
               .filter(
-                (row) =>
-                  Number(row.comprometido || 0) >= solicitud.cantidad,
+                (row) => Number(row.comprometido || 0) >= solicitud.cantidad,
               )
               .sort(
                 (a, b) =>
-                  Number(b.comprometido || 0) -
-                  Number(a.comprometido || 0),
+                  Number(b.comprometido || 0) - Number(a.comprometido || 0),
               )[0];
 
         if (!existencia) {
@@ -592,8 +590,7 @@ export class StkExistenciaService {
       const modificadas = new Set<StkExistencia>();
       for (const liberacion of liberaciones) {
         liberacion.existencia.comprometido = (
-          Number(liberacion.existencia.comprometido || 0) -
-          liberacion.cantidad
+          Number(liberacion.existencia.comprometido || 0) - liberacion.cantidad
         ).toString();
         modificadas.add(liberacion.existencia);
       }
@@ -601,6 +598,114 @@ export class StkExistenciaService {
       if (modificadas.size) {
         await repo.save([...modificadas]);
       }
+    });
+  }
+
+  /**
+   * Cancela una transferencia cuya existencia fisica ya fue descontada por
+   * el comprobante del ERP. Repone cantidad y elimina la reserva en un unico
+   * movimiento atomico.
+   */
+  async revertirReservaTransferenciaLote(
+    solicitudes: StockSolicitud[],
+  ): Promise<void> {
+    const agrupadas = this.agruparSolicitudes(solicitudes);
+
+    await this.stkExistenciaRepository.manager.transaction(async (manager) => {
+      const repo = manager.getRepository(StkExistencia);
+      const reversiones: Array<{
+        existencia: StkExistencia;
+        cantidad: number;
+      }> = [];
+
+      for (const solicitud of agrupadas) {
+        if (solicitud.item.startsWith('ENV')) continue;
+
+        const existencias = await repo.find({
+          where: { item: solicitud.item },
+          lock: { mode: 'pessimistic_write' },
+        });
+        const existencia = solicitud.deposito
+          ? existencias.find((row) => row.deposito === solicitud.deposito)
+          : existencias
+              .filter(
+                (row) => Number(row.comprometido || 0) >= solicitud.cantidad,
+              )
+              .sort(
+                (a, b) =>
+                  Number(b.comprometido || 0) - Number(a.comprometido || 0),
+              )[0];
+
+        if (!existencia) {
+          throw new NotFoundException(
+            `Reserva de transferencia no encontrada para ${solicitud.item}`,
+          );
+        }
+
+        const comprometido = Number(existencia.comprometido || 0);
+        if (comprometido < solicitud.cantidad) {
+          throw new ConflictException(
+            `Reserva insuficiente para revertir ${solicitud.item} en ${existencia.deposito}. Comprometido: ${comprometido}, Solicitado: ${solicitud.cantidad}`,
+          );
+        }
+
+        reversiones.push({ existencia, cantidad: solicitud.cantidad });
+      }
+
+      for (const reversion of reversiones) {
+        reversion.existencia.cantidad = (
+          Number(reversion.existencia.cantidad || 0) + reversion.cantidad
+        ).toString();
+        reversion.existencia.comprometido = (
+          Number(reversion.existencia.comprometido || 0) - reversion.cantidad
+        ).toString();
+      }
+
+      if (reversiones.length) {
+        await repo.save(reversiones.map(({ existencia }) => existencia));
+      }
+    });
+  }
+
+  /** Restaura solo la reserva si falla el guardado posterior de la aprobacion. */
+  async restaurarCompromisoLote(solicitudes: StockSolicitud[]): Promise<void> {
+    const agrupadas = this.agruparSolicitudes(solicitudes);
+
+    await this.stkExistenciaRepository.manager.transaction(async (manager) => {
+      const repo = manager.getRepository(StkExistencia);
+      const restauradas: StkExistencia[] = [];
+
+      for (const solicitud of agrupadas) {
+        if (solicitud.item.startsWith('ENV')) continue;
+
+        const existencia = solicitud.deposito
+          ? await repo.findOne({
+              where: {
+                item: solicitud.item,
+                deposito: solicitud.deposito,
+              },
+              lock: { mode: 'pessimistic_write' },
+            })
+          : (
+              await repo.find({
+                where: { item: solicitud.item },
+                lock: { mode: 'pessimistic_write' },
+              })
+            )[0];
+
+        if (!existencia) {
+          throw new NotFoundException(
+            `Existencia no encontrada para restaurar compromiso de ${solicitud.item}`,
+          );
+        }
+
+        existencia.comprometido = (
+          Number(existencia.comprometido || 0) + solicitud.cantidad
+        ).toString();
+        restauradas.push(existencia);
+      }
+
+      if (restauradas.length) await repo.save(restauradas);
     });
   }
 }

@@ -1166,13 +1166,19 @@ export class PedidoService {
       );
     }
 
-    await this.stockService.liberarStockLote(
-      pedido.productos.map((producto) => ({
-        item: producto.nombre,
-        cantidad: producto.cantidad,
-        deposito: producto.deposito_reserva ?? undefined,
-      })),
-    );
+    const solicitudesStock = pedido.productos.map((producto) => ({
+      item: producto.nombre,
+      cantidad: producto.cantidad,
+      deposito: producto.deposito_reserva ?? undefined,
+    }));
+
+    if (pedido.metodo_pago === 'transfer') {
+      await this.stockService.revertirReservaTransferenciaLote(
+        solicitudesStock,
+      );
+    } else {
+      await this.stockService.liberarStockLote(solicitudesStock);
+    }
 
     pedido.estado = 'CANCELADO';
     await this.eliminarComprobanteSiExiste(pedido);
@@ -1300,13 +1306,29 @@ export class PedidoService {
           comprobante: pedido.comprobante_numero,
         };
 
-        // La reserva se crea junto con el pedido y solo se libera si el pedido
-        // se cancela. Al aprobar una transferencia, el ERP es responsable de
-        // procesar existencia y reserva; la API no modifica stk_existencia.
-        pedido.estado = 'APROBADO';
-        pedido.aprobado = new Date();
-        pedido = await pedidoRepo.save(pedido);
-        aprobacionNueva = true;
+        const solicitudesStock = pedido.productos.map((producto) => ({
+          item: producto.nombre,
+          cantidad: producto.cantidad,
+          deposito: producto.deposito_reserva ?? undefined,
+        }));
+        let compromisoLiberado = false;
+
+        try {
+          // El comprobante del ERP ya desconto la existencia fisica. Al
+          // aprobar, la API convierte la reserva reduciendo solo comprometido.
+          await this.stockService.liberarStockLote(solicitudesStock);
+          compromisoLiberado = true;
+
+          pedido.estado = 'APROBADO';
+          pedido.aprobado = new Date();
+          pedido = await pedidoRepo.save(pedido);
+          aprobacionNueva = true;
+        } catch (error) {
+          if (compromisoLiberado) {
+            await this.stockService.restaurarCompromisoLote(solicitudesStock);
+          }
+          throw error;
+        }
       });
 
       if (!aprobacionNueva) {
