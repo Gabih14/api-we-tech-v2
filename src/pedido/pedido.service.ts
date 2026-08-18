@@ -1633,10 +1633,17 @@ export class PedidoService {
       );
       const ivaSubtotal = this.calcularIvaFacturaImporte(subtotal);
       const subtotalFinalBruto = this.redondear2(subtotal + ivaSubtotal);
-      const precioUnitario = this.redondearPrecio(subtotal / cantidad);
-      const precioUnitarioBruto = this.redondear2(
-        subtotalFinalBruto / cantidad,
-      );
+      // Para una bonificacion total conservamos el precio de lista en la linea.
+      // El importe final sigue siendo cero y el ERP representa la diferencia
+      // mediante un ajuste del 100%.
+      const precioUnitario =
+        descuentoPorcentaje === 100
+          ? precioBaseUnitario
+          : this.redondearPrecio(subtotal / cantidad);
+      const precioUnitarioBruto =
+        descuentoPorcentaje === 100
+          ? this.redondear2(subtotalBruto / cantidad)
+          : this.redondear2(subtotalFinalBruto / cantidad);
       const descuentoCuponAplicado =
         porcentajeCuponAplicable > descuentoProductoPorcentaje
           ? this.redondearPrecio(precioBaseUnitario * cantidad - subtotal)
@@ -1658,7 +1665,12 @@ export class PedidoService {
     const subtotal = this.redondearPrecio(
       precioBaseUnitario * cantidad * (1 - descuentoPorcentaje / 100),
     );
-    const precioUnitario = this.redondearPrecio(subtotal / cantidad);
+    // Un descuento del 100% no debe convertir el precio de lista en cero: el
+    // comprobante necesita ese valor para registrar el ajuste total.
+    const precioUnitario =
+      descuentoPorcentaje === 100
+        ? precioBaseUnitario
+        : this.redondearPrecio(subtotal / cantidad);
     const descuentoCuponAplicado =
       porcentajeCuponAplicable > descuentoProductoPorcentaje
         ? this.redondearPrecio(precioBaseUnitario * cantidad - subtotal)
