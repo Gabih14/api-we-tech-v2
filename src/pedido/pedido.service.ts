@@ -1150,7 +1150,10 @@ export class PedidoService {
     };
   }
 
-  async cancelarPedidoPendiente(externalId: string): Promise<Pedido> {
+  async cancelarPedidoPendiente(
+    externalId: string,
+    motivo = 'Pedido cancelado por administracion',
+  ): Promise<Pedido> {
     const pedido = await this.pedidoRepo.findOne({
       where: { external_id: externalId },
       relations: ['productos'],
@@ -1166,17 +1169,13 @@ export class PedidoService {
       );
     }
 
-    for (const producto of pedido.productos) {
-      try {
-        await this.stockService.liberarStock(
-          producto.nombre,
-          producto.cantidad,
-          producto.deposito_reserva ?? undefined,
-        );
-      } catch (err) {
-        console.error(`❌ Error liberando stock de ${producto.nombre}:`, err);
-      }
-    }
+    await this.stockService.liberarStockLote(
+      pedido.productos.map((producto) => ({
+        item: producto.nombre,
+        cantidad: producto.cantidad,
+        deposito: producto.deposito_reserva ?? undefined,
+      })),
+    );
 
     pedido.estado = 'CANCELADO';
     await this.eliminarComprobanteSiExiste(pedido);
@@ -1185,7 +1184,7 @@ export class PedidoService {
     try {
       await this.notificarCancelacionCliente(
         pedidoCancelado,
-        'Pedido cancelado por administracion',
+        motivo,
       );
     } catch (e) {
       console.error('mail cancelacion cliente', e);

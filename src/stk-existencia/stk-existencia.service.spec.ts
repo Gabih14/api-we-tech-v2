@@ -226,4 +226,60 @@ describe('StkExistenciaService', () => {
     expect(salida.cantidad).toBe('1');
     expect(repo.save).not.toHaveBeenCalled();
   });
+
+  it('libera un lote completo en una transaccion', async () => {
+    const item1 = {
+      item: 'ITEM-1',
+      deposito: 'DEPOSITO',
+      cantidad: '10',
+      comprometido: '3',
+    };
+    const item2 = {
+      item: 'ITEM-2',
+      deposito: 'LOCAL',
+      cantidad: '5',
+      comprometido: '2',
+    };
+    repo.find.mockImplementation(async ({ where }) =>
+      where.item === 'ITEM-1' ? [item1] : [item2],
+    );
+
+    await service.liberarStockLote([
+      { item: 'ITEM-1', cantidad: 2, deposito: 'DEPOSITO' },
+      { item: 'ITEM-2', cantidad: 1, deposito: 'LOCAL' },
+    ]);
+
+    expect(item1.comprometido).toBe('1');
+    expect(item2.comprometido).toBe('1');
+    expect(repo.save).toHaveBeenCalledWith([item1, item2]);
+  });
+
+  it('no libera parcialmente cuando una reserva del lote es insuficiente', async () => {
+    const item1 = {
+      item: 'ITEM-1',
+      deposito: 'DEPOSITO',
+      cantidad: '10',
+      comprometido: '3',
+    };
+    const item2 = {
+      item: 'ITEM-2',
+      deposito: 'LOCAL',
+      cantidad: '5',
+      comprometido: '0',
+    };
+    repo.find.mockImplementation(async ({ where }) =>
+      where.item === 'ITEM-1' ? [item1] : [item2],
+    );
+
+    await expect(
+      service.liberarStockLote([
+        { item: 'ITEM-1', cantidad: 2, deposito: 'DEPOSITO' },
+        { item: 'ITEM-2', cantidad: 1, deposito: 'LOCAL' },
+      ]),
+    ).rejects.toThrow('Reserva insuficiente para liberar ITEM-2');
+
+    expect(item1.comprometido).toBe('3');
+    expect(item2.comprometido).toBe('0');
+    expect(repo.save).not.toHaveBeenCalled();
+  });
 });
