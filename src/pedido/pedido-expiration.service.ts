@@ -3,7 +3,6 @@ import { Cron } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, LessThan, Not, Repository } from 'typeorm';
 import { Pedido } from './entities/pedido.entity';
-import { StkExistenciaService } from 'src/stk-existencia/stk-existencia.service';
 import { CobrosService } from 'src/vta-comprobante/cobros.service';
 import { PedidoService } from './pedido.service';
 
@@ -15,7 +14,6 @@ export class PedidoExpirationService {
   constructor(
     @InjectRepository(Pedido, 'back')
     private readonly pedidoRepo: Repository<Pedido>,
-    private readonly existenciaService: StkExistenciaService,
     private readonly cobrosService: CobrosService,
     private readonly pedidoService: PedidoService,
   ) {}
@@ -53,44 +51,32 @@ export class PedidoExpirationService {
     let fallos = 0;
 
     for (const pedido of pendientes) {
-      const liberacionesExitosas: Array<{ nombre: string; cantidad: number }> =
-        [];
-      let tieneErrores = false;
-
       try {
-        // 1️⃣ Intentar liberar cada producto
-        for (const p of pedido.productos) {
-          try {
-            await this.existenciaService.liberarStock(
-              p.nombre,
-              p.cantidad,
-              p.deposito_reserva ?? undefined,
-            );
-            liberacionesExitosas.push({
-              nombre: p.nombre,
-              cantidad: p.cantidad,
-            });
-          } catch (stockError) {
-            tieneErrores = true;
+        if (
+          pedido.metodo_pago === 'transfer' &&
+          pedido.comprobante_tipo &&
+          pedido.comprobante_numero
+        ) {
+          const tieneCobro = await this.cobrosService.tieneCobroFacturaDelPedido(
+            pedido.comprobante_tipo,
+            pedido.comprobante_numero,
+            pedido,
+          );
+
+          if (tieneCobro) {
             this.logger.warn(
-              `[${pedido.external_id}] No se pudo liberar stock de ${p.nombre} (${p.cantidad}): ${stockError?.message || stockError}`,
+              `[${pedido.external_id}] No se expira: la transferencia tiene un cobro asociado`,
             );
+            continue;
           }
         }
 
-        // 2️⃣ Marcar como cancelado incluso si hubo fallos parciales
-        pedido.estado = 'CANCELADO';
-        await this.pedidoRepo.save(pedido);
+        await this.pedidoService.cancelarPedidoPendiente(
+          pedido.external_id,
+          'Pedido cancelado automaticamente por expiracion',
+        );
         expirados++;
-
-        // 3️⃣ Registrar el resultado
-        if (tieneErrores) {
-          this.logger.log(
-            `[${pedido.external_id}] Cancelado con advertencias. Liberadas: ${liberacionesExitosas.length}/${pedido.productos.length}`,
-          );
-        } else {
-          this.logger.log(`[${pedido.external_id}] Cancelado exitosamente`);
-        }
+        this.logger.log(`[${pedido.external_id}] Cancelado exitosamente`);
       } catch (e) {
         fallos++;
         this.logger.error(

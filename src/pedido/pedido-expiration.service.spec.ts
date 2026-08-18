@@ -24,11 +24,11 @@ describe('PedidoExpirationService', () => {
     };
     const pedidoService = {
       aprobarTransferencia: jest.fn(),
+      cancelarPedidoPendiente: jest.fn().mockResolvedValue(undefined),
     };
 
     const service = new PedidoExpirationService(
       pedidoRepo as any,
-      {} as any,
       cobrosService as any,
       pedidoService as any,
     );
@@ -74,5 +74,38 @@ describe('PedidoExpirationService', () => {
       pedido,
     );
     expect(pedidoService.aprobarTransferencia).not.toHaveBeenCalled();
+  });
+
+  it('cancela un pedido online expirado usando el flujo completo', async () => {
+    const pedido = {
+      external_id: 'pedido-online-expirado',
+      metodo_pago: 'online',
+    };
+    const { service, pedidoRepo, pedidoService } = createService();
+    pedidoRepo.find.mockResolvedValueOnce([pedido]).mockResolvedValueOnce([]);
+
+    await expect(service.run(30)).resolves.toMatchObject({ expirados: 1 });
+
+    expect(pedidoService.cancelarPedidoPendiente).toHaveBeenCalledWith(
+      pedido.external_id,
+      'Pedido cancelado automaticamente por expiracion',
+    );
+  });
+
+  it('no cancela una transferencia expirada que ya tiene cobro', async () => {
+    const pedido = {
+      external_id: 'pedido-transfer-cobrado',
+      metodo_pago: 'transfer',
+      comprobante_tipo: 'FX',
+      comprobante_numero: 'X 00001 00000002',
+    };
+    const { service, pedidoRepo, cobrosService, pedidoService } =
+      createService();
+    pedidoRepo.find.mockResolvedValueOnce([]).mockResolvedValueOnce([pedido]);
+    cobrosService.tieneCobroFacturaDelPedido.mockResolvedValueOnce(true);
+
+    await expect(service.run(30)).resolves.toMatchObject({ expirados: 0 });
+
+    expect(pedidoService.cancelarPedidoPendiente).not.toHaveBeenCalled();
   });
 });

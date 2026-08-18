@@ -62,6 +62,7 @@ describe('PedidoService recalculo de importes', () => {
   const stockService = {
     reservarStock: jest.fn(async () => 'DEPOSITO'),
     liberarStock: jest.fn(async () => undefined),
+    liberarStockLote: jest.fn(async () => undefined),
     confirmarStock: jest.fn(async () => 'DEPOSITO'),
     restaurarStockConfirmado: jest.fn(async () => undefined),
     confirmarStockLote: jest.fn(async (solicitudes) =>
@@ -85,6 +86,7 @@ describe('PedidoService recalculo de importes', () => {
   };
   const vtaComprobanteService = {
     crearDesdePedido: jest.fn(),
+    eliminarComprobantePorPedido: jest.fn(async () => ({ eliminado: true })),
   };
   const configService = {
     get: jest.fn((key: string) => {
@@ -2052,11 +2054,9 @@ describe('PedidoService recalculo de importes', () => {
       service.cancelarPedidoPendiente(pedido.external_id),
     ).resolves.toMatchObject({ estado: 'CANCELADO' });
 
-    expect(stockService.liberarStock).toHaveBeenCalledWith(
-      'ITEM-1',
-      1,
-      'DEPOSITO',
-    );
+    expect(stockService.liberarStockLote).toHaveBeenCalledWith([
+      { item: 'ITEM-1', cantidad: 1, deposito: 'DEPOSITO' },
+    ]);
   });
 
   it('envia a delivery un pedido shipping marcado con ERROR_STOCK', async () => {

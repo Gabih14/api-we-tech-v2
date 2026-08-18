@@ -528,4 +528,79 @@ export class StkExistenciaService {
 
     await this.stkExistenciaRepository.save(existencia);
   }
+
+  /**
+   * Libera todas las reservas de un pedido de forma atomica. Primero valida
+   * el lote completo y bloquea las existencias involucradas; si una reserva
+   * no existe o es insuficiente, no modifica ninguna fila.
+   */
+  async liberarStockLote(solicitudes: StockSolicitud[]): Promise<void> {
+    const agrupadas = this.agruparSolicitudes(solicitudes);
+
+    await this.stkExistenciaRepository.manager.transaction(async (manager) => {
+      const repo = manager.getRepository(StkExistencia);
+      const liberaciones: Array<{
+        existencia: StkExistencia;
+        cantidad: number;
+      }> = [];
+
+      for (const solicitud of agrupadas) {
+        if (solicitud.item.startsWith('ENV')) continue;
+
+        const existencias = await repo.find({
+          where: { item: solicitud.item },
+          lock: { mode: 'pessimistic_write' },
+        });
+
+        if (!existencias.length) {
+          throw new NotFoundException(
+            `Stock no encontrado para ${solicitud.item}`,
+          );
+        }
+
+        const existencia = solicitud.deposito
+          ? existencias.find((row) => row.deposito === solicitud.deposito)
+          : existencias
+              .filter(
+                (row) =>
+                  Number(row.comprometido || 0) >= solicitud.cantidad,
+              )
+              .sort(
+                (a, b) =>
+                  Number(b.comprometido || 0) -
+                  Number(a.comprometido || 0),
+              )[0];
+
+        if (!existencia) {
+          throw new NotFoundException(
+            `Reserva no encontrada para ${solicitud.item}${
+              solicitud.deposito ? ` en ${solicitud.deposito}` : ''
+            }`,
+          );
+        }
+
+        const comprometido = Number(existencia.comprometido || 0);
+        if (comprometido < solicitud.cantidad) {
+          throw new ConflictException(
+            `Reserva insuficiente para liberar ${solicitud.item} en ${existencia.deposito}. Comprometido: ${comprometido}, Solicitado: ${solicitud.cantidad}`,
+          );
+        }
+
+        liberaciones.push({ existencia, cantidad: solicitud.cantidad });
+      }
+
+      const modificadas = new Set<StkExistencia>();
+      for (const liberacion of liberaciones) {
+        liberacion.existencia.comprometido = (
+          Number(liberacion.existencia.comprometido || 0) -
+          liberacion.cantidad
+        ).toString();
+        modificadas.add(liberacion.existencia);
+      }
+
+      if (modificadas.size) {
+        await repo.save([...modificadas]);
+      }
+    });
+  }
 }
