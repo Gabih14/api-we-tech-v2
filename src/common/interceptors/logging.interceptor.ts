@@ -75,6 +75,7 @@ export class LoggingInterceptor implements NestInterceptor {
     return (
       method === 'GET' &&
       (path.endsWith('/vta-comprobante/metrics') ||
+        path.endsWith('/vta-comprobante/metrics/ventas-mensuales') ||
         path.endsWith('/vta-comprobante/metrics/ventas-por-vendedor') ||
         /(?:^|\/)cupones\/[^/]+\/estadisticas$/.test(path))
     );
