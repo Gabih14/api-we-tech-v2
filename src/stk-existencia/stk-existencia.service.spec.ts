@@ -254,6 +254,66 @@ describe('StkExistenciaService', () => {
     expect(repo.save).toHaveBeenCalledWith([item1, item2]);
   });
 
+  it('aprueba una transferencia quitando el compromiso sin tocar existencia', async () => {
+    const existencia = {
+      item: 'ITEM-1',
+      deposito: 'DEPOSITO',
+      cantidad: '0',
+      comprometido: '1',
+    };
+    repo.find.mockResolvedValue([existencia]);
+
+    await service.liberarStockLote([
+      { item: 'ITEM-1', cantidad: 1, deposito: 'DEPOSITO' },
+    ]);
+
+    expect(existencia).toMatchObject({
+      cantidad: '0',
+      comprometido: '0',
+    });
+    expect(repo.save).toHaveBeenCalledWith([existencia]);
+  });
+
+  it('cancela una transferencia reponiendo existencia y quitando compromiso', async () => {
+    const existencia = {
+      item: 'ITEM-1',
+      deposito: 'DEPOSITO',
+      cantidad: '0',
+      comprometido: '1',
+    };
+    repo.find.mockResolvedValue([existencia]);
+
+    await service.revertirReservaTransferenciaLote([
+      { item: 'ITEM-1', cantidad: 1, deposito: 'DEPOSITO' },
+    ]);
+
+    expect(existencia).toMatchObject({
+      cantidad: '1',
+      comprometido: '0',
+    });
+    expect(repo.save).toHaveBeenCalledWith([existencia]);
+  });
+
+  it('restaura solo el compromiso si falla el guardado de la aprobacion', async () => {
+    const existencia = {
+      item: 'ITEM-1',
+      deposito: 'DEPOSITO',
+      cantidad: '0',
+      comprometido: '0',
+    };
+    repo.findOne.mockResolvedValue(existencia);
+
+    await service.restaurarCompromisoLote([
+      { item: 'ITEM-1', cantidad: 1, deposito: 'DEPOSITO' },
+    ]);
+
+    expect(existencia).toMatchObject({
+      cantidad: '0',
+      comprometido: '1',
+    });
+    expect(repo.save).toHaveBeenCalledWith([existencia]);
+  });
+
   it('no libera parcialmente cuando una reserva del lote es insuficiente', async () => {
     const item1 = {
       item: 'ITEM-1',
