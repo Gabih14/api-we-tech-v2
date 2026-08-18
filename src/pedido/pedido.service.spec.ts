@@ -1921,7 +1921,7 @@ describe('PedidoService recalculo de importes', () => {
     expect(tokenSpy).not.toHaveBeenCalled();
   });
 
-  it('crea una transferencia sin reservar stock en la API', async () => {
+  it('crea una transferencia reservando stock', async () => {
     stkItemRepo.findOne.mockResolvedValue(itemConPrecio('ITEM-TRANSFER', '10'));
     vtaComprobanteService.crearDesdePedido.mockResolvedValue({
       tipo: 'FX',
@@ -1943,9 +1943,9 @@ describe('PedidoService recalculo de importes', () => {
       }),
     );
 
-    expect(stockService.reservarStock).not.toHaveBeenCalled();
+    expect(stockService.reservarStock).toHaveBeenCalledWith('ITEM-TRANSFER', 1);
     expect(stockService.liberarStock).not.toHaveBeenCalled();
-    expect(pedido.productos[0].deposito_reserva).toBeNull();
+    expect(pedido.productos[0].deposito_reserva).toBe('DEPOSITO');
   });
 
   it('mantiene la reserva de stock al crear un pedido online', async () => {
@@ -2097,13 +2097,15 @@ describe('PedidoService recalculo de importes', () => {
     ]);
   });
 
-  it('cancela una transferencia sin liberar stock desde la API', async () => {
+  it('cancela una transferencia liberando la reserva', async () => {
     const pedido = {
       id: 909,
       external_id: 'pedido-transfer-cancelable',
       estado: 'PENDIENTE',
       metodo_pago: 'transfer',
-      productos: [{ nombre: 'ITEM-1', cantidad: 1, deposito_reserva: null }],
+      productos: [
+        { nombre: 'ITEM-1', cantidad: 1, deposito_reserva: 'DEPOSITO' },
+      ],
     };
     createRepo.findOne.mockResolvedValue(pedido);
 
@@ -2111,8 +2113,9 @@ describe('PedidoService recalculo de importes', () => {
       service.cancelarPedidoPendiente(pedido.external_id),
     ).resolves.toMatchObject({ estado: 'CANCELADO' });
 
-    expect(stockService.liberarStockLote).not.toHaveBeenCalled();
-    expect(stockService.liberarStock).not.toHaveBeenCalled();
+    expect(stockService.liberarStockLote).toHaveBeenCalledWith([
+      { item: 'ITEM-1', cantidad: 1, deposito: 'DEPOSITO' },
+    ]);
   });
 
   it('envia a delivery un pedido shipping marcado con ERROR_STOCK', async () => {
