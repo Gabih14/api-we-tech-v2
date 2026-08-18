@@ -15,10 +15,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Pedido } from './entities/pedido.entity';
 import { Brackets, Repository } from 'typeorm';
 import { CreatePedidoDto } from './dto/create-pedido.dto';
-import {
-  StkExistenciaService,
-  StockConfirmado,
-} from 'src/stk-existencia/stk-existencia.service';
+import { StkExistenciaService } from 'src/stk-existencia/stk-existencia.service';
 import { StkItem } from 'src/stk-item/entities/stk-item.entity';
 import { StkAtributo } from 'src/stk-item/entities/stk-atributo.entity';
 import { StkAtributoNodo } from 'src/stk-item/entities/stk-atributo-nodo.entity';
@@ -308,33 +305,35 @@ export class PedidoService {
     });
 
     const reservasRealizadas: PedidoItem[] = [];
-    try {
-      for (const p of productosValidados) {
-        p.deposito_reserva = await this.stockService.reservarStock(
-          p.nombre,
-          p.cantidad,
-        );
-        reservasRealizadas.push(p);
-      }
-    } catch (error) {
-      for (const reservado of reservasRealizadas.reverse()) {
-        try {
-          await this.stockService.liberarStock(
-            reservado.nombre,
-            reservado.cantidad,
-            reservado.deposito_reserva ?? undefined,
+    if (metodoPago === 'online') {
+      try {
+        for (const p of productosValidados) {
+          p.deposito_reserva = await this.stockService.reservarStock(
+            p.nombre,
+            p.cantidad,
           );
-        } catch (rollbackError) {
-          this.logger.error(
-            `Error liberando reserva incompleta de ${reservado.nombre}: ${
-              rollbackError instanceof Error
-                ? rollbackError.message
-                : String(rollbackError)
-            }`,
-          );
+          reservasRealizadas.push(p);
         }
+      } catch (error) {
+        for (const reservado of reservasRealizadas.reverse()) {
+          try {
+            await this.stockService.liberarStock(
+              reservado.nombre,
+              reservado.cantidad,
+              reservado.deposito_reserva ?? undefined,
+            );
+          } catch (rollbackError) {
+            this.logger.error(
+              `Error liberando reserva incompleta de ${reservado.nombre}: ${
+                rollbackError instanceof Error
+                  ? rollbackError.message
+                  : String(rollbackError)
+              }`,
+            );
+          }
+        }
+        throw error;
       }
-      throw error;
     }
 
     const externalId = uuidv4().replace(/-/g, '');
@@ -414,7 +413,7 @@ export class PedidoService {
         pedidoGuardado.comprobante_numero = comp.comprobante;
         await this.pedidoRepo.save(pedidoGuardado);
       } catch (err) {
-        for (const p of productosValidados) {
+        for (const p of reservasRealizadas) {
           try {
             await this.stockService.liberarStock(
               p.nombre,
@@ -1169,23 +1168,22 @@ export class PedidoService {
       );
     }
 
-    await this.stockService.liberarStockLote(
-      pedido.productos.map((producto) => ({
-        item: producto.nombre,
-        cantidad: producto.cantidad,
-        deposito: producto.deposito_reserva ?? undefined,
-      })),
-    );
+    if (pedido.metodo_pago !== 'transfer') {
+      await this.stockService.liberarStockLote(
+        pedido.productos.map((producto) => ({
+          item: producto.nombre,
+          cantidad: producto.cantidad,
+          deposito: producto.deposito_reserva ?? undefined,
+        })),
+      );
+    }
 
     pedido.estado = 'CANCELADO';
     await this.eliminarComprobanteSiExiste(pedido);
     const pedidoCancelado = await this.pedidoRepo.save(pedido);
 
     try {
-      await this.notificarCancelacionCliente(
-        pedidoCancelado,
-        motivo,
-      );
+      await this.notificarCancelacionCliente(pedidoCancelado, motivo);
     } catch (e) {
       console.error('mail cancelacion cliente', e);
     }
@@ -1272,7 +1270,7 @@ export class PedidoService {
           return;
         }
 
-        if (pedido.estado !== 'PENDIENTE') {
+        if (pedido.estado !== 'PENDIENTE' && pedido.estado !== 'ERROR_STOCK') {
           throw new ConflictException(
             `Pedido ${externalId} no puede aprobarse (estado: ${pedido.estado})`,
           );
@@ -1306,51 +1304,13 @@ export class PedidoService {
           comprobante: pedido.comprobante_numero,
         };
 
-        let stockConfirmado: StockConfirmado[] = [];
-        try {
-          stockConfirmado = await this.stockService.confirmarStockLote(
-            pedido.productos.map((producto) => ({
-              item: producto.nombre,
-              cantidad: producto.cantidad,
-              deposito: producto.deposito_reserva ?? undefined,
-            })),
-          );
-
-          pedido.estado = 'APROBADO';
-          pedido.aprobado = new Date();
-          pedido = await pedidoRepo.save(pedido);
-          aprobacionNueva = true;
-        } catch (error) {
-          if (stockConfirmado.length) {
-            try {
-              await this.stockService.restaurarStockConfirmadoLote(
-                stockConfirmado,
-              );
-            } catch (rollbackError) {
-              this.logger.error(
-                `[${externalId}] Fallo critico restaurando stock luego de una aprobacion fallida`,
-                rollbackError instanceof Error
-                  ? rollbackError.stack
-                  : String(rollbackError),
-              );
-              throw new InternalServerErrorException(
-                `Pedido ${externalId} requiere reconciliacion manual de stock`,
-              );
-            }
-          }
-
-          if (!stockConfirmado.length) {
-            pedido.estado = 'ERROR_STOCK';
-            pedido = await pedidoRepo.save(pedido);
-          }
-
-          this.logger.error(
-            `[${externalId}] No se pudo completar la aprobacion de transferencia: ${
-              error instanceof Error ? error.message : String(error)
-            }`,
-          );
-          throw error;
-        }
+        // El ERP es la unica fuente de verdad para los movimientos de stock de
+        // transferencias. La API solo refleja la aprobacion luego de validar el
+        // cobro y no reserva, confirma, libera ni compensa stk_existencia.
+        pedido.estado = 'APROBADO';
+        pedido.aprobado = new Date();
+        pedido = await pedidoRepo.save(pedido);
+        aprobacionNueva = true;
       });
 
       if (!aprobacionNueva) {
