@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
-import { IsNull, LessThan, Not, Repository } from 'typeorm';
+import { In, IsNull, LessThan, Not, Repository } from 'typeorm';
 import { Pedido } from './entities/pedido.entity';
 import { CobrosService } from 'src/vta-comprobante/cobros.service';
 import { PedidoService } from './pedido.service';
@@ -57,11 +57,12 @@ export class PedidoExpirationService {
           pedido.comprobante_tipo &&
           pedido.comprobante_numero
         ) {
-          const tieneCobro = await this.cobrosService.tieneCobroFacturaDelPedido(
-            pedido.comprobante_tipo,
-            pedido.comprobante_numero,
-            pedido,
-          );
+          const tieneCobro =
+            await this.cobrosService.tieneCobroFacturaDelPedido(
+              pedido.comprobante_tipo,
+              pedido.comprobante_numero,
+              pedido,
+            );
 
           if (tieneCobro) {
             this.logger.warn(
@@ -116,7 +117,7 @@ export class PedidoExpirationService {
 
     const pendientes = await this.pedidoRepo.find({
       where: {
-        estado: 'PENDIENTE',
+        estado: In(['PENDIENTE', 'ERROR_STOCK']),
         metodo_pago: 'transfer',
         comprobante_tipo: Not(IsNull()),
         comprobante_numero: Not(IsNull()),
