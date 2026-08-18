@@ -1459,7 +1459,7 @@ describe('PedidoService recalculo de importes', () => {
         {
           nombre: 'ENV-07K-GM-DELIVERY',
           cantidad: 1,
-          precio_unitario: 0,
+          precio_unitario: 3999,
           subtotal: 0,
           ajuste_porcentaje: 100,
         },
@@ -1470,7 +1470,7 @@ describe('PedidoService recalculo de importes', () => {
 
     expect(pedido.costo_envio).toBe(0);
     expect(pedido.total).toBe(1000);
-    expect(pedido.productos[1].precio_unitario).toBe(0);
+    expect(pedido.productos[1].precio_unitario).toBe(3999);
     expect(pedido.productos[1].subtotal).toBe(0);
     expect(pedido.productos[1].ajuste_porcentaje).toBe(100);
   });

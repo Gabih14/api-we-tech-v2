@@ -606,6 +606,40 @@ describe('VtaComprobanteService crearDesdePedido', () => {
       comprobante: 'X 00001 00000001',
     });
   });
+
+  it('conserva el precio y registra ajuste del 100% para un envio bonificado', async () => {
+    await service.crearDesdePedido(
+      pedidoBase(
+        [
+          {
+            nombre: 'ENV-02K-GM-DELIVERY',
+            cantidad: 1,
+            precio_unitario: 3999,
+            subtotal: 0,
+            ajuste_porcentaje: 100,
+          },
+        ],
+        0,
+      ),
+    );
+
+    expect(comprobanteRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        total: 0,
+        ajuste: -100,
+        ajuste_neto: -3999,
+      }),
+    );
+    expect(comprobanteItemService.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        itemId: 'ENV-02K-GM-DELIVERY',
+        precio: 3999,
+        importe: 0,
+        ajuste: -100,
+        ajuste_neto: -3999,
+      }),
+    );
+  });
 });
 
 describe('VtaComprobanteService eliminarComprobantePorPedido', () => {
