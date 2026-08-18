@@ -2,21 +2,21 @@
 
 ## Regla de propiedad
 
-- **Online:** la API es responsable de reservar, confirmar, liberar y
-  compensar stock en `stk_existencia`.
-- **Transferencia:** el ERP es la única fuente de verdad para los movimientos
-  de stock. La API no escribe en `stk_existencia` durante ninguna transición
-  del pedido.
+- **Online:** la API reserva, confirma, libera y compensa stock en
+  `stk_existencia`.
+- **Transferencia:** la API reserva al crear el pedido y libera esa reserva si
+  el pedido se cancela. Cuando la transferencia se aprueba, el ERP es
+  responsable de procesar la existencia y la reserva.
 
 ## Matriz del flujo
 
-| Operación                    | Online                                    | Transferencia                                     |
-| ---------------------------- | ----------------------------------------- | ------------------------------------------------- |
-| Crear pedido                 | Reserva stock y guarda `deposito_reserva` | No reserva ni modifica existencias                |
-| Aprobar pago                 | Resta la reserva y la existencia física   | Solo valida el cobro y marca el pedido `APROBADO` |
-| Cancelar o expirar           | Libera la reserva                         | No modifica existencias                           |
-| Compensar un error posterior | Restaura existencia y reserva             | No modifica existencias                           |
-| Registrar la venta en el ERP | Crea el comprobante al aprobar            | Crea el comprobante pendiente al crear el pedido  |
+| Operación                    | Online                                    | Transferencia                                       |
+| ---------------------------- | ----------------------------------------- | --------------------------------------------------- |
+| Crear pedido                 | Reserva stock y guarda `deposito_reserva` | Reserva stock y guarda `deposito_reserva`           |
+| Aprobar pago                 | Resta la reserva y la existencia física   | No modifica `stk_existencia`; solo marca `APROBADO` |
+| Cancelar o expirar           | Libera la reserva                         | Libera la reserva                                   |
+| Compensar un error posterior | Restaura existencia y reserva             | No modifica existencias                             |
+| Registrar la venta en el ERP | Crea el comprobante al aprobar            | Crea el comprobante pendiente al crear el pedido    |
 
 ## Motivo
 
@@ -27,15 +27,15 @@ API intenta volver a reducirla al detectar el cobro.
 
 Por ese motivo, `aprobarTransferencia` conserva las validaciones de pedido,
 comprobante y cobro, pero no invoca ningún método de `StkExistenciaService`.
-La misma exclusión se aplica al alta y a la cancelación de transferencias.
+La reserva se mantiene durante la aprobación para que el sistema de gestión
+la procese. Si la transferencia se cancela o expira antes de aprobarse, la API
+sí libera la reserva.
 
 ## Pedidos anteriores al cambio
 
-Una transferencia creada antes de esta regla puede conservar valores en
-`comprometido` generados por la API anterior. El nuevo flujo no los corrige
-automáticamente porque hacerlo sería otro movimiento sobre existencias. Esos
-casos deben reconciliarse una sola vez desde el ERP o mediante un procedimiento
-controlado antes de considerar cerrado el incidente.
+Una transferencia creada antes de esta regla puede estar en `ERROR_STOCK` por
+el intento anterior de confirmar existencia desde la API. Al reintentarse, la
+API conservará su reserva y el ERP deberá procesarla al aprobar la operación.
 
 Los pedidos en `ERROR_STOCK` con un cobro válido pueden reintentarse: se
 marcarán `APROBADO` sin consultar ni modificar `stk_existencia`.

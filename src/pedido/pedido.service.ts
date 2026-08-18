@@ -305,35 +305,33 @@ export class PedidoService {
     });
 
     const reservasRealizadas: PedidoItem[] = [];
-    if (metodoPago === 'online') {
-      try {
-        for (const p of productosValidados) {
-          p.deposito_reserva = await this.stockService.reservarStock(
-            p.nombre,
-            p.cantidad,
-          );
-          reservasRealizadas.push(p);
-        }
-      } catch (error) {
-        for (const reservado of reservasRealizadas.reverse()) {
-          try {
-            await this.stockService.liberarStock(
-              reservado.nombre,
-              reservado.cantidad,
-              reservado.deposito_reserva ?? undefined,
-            );
-          } catch (rollbackError) {
-            this.logger.error(
-              `Error liberando reserva incompleta de ${reservado.nombre}: ${
-                rollbackError instanceof Error
-                  ? rollbackError.message
-                  : String(rollbackError)
-              }`,
-            );
-          }
-        }
-        throw error;
+    try {
+      for (const p of productosValidados) {
+        p.deposito_reserva = await this.stockService.reservarStock(
+          p.nombre,
+          p.cantidad,
+        );
+        reservasRealizadas.push(p);
       }
+    } catch (error) {
+      for (const reservado of reservasRealizadas.reverse()) {
+        try {
+          await this.stockService.liberarStock(
+            reservado.nombre,
+            reservado.cantidad,
+            reservado.deposito_reserva ?? undefined,
+          );
+        } catch (rollbackError) {
+          this.logger.error(
+            `Error liberando reserva incompleta de ${reservado.nombre}: ${
+              rollbackError instanceof Error
+                ? rollbackError.message
+                : String(rollbackError)
+            }`,
+          );
+        }
+      }
+      throw error;
     }
 
     const externalId = uuidv4().replace(/-/g, '');
@@ -1168,15 +1166,13 @@ export class PedidoService {
       );
     }
 
-    if (pedido.metodo_pago !== 'transfer') {
-      await this.stockService.liberarStockLote(
-        pedido.productos.map((producto) => ({
-          item: producto.nombre,
-          cantidad: producto.cantidad,
-          deposito: producto.deposito_reserva ?? undefined,
-        })),
-      );
-    }
+    await this.stockService.liberarStockLote(
+      pedido.productos.map((producto) => ({
+        item: producto.nombre,
+        cantidad: producto.cantidad,
+        deposito: producto.deposito_reserva ?? undefined,
+      })),
+    );
 
     pedido.estado = 'CANCELADO';
     await this.eliminarComprobanteSiExiste(pedido);
@@ -1304,9 +1300,9 @@ export class PedidoService {
           comprobante: pedido.comprobante_numero,
         };
 
-        // El ERP es la unica fuente de verdad para los movimientos de stock de
-        // transferencias. La API solo refleja la aprobacion luego de validar el
-        // cobro y no reserva, confirma, libera ni compensa stk_existencia.
+        // La reserva se crea junto con el pedido y solo se libera si el pedido
+        // se cancela. Al aprobar una transferencia, el ERP es responsable de
+        // procesar existencia y reserva; la API no modifica stk_existencia.
         pedido.estado = 'APROBADO';
         pedido.aprobado = new Date();
         pedido = await pedidoRepo.save(pedido);
