@@ -98,19 +98,19 @@ Si se envia `factura_tipo` con valor `A` o `B`, el backend valida los importes d
 
 El envio gratis aplica solo para pedidos `tipo_envio: "shipping"` cuando el peso total de productos reales es mayor o igual a 10 kg. Los productos de envio con formato `ENV-<n>K-GM-DELIVERY` no suman peso: la `K` del codigo representa kilometros de delivery, no kilos.
 
-Si los productos reales llegan al umbral de envio gratis, el producto `ENV` debe seguir dentro de `productos`, pero bonificado al 100%:
+Si los productos reales llegan al umbral de envio gratis, el producto `ENV` debe seguir dentro de `productos`, pero bonificado al 100%. En ese caso `precio_unitario` debe conservar el precio de lista del producto de envio y el importe final de la linea se representa con `subtotal: 0` y `ajuste_porcentaje: 100`:
 
 ```json
 {
   "nombre": "ENV-11K-GM-DELIVERY",
   "cantidad": 1,
-  "precio_unitario": 0,
+  "precio_unitario": 5599,
   "subtotal": 0,
   "ajuste_porcentaje": 100
 }
 ```
 
-En ese caso `costo_envio` debe enviarse como `0` y el `total` no debe incluir el envio. Si los productos reales pesan menos de 10 kg, el `ENV` mantiene su precio normal aunque el codigo indique, por ejemplo, `11K`.
+En ese caso `costo_envio` debe enviarse como `0` y el `total` no debe incluir el envio. No enviar `precio_unitario: 0` para el producto `ENV`: el backend valida ese valor contra el precio de lista y usa `ajuste_porcentaje: 100` para registrar la bonificacion total. Si los productos reales pesan menos de 10 kg, el `ENV` mantiene su precio normal aunque el codigo indique, por ejemplo, `11K`.
 
 ```json
 {

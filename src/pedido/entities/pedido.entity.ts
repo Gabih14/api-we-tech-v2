@@ -67,6 +67,9 @@ export class Pedido {
   @Column({ type: 'varchar', length: 512, nullable: true })
   cliente_direccion: string | null;
 
+  @Column({ type: 'varchar', length: 1024, nullable: true })
+  cliente_direccion_link: string | null;
+
   @Column({ type: 'text', nullable: true })
   observaciones_direccion: string | null;
 
