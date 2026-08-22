@@ -16,6 +16,7 @@ import { PedidoExpirationService } from './pedido-expiration.service';
 import { WhatsappModule } from '../whatsapp/whatsapp.module';
 import { TelegramModule } from 'src/telegram/telegram.module';
 import { CuponModule } from 'src/cupon/cupon.module';
+import { VtaClienteModule } from 'src/vta_cliente/vta_cliente.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { CuponModule } from 'src/cupon/cupon.module';
     WhatsappModule,
     TelegramModule,
     CuponModule,
+    VtaClienteModule,
   ],
   controllers: [PedidoController],
   providers: [PedidoService, PedidoExpirationService],

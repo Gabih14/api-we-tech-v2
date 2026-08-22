@@ -119,6 +119,9 @@ describe('PedidoService recalculo de importes', () => {
     validarUsoCupon: jest.fn(async () => undefined),
     resolverPorcentajePorModalidad: jest.fn(),
   };
+  const vtaClienteService = {
+    saveDireccionLink: jest.fn(async () => undefined),
+  };
 
   let service: PedidoService;
   let warnSpy: jest.SpyInstance;
@@ -201,6 +204,7 @@ describe('PedidoService recalculo de importes', () => {
       telegramService as any,
       cobrosService as any,
       cuponService as any,
+      vtaClienteService as any,
     );
     jest
       .spyOn(service, 'generarIntencionDePago')
@@ -619,6 +623,7 @@ describe('PedidoService recalculo de importes', () => {
       pais: 'AR',
       codigo_postal: '2000',
       direccion: 'Direccion Real 456, M2000 Ciudad Real, Argentina',
+      direccion_link: 'https://maps.google.com/?q=Direccion+Real+456',
       billing_address: {
         street: 'Billing Street',
         number: '999',
@@ -627,6 +632,7 @@ describe('PedidoService recalculo de importes', () => {
         country: 'BR',
         postal_code: '9999',
       },
+      tipo_envio: 'shipping',
       total: 10,
       productos: [
         {
@@ -646,6 +652,41 @@ describe('PedidoService recalculo de importes', () => {
     expect(pedido.cliente_direccion).toBe(
       'Billing Street 999, Billing City, Billing Region, BR, 9999',
     );
+    expect(pedido.cliente_direccion_link).toBe(
+      'https://maps.google.com/?q=Direccion+Real+456',
+    );
+    expect(vtaClienteService.saveDireccionLink).toHaveBeenCalledWith(
+      '20123456789',
+      {
+        link: 'https://maps.google.com/?q=Direccion+Real+456',
+        direccionTexto: 'Direccion Real 456, M2000 Ciudad Real, Argentina',
+        etiqueta: 'checkout',
+      },
+    );
+  });
+
+  it('guarda el link en el pedido sin actualizar cliente_direccion_link si no es shipping', async () => {
+    stkItemRepo.findOne.mockResolvedValue(itemConPrecio('ITEM-1', '10.01'));
+
+    const dto = dtoBase({
+      direccion_link: ' https://maps.google.com/?q=Pickup ',
+      total: 10,
+      productos: [
+        {
+          nombre: 'ITEM-1',
+          cantidad: 1,
+          precio_unitario: 10,
+          subtotal: 10,
+        },
+      ],
+    });
+
+    const { pedido } = await service.crear(dto);
+
+    expect(pedido.cliente_direccion_link).toBe(
+      'https://maps.google.com/?q=Pickup',
+    );
+    expect(vtaClienteService.saveDireccionLink).not.toHaveBeenCalled();
   });
 
   it('cotiza dolares solo para moneda DOL y redondea normal', async () => {

@@ -6,6 +6,8 @@ import {
   IsString,
   IsIn,
   IsOptional,
+  IsUrl,
+  Length,
   Min,
   Max,
   ValidateNested,
@@ -95,6 +97,18 @@ export class CreatePedidoDto {
   @IsOptional()
   @IsString()
   direccion?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsUrl({ require_tld: false })
+  @Length(1, 1024)
+  direccion_link?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsUrl({ require_tld: false })
+  @Length(1, 1024)
+  direccionLink?: string;
 
   @IsString()
   mobile: string;

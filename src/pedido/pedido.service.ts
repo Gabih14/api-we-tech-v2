@@ -30,6 +30,7 @@ import { CobrosService } from 'src/vta-comprobante/cobros.service';
 import { GetPedidosDashboardDto } from './dto/get-pedidos-dashboard.dto';
 import { CuponService } from 'src/cupon/cupon.service';
 import { CuponCategoriaAplicable } from 'src/cupon/entities/cupon.entity';
+import { VtaClienteService } from 'src/vta_cliente/vta_cliente.service';
 import {
   FILAMENT_CATEGORIES,
   getDiscountPercentageForFilament,
@@ -117,6 +118,8 @@ export class PedidoService {
     private readonly cobrosService: CobrosService,
 
     private readonly cuponService: CuponService,
+
+    private readonly vtaClienteService: VtaClienteService,
   ) {}
 
   // 🧾 Crear pedido e intención de pago
@@ -355,6 +358,7 @@ export class PedidoService {
       .join(', ');
     const clienteUbicacion =
       ubicacionDesdeDireccion || direccionClienteCompleta;
+    const direccionLink = this.normalizarDireccionLink(dto);
 
     const pedido = this.pedidoRepo.create({
       cliente_cuit: dto.cliente_cuit,
@@ -368,6 +372,7 @@ export class PedidoService {
       delivery_method: dto.tipo_envio,
       cliente_ubicacion: clienteUbicacion,
       cliente_direccion: direccionClienteCompleta || null,
+      cliente_direccion_link: direccionLink,
       observaciones_direccion: dto.observaciones || undefined,
       telefono: dto.telefono || undefined,
       estado: 'PENDIENTE',
@@ -455,6 +460,11 @@ export class PedidoService {
       }
 
       const callbackUrl = `https://shop.wetech.ar/checkout/callback?payment_id=${externalId}`;
+      await this.guardarDireccionLinkClienteDesdePedido(
+        dto,
+        direccionLink,
+        clienteUbicacion,
+      );
       return { pedido: pedidoGuardado, naveUrl: callbackUrl };
     }
 
@@ -475,6 +485,11 @@ export class PedidoService {
         })),
         external_id: externalId,
       });
+      await this.guardarDireccionLinkClienteDesdePedido(
+        dto,
+        direccionLink,
+        clienteUbicacion,
+      );
       return { pedido: pedidoGuardado, naveUrl };
     } catch (err) {
       // Rollback: liberar stock y marcar pedido como cancelado
@@ -500,6 +515,38 @@ export class PedidoService {
   }
 
   // 💳 Generar intención de pago (nueva API)
+  private normalizarDireccionLink(dto: CreatePedidoDto): string | null {
+    const link = dto.direccion_link ?? dto.direccionLink;
+    if (!link) return null;
+
+    const trimmed = link.trim();
+    return trimmed === '' ? null : trimmed;
+  }
+
+  private async guardarDireccionLinkClienteDesdePedido(
+    dto: CreatePedidoDto,
+    direccionLink: string | null,
+    direccionTexto: string,
+  ): Promise<void> {
+    if (dto.tipo_envio !== 'shipping' || !direccionLink) {
+      return;
+    }
+
+    try {
+      await this.vtaClienteService.saveDireccionLink(dto.cliente_cuit, {
+        link: direccionLink,
+        direccionTexto,
+        etiqueta: 'checkout',
+      });
+    } catch (error) {
+      this.logger.warn(
+        `No se pudo guardar el link de direccion del cliente ${dto.cliente_cuit}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+  }
+
   async generarIntencionDePago(
     dto: CreatePedidoDto & {
       external_id: string;
