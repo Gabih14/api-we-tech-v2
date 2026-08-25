@@ -112,10 +112,22 @@ export class WhatsappService {
 
     const total = productos
       .filter((producto) => this.esProductoEnvio(producto?.nombre))
-      .reduce(
-        (acc, producto) => acc + Number(producto?.subtotal ?? 0),
-        0,
-      );
+      .reduce((acc, producto) => {
+        const subtotal = Number(producto?.subtotal ?? 0);
+        const estaBonificado = Number(producto?.ajuste_porcentaje ?? 0) >= 100;
+
+        // El pedido conserva el envio gratis en $0, pero en la notificacion se
+        // muestra el precio de lista que hubiera correspondido pagar.
+        if (estaBonificado && subtotal === 0) {
+          return (
+            acc +
+            Number(producto?.precio_unitario ?? 0) *
+              Number(producto?.cantidad ?? 0)
+          );
+        }
+
+        return acc + subtotal;
+      }, 0);
 
     return total > 0 ? total : null;
   }

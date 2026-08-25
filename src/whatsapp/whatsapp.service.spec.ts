@@ -91,6 +91,31 @@ describe('WhatsappService', () => {
       expect(mensaje).toContain('$3999.00');
     });
 
+    it('muestra el precio de lista del ENV cuando el envio esta bonificado', () => {
+      const mensaje = service.formatearMensajeParaDelivery({
+        ...pedidoBase,
+        costo_envio: 0,
+        productos: [
+          {
+            nombre: 'Producto 1KG',
+            cantidad: 10,
+            precio_unitario: 100,
+            subtotal: 1000,
+          },
+          {
+            nombre: 'ENV-07K-GM-DELIVERY',
+            cantidad: 1,
+            precio_unitario: 3999,
+            subtotal: 0,
+            ajuste_porcentaje: 100,
+          },
+        ],
+      });
+
+      expect(mensaje).toContain('$3999.00');
+      expect(mensaje).not.toContain('$0.00');
+    });
+
     it('no incluye la linea de Maps cuando no hay ubicacion real', () => {
       const mensaje = service.formatearMensajeParaDelivery({
         ...pedidoBase,
