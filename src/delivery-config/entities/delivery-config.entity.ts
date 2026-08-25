@@ -11,11 +11,11 @@ export class DeliveryConfig {
   @PrimaryGeneratedColumn({ type: 'int' })
   id: number;
 
-  @Column({ type: 'varchar', length: 20 })
-  telefono: string;
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  telefono: string | null;
 
-  @Column({ name: 'api_key', type: 'varchar', length: 255 })
-  api_key: string;
+  @Column({ name: 'api_key', type: 'varchar', length: 255, nullable: true })
+  api_key: string | null;
 
   @Column({ type: 'varchar', length: 255, nullable: true })
   descripcion: string | null;

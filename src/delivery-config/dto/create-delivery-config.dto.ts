@@ -11,15 +11,17 @@ import {
 } from 'class-validator';
 
 export class CreateDeliveryConfigDto {
+  @IsOptional()
   @IsString()
   @Length(1, 20)
   @Matches(/\S/, { message: 'telefono no puede estar vacio' })
-  telefono: string;
+  telefono?: string | null;
 
+  @IsOptional()
   @IsString()
   @Length(1, 255)
   @Matches(/\S/, { message: 'api_key no puede estar vacia' })
-  api_key: string;
+  api_key?: string | null;
 
   @IsOptional()
   @IsString()

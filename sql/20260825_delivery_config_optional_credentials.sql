@@ -1,0 +1,3 @@
+ALTER TABLE delivery_config
+  MODIFY COLUMN telefono VARCHAR(20) NULL,
+  MODIFY COLUMN api_key VARCHAR(255) NULL;

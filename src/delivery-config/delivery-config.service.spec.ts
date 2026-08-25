@@ -68,6 +68,25 @@ describe('DeliveryConfigService', () => {
     });
   });
 
+  it('permite crear una configuracion sin telefono ni api key', async () => {
+    repository.create.mockImplementation((value) => value as DeliveryConfig);
+    repository.save.mockResolvedValue({
+      ...config,
+      telefono: null,
+      api_key: null,
+    });
+
+    await service.create({
+      descripcion: 'Delivery sin credenciales',
+      kms: 50,
+    });
+
+    expect(repository.create).toHaveBeenCalledWith({
+      descripcion: 'Delivery sin credenciales',
+      kms: 50,
+    });
+  });
+
   it('lista las configuraciones ordenadas por id', async () => {
     repository.find.mockResolvedValue([config]);
 
