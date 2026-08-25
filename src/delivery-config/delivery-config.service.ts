@@ -303,8 +303,12 @@ export class DeliveryConfigService {
   ): Partial<DeliveryConfig> {
     const values: Partial<DeliveryConfig> = {};
 
-    if (dto.telefono !== undefined) values.telefono = dto.telefono.trim();
-    if (dto.api_key !== undefined) values.api_key = dto.api_key.trim();
+    if (dto.telefono !== undefined) {
+      values.telefono = dto.telefono?.trim() || null;
+    }
+    if (dto.api_key !== undefined) {
+      values.api_key = dto.api_key?.trim() || null;
+    }
     if (dto.descripcion !== undefined) {
       values.descripcion = dto.descripcion?.trim() || null;
     }
