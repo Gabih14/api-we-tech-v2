@@ -22,13 +22,11 @@ export class LoggingInterceptor implements NestInterceptor {
       method === 'POST' && this.isPedidoCreateRequest(requestUrl);
 
     // Evita loguear bodies grandes o no serializables
-    let bodyPreview: any = body;
+    let bodyPreview: any = this.redactSensitiveFields(body);
     try {
-      const serialized = JSON.stringify(body);
+      const serialized = JSON.stringify(bodyPreview);
       if (serialized && serialized.length > 1000 && !shouldAlwaysLogBody) {
         bodyPreview = '[omitted large body]';
-      } else {
-        bodyPreview = body;
       }
     } catch {
       bodyPreview = '[unserializable body]';
@@ -45,8 +43,7 @@ export class LoggingInterceptor implements NestInterceptor {
         const duration = Date.now() - now;
 
         // Evita serialización costosa
-        const isLarge =
-          Array.isArray(data) ? data.length > 50 : false;
+        const isLarge = Array.isArray(data) ? data.length > 50 : false;
 
         if (isLarge) {
           console.log(
@@ -79,5 +76,20 @@ export class LoggingInterceptor implements NestInterceptor {
         path.endsWith('/vta-comprobante/metrics/ventas-por-vendedor') ||
         /(?:^|\/)cupones\/[^/]+\/estadisticas$/.test(path))
     );
+  }
+
+  private redactSensitiveFields(body: any): any {
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      return body;
+    }
+
+    if (!Object.prototype.hasOwnProperty.call(body, 'api_key')) {
+      return body;
+    }
+
+    return {
+      ...body,
+      api_key: body.api_key ? '[REDACTED]' : body.api_key,
+    };
   }
 }

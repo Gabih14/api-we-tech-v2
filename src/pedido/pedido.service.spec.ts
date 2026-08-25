@@ -110,6 +110,7 @@ describe('PedidoService recalculo de importes', () => {
   const telegramService = {
     enviarMensaje: jest.fn(async () => undefined),
     enviarMensajeDelivery: jest.fn(async () => undefined),
+    enviarMensajeDeliveryGeneral: jest.fn(async () => undefined),
   };
   const cobrosService = {
     cobrarFactura: jest.fn(async () => undefined),
@@ -121,6 +122,9 @@ describe('PedidoService recalculo de importes', () => {
   };
   const vtaClienteService = {
     saveDireccionLink: jest.fn(async () => undefined),
+  };
+  const deliveryConfigService = {
+    cotizarEnvio: jest.fn(),
   };
 
   let service: PedidoService;
@@ -205,6 +209,7 @@ describe('PedidoService recalculo de importes', () => {
       cobrosService as any,
       cuponService as any,
       vtaClienteService as any,
+      deliveryConfigService as any,
     );
     jest
       .spyOn(service, 'generarIntencionDePago')
@@ -1162,6 +1167,96 @@ describe('PedidoService recalculo de importes', () => {
         total: 25174,
       }),
     );
+  });
+
+  it('valida y guarda la configuracion usada por una cotizacion extendida', async () => {
+    deliveryConfigService.cotizarEnvio.mockResolvedValue({
+      itemId: 'ENV-ZONA-EXTENDIDA',
+      descripcion: 'Envio extendido',
+      lista: 'MINORISTA',
+      moneda: 'PES',
+      precioVta: 5000,
+      costoTotal: 5000,
+      origen: 'delivery_config',
+      deliveryConfigId: 7,
+    });
+    stkItemRepo.findOne
+      .mockResolvedValueOnce(itemConPrecio('ITEM-EXT', '10000'))
+      .mockResolvedValueOnce(
+        itemConPrecio('ENV-ZONA-EXTENDIDA', '5000', 'PES', '1', null),
+      );
+
+    const { pedido } = await service.crear(
+      dtoBase({
+        tipo_envio: 'shipping',
+        distancia_envio: 35,
+        provincia_envio: 'Mendoza',
+        departamento_envio: 'Capital',
+        costo_envio: 5000,
+        total: 15000,
+        productos: [
+          {
+            nombre: 'ITEM-EXT',
+            cantidad: 1,
+            precio_unitario: 10000,
+            subtotal: 10000,
+          },
+          {
+            nombre: 'ENV-ZONA-EXTENDIDA',
+            cantidad: 1,
+            precio_unitario: 5000,
+            subtotal: 5000,
+          },
+        ],
+      }),
+    );
+
+    expect(deliveryConfigService.cotizarEnvio).toHaveBeenCalledWith(
+      35,
+      'Mendoza',
+      'Capital',
+    );
+    expect(pedido).toEqual(
+      expect.objectContaining({
+        delivery_config_id: 7,
+        distancia_envio: 35,
+        provincia_envio: 'Mendoza',
+        departamento_envio: 'Capital',
+        costo_envio: 5000,
+      }),
+    );
+  });
+
+  it('rechaza un item de envio distinto al cotizado', async () => {
+    deliveryConfigService.cotizarEnvio.mockResolvedValue({
+      itemId: 'ENV-ZONA-CORRECTA',
+      costoTotal: 5000,
+      deliveryConfigId: 7,
+    });
+
+    await expect(
+      service.crear(
+        dtoBase({
+          tipo_envio: 'shipping',
+          distancia_envio: 35,
+          costo_envio: 1000,
+          productos: [
+            {
+              nombre: 'ENV-ZONA-BARATA',
+              cantidad: 1,
+              precio_unitario: 1000,
+              subtotal: 1000,
+            },
+          ],
+        }),
+      ),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({
+        code: 'ERR_DELIVERY_QUOTE_MISMATCH',
+        expectedItem: 'ENV-ZONA-CORRECTA',
+      }),
+    });
+    expect(stkItemRepo.findOne).not.toHaveBeenCalled();
   });
 
   it('no aplica cupon al producto ENV de envio', async () => {
@@ -2210,6 +2305,32 @@ describe('PedidoService recalculo de importes', () => {
       pedido,
     );
     expect(telegramService.enviarMensajeDelivery).toHaveBeenCalledWith('msg');
+    expect(telegramService.enviarMensajeDeliveryGeneral).not.toHaveBeenCalled();
+  });
+
+  it('envia al chat general un pedido de delivery config con ERROR_STOCK', async () => {
+    const pedido = {
+      id: 909,
+      external_id: 'pedido-error-stock-delivery-general',
+      estado: 'ERROR_STOCK',
+      delivery_method: 'shipping',
+      delivery_config_id: 7,
+      cliente_nombre: 'Cliente Delivery General',
+      cliente_cuit: '20123456789',
+      cliente_ubicacion: 'Ruta 1, Mendoza',
+      telefono: '2611234567',
+      costo_envio: 5000,
+      total: 9000,
+      productos: [],
+    };
+    createRepo.findOne.mockResolvedValue(pedido);
+
+    await service.notificarDeliveryPedidoErrorStock(pedido.external_id);
+
+    expect(telegramService.enviarMensajeDeliveryGeneral).toHaveBeenCalledWith(
+      'msg',
+    );
+    expect(telegramService.enviarMensajeDelivery).not.toHaveBeenCalled();
   });
 
   it('no envia a delivery si el pedido no esta en ERROR_STOCK', async () => {
