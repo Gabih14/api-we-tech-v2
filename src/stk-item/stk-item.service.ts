@@ -8,6 +8,7 @@ import { CreateStkItemDto } from './dto/create-stk-item.dto';
 import { UpdateStkItemDto } from './dto/update-stk-item.dto';
 import { StkFamilia } from 'src/stk_familia/entities/stk_familia.entity';
 import { StkPrecioService } from 'src/stk-precio/stk-precio.service';
+import { DeliveryConfigService } from '../delivery-config/delivery-config.service';
 
 /** Proyección pública de un atributo (nada de la fila entera). */
 export interface ItemAtributo {
@@ -120,6 +121,7 @@ export class StkItemService {
     private readonly stkFamiliaRepository: Repository<StkFamilia>,
 
     private readonly stkPrecioService: StkPrecioService,
+    private readonly deliveryConfigService: DeliveryConfigService,
   ) {}
 
   async create(createStkItemDto: CreateStkItemDto): Promise<StkItem> {
@@ -636,69 +638,16 @@ export class StkItemService {
     await this.stkItemRepository.remove(item);
   }
 
-  async getCostoEnvio(distancia: number): Promise<any> {
-    // Nueva lógica: tomar el precio del item según la distancia sin cálculos
-    // y si no existe ese item, redondear al siguiente más caro (mayor km) si existe.
-    const kmInicial = Math.ceil(distancia);
-
-    const findItemForKm = async (km: number) => {
-      const id = `ENV-${String(km).padStart(2, '0')}K-GM-DELIVERY`;
-      const item = await this.stkItemRepository.findOne({
-        where: { id },
-        relations: ['stkPrecios', 'stkPrecios.moneda', 'stkExistencias', 'familia2'],
-      });
-      return { id, item };
-    };
-
-    // Intentar con el km inicial y, si no existe, ir subiendo hasta encontrar el siguiente más caro
-    let elegidoId = '';
-    let elegidoItem: StkItem | null = null;
-
-    // Intento exacto
-    const exacto = await findItemForKm(kmInicial);
-    if (exacto.item) {
-      elegidoId = exacto.id;
-      elegidoItem = exacto.item;
-    } else {
-      // Buscar el siguiente disponible hacia arriba (límite de búsqueda para evitar loops largos)
-      const LIMITE_BUSQUEDA = 20;
-      for (let delta = 1; delta <= LIMITE_BUSQUEDA; delta++) {
-        const siguiente = await findItemForKm(kmInicial + delta);
-        if (siguiente.item) {
-          elegidoId = siguiente.id;
-          elegidoItem = siguiente.item;
-          break;
-        }
-      }
-    }
-
-    if (!elegidoItem) {
-      throw new NotFoundException(
-        `No se encontró item de envío para ${kmInicial}km ni un siguiente más caro disponible`,
-      );
-    }
-
-    const precioMinorista = elegidoItem.stkPrecios?.find((p) => p.lista === 'MINORISTA');
-    if (!precioMinorista) {
-      throw new NotFoundException(`Precio MINORISTA no disponible para ${elegidoId}`);
-    }
-
-    // Tomar el precio tal cual está definido en el item, sin cálculos adicionales
-    const precioVta = parseFloat(precioMinorista.precioVta || '0');
-    const isDol = precioMinorista?.moneda?.id === 'DOL';
-    const cotizacion = isDol ? parseFloat(precioMinorista?.moneda?.cotizacion || '1') : 1;
-    const costoTotal = !isNaN(precioVta) && !isNaN(cotizacion)
-      ? parseFloat((precioVta * cotizacion).toFixed(2))
-      : precioVta;
-
-    return {
-      itemId: elegidoId,
-      descripcion: (elegidoItem as any).descripcion,
-      lista: 'MINORISTA',
-      moneda: precioMinorista?.moneda?.id || null,
-      precioVta,
-      costoTotal,
-    };
+  async getCostoEnvio(
+    distancia: number,
+    provincia?: string,
+    departamento?: string,
+  ) {
+    return this.deliveryConfigService.cotizarEnvio(
+      distancia,
+      provincia,
+      departamento,
+    );
   }
   private extractFotoUrl(foto: Buffer | null): string | null {
   if (!foto) return null;

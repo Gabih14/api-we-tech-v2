@@ -129,6 +129,22 @@ export class CreatePedidoDto {
   @IsNumber()
   costo_envio: number;
 
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  distancia_envio?: number;
+
+  @IsOptional()
+  @IsString()
+  @Length(1, 100)
+  provincia_envio?: string;
+
+  @IsOptional()
+  @IsString()
+  @Length(1, 100)
+  departamento_envio?: string;
+
   @IsString()
   observaciones?: string;
 

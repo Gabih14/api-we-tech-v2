@@ -28,7 +28,7 @@ export class Pedido {
   @Column({ default: 'PENDIENTE' })
   estado: PedidoEstado;
 
-  @OneToMany(() => PedidoItem, item => item.pedido, { cascade: true })
+  @OneToMany(() => PedidoItem, (item) => item.pedido, { cascade: true })
   productos: PedidoItem[];
 
   @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
@@ -45,6 +45,18 @@ export class Pedido {
 
   @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
   costo_envio: number;
+
+  @Column({ type: 'decimal', precision: 8, scale: 2, nullable: true })
+  distancia_envio: number | null;
+
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  provincia_envio: string | null;
+
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  departamento_envio: string | null;
+
+  @Column({ type: 'int', nullable: true })
+  delivery_config_id: number | null;
 
   // Información de cupón aplicado
   @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })

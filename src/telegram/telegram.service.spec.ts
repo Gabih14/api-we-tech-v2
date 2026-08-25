@@ -12,6 +12,7 @@ describe('TelegramService', () => {
           TELEGRAM_BOT_TOKEN: 'bot-token',
           TELEGRAM_CHAT_ID: 'chat-id',
           DELIVERY_TELEGRAM_CHAT_ID: 'delivery-chat-id',
+          DELIVERY_GENERAL_TELEGRAM_CHAT_ID: 'delivery-general-chat-id',
           TELEGRAM_RETRY_DELAY_MS: '1',
         };
 
@@ -30,7 +31,8 @@ describe('TelegramService', () => {
   });
 
   it('envia el mensaje como HTML para Telegram preservando emojis y saltos de linea', async () => {
-    const mensaje = '\uD83D\uDE9A *Cliente:* Juan\n\n\uD83D\uDCCD *Ubicacion:* Calle 123';
+    const mensaje =
+      '\uD83D\uDE9A *Cliente:* Juan\n\n\uD83D\uDCCD *Ubicacion:* Calle 123';
 
     await service.enviarMensaje(mensaje);
 
@@ -39,7 +41,9 @@ describe('TelegramService', () => {
     expect(body.chat_id).toBe('chat-id');
     expect(body.parse_mode).toBe('HTML');
     expect(body.disable_web_page_preview).toBe(true);
-    expect(body.text).toBe('\uD83D\uDE9A <b>Cliente:</b> Juan\n\n\uD83D\uDCCD <b>Ubicacion:</b> Calle 123');
+    expect(body.text).toBe(
+      '\uD83D\uDE9A <b>Cliente:</b> Juan\n\n\uD83D\uDCCD <b>Ubicacion:</b> Calle 123',
+    );
     expect(body.text).not.toContain('*Cliente:*');
   });
 
@@ -52,12 +56,24 @@ describe('TelegramService', () => {
     expect(body.text).toBe('<b>Cliente:</b> &lt;Juan &amp; Asociados&gt;');
   });
 
+  it('envia los delivery config al chat general de delivery', async () => {
+    await service.enviarMensajeDeliveryGeneral('*Cliente:* Juan');
+
+    const body = JSON.parse(postJsonMock.mock.calls[0][1]);
+
+    expect(body.chat_id).toBe('delivery-general-chat-id');
+  });
+
   it('reintenta errores temporales de red antes de fallar', async () => {
     const warnSpy = jest.spyOn(console, 'warn').mockImplementation();
-    const error = new TypeError('fetch failed') as Error & { cause?: { code: string } };
+    const error = new TypeError('fetch failed') as Error & {
+      cause?: { code: string };
+    };
     error.cause = { code: 'ETIMEDOUT' };
 
-    postJsonMock.mockRejectedValueOnce(error).mockResolvedValueOnce({ ok: true });
+    postJsonMock
+      .mockRejectedValueOnce(error)
+      .mockResolvedValueOnce({ ok: true });
 
     await service.enviarMensaje('Mensaje');
 

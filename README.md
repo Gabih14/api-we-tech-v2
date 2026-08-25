@@ -31,6 +31,7 @@ GOOGLE_API_KEY=tu_google_api_key
 TELEGRAM_BOT_TOKEN=tu_telegram_bot_token
 TELEGRAM_CHAT_ID=tu_telegram_chat_id_secretaria
 DELIVERY_TELEGRAM_CHAT_ID=tu_telegram_chat_id_delivery
+DELIVERY_GENERAL_TELEGRAM_CHAT_ID=tu_telegram_chat_id_delivery_general
 PEDIDO_TRANSFER_APPROVAL_ENABLED=true
 ```
 

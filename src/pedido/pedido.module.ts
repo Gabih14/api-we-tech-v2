@@ -17,6 +17,7 @@ import { WhatsappModule } from '../whatsapp/whatsapp.module';
 import { TelegramModule } from 'src/telegram/telegram.module';
 import { CuponModule } from 'src/cupon/cupon.module';
 import { VtaClienteModule } from 'src/vta_cliente/vta_cliente.module';
+import { DeliveryConfigModule } from '../delivery-config/delivery-config.module';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { VtaClienteModule } from 'src/vta_cliente/vta_cliente.module';
     TelegramModule,
     CuponModule,
     VtaClienteModule,
+    DeliveryConfigModule,
   ],
   controllers: [PedidoController],
   providers: [PedidoService, PedidoExpirationService],

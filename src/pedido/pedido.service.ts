@@ -38,6 +38,10 @@ import {
   parseProductWeightFromDescription,
   FilamentIdentity,
 } from 'src/pricing/discounts';
+import {
+  DeliveryConfigService,
+  DeliveryQuote,
+} from '../delivery-config/delivery-config.service';
 
 type PedidoMetodoPago = 'online' | 'transfer';
 
@@ -120,6 +124,8 @@ export class PedidoService {
     private readonly cuponService: CuponService,
 
     private readonly vtaClienteService: VtaClienteService,
+
+    private readonly deliveryConfigService: DeliveryConfigService,
   ) {}
 
   // 🧾 Crear pedido e intención de pago
@@ -136,6 +142,9 @@ export class PedidoService {
         HttpStatus.BAD_REQUEST,
       );
     }
+
+    const cotizacionEnvio = await this.resolverCotizacionEnvio(dto);
+    const productoEnvioCotizadoId = cotizacionEnvio?.itemId;
 
     if (dto.codigo_cupon) {
       await this.cuponService.validarUsoCupon({
@@ -174,7 +183,10 @@ export class PedidoService {
       }
 
       const cantidad = this.obtenerCantidadProducto(producto);
-      const esProductoEnvio = this.esProductoEnvio(producto.nombre);
+      const esProductoEnvio = this.esProductoEnvioPedido(
+        producto.nombre,
+        productoEnvioCotizadoId,
+      );
       const categoriaProducto = this.derivarCategoriaProducto(item.grupo);
       // En ENV-<n>K-GM-DELIVERY, la K representa kilometros de delivery,
       // no kilos. Estos productos no participan del peso para envio gratis.
@@ -283,8 +295,10 @@ export class PedidoService {
         0,
       ),
     );
-    const costoEnvioDesdeProducto =
-      this.obtenerCostoEnvioDesdeProductos(productosValidados);
+    const costoEnvioDesdeProducto = this.obtenerCostoEnvioDesdeProductos(
+      productosValidados,
+      productoEnvioCotizadoId,
+    );
     const costoEnvioCalculado =
       costoEnvioDesdeProducto ??
       this.calcularCostoEnvioPedido(dto, pesoTotalKg);
@@ -367,6 +381,17 @@ export class PedidoService {
       external_id: externalId,
       total: totalCalculado,
       costo_envio: costoEnvioCalculado,
+      distancia_envio:
+        dto.tipo_envio === 'shipping' ? (dto.distancia_envio ?? null) : null,
+      provincia_envio:
+        dto.tipo_envio === 'shipping'
+          ? this.obtenerProvinciaEnvio(dto) || null
+          : null,
+      departamento_envio:
+        dto.tipo_envio === 'shipping'
+          ? this.obtenerDepartamentoEnvio(dto) || null
+          : null,
+      delivery_config_id: cotizacionEnvio?.deliveryConfigId ?? null,
       descuento_cupon: descuentoCupon || undefined,
       codigo_cupon: dto.codigo_cupon ?? undefined,
       delivery_method: dto.tipo_envio,
@@ -1019,9 +1044,7 @@ export class PedidoService {
           // } catch (e) { console.error('delivery whatsapp', e); }
 
           try {
-            const msg =
-              this.whatsappService.formatearMensajeParaDelivery(pedido);
-            await this.telegramService.enviarMensajeDelivery(msg);
+            await this.enviarPedidoADeliveryTelegram(pedido);
           } catch (e) {
             console.error('delivery telegram', e);
           }
@@ -1262,8 +1285,7 @@ export class PedidoService {
       );
     }
 
-    const msg = this.whatsappService.formatearMensajeParaDelivery(pedido);
-    await this.telegramService.enviarMensajeDelivery(msg);
+    await this.enviarPedidoADeliveryTelegram(pedido);
 
     return pedido;
   }
@@ -1416,8 +1438,7 @@ export class PedidoService {
       // } catch (e) { console.error('delivery whatsapp', e); }
 
       try {
-        const msg = this.whatsappService.formatearMensajeParaDelivery(pedido);
-        await this.telegramService.enviarMensajeDelivery(msg);
+        await this.enviarPedidoADeliveryTelegram(pedido);
       } catch (e) {
         console.error('delivery telegram', e);
       }
@@ -1553,8 +1574,93 @@ export class PedidoService {
     return this.redondearPrecio(Number(dto.costo_envio ?? 0));
   }
 
+  private async resolverCotizacionEnvio(
+    dto: CreatePedidoDto,
+  ): Promise<DeliveryQuote | null> {
+    if (dto.tipo_envio !== 'shipping' || dto.distancia_envio === undefined) {
+      return null;
+    }
+
+    const distancia = Number(dto.distancia_envio);
+    if (!Number.isFinite(distancia) || distancia < 0) {
+      throw new BadRequestException(
+        'distancia_envio debe ser un numero mayor o igual a cero',
+      );
+    }
+
+    const cotizacion = await this.deliveryConfigService.cotizarEnvio(
+      distancia,
+      this.obtenerProvinciaEnvio(dto),
+      this.obtenerDepartamentoEnvio(dto),
+    );
+    const productosVirtuales = dto.productos.filter((producto) =>
+      producto.nombre.toUpperCase().startsWith('ENV'),
+    );
+    const productoCotizado = productosVirtuales.find(
+      (producto) => producto.nombre === cotizacion.itemId,
+    );
+
+    if (
+      productosVirtuales.length !== 1 ||
+      !productoCotizado ||
+      Number(productoCotizado.cantidad) !== 1
+    ) {
+      throw new BadRequestException({
+        code: 'ERR_DELIVERY_QUOTE_MISMATCH',
+        message:
+          'El pedido debe incluir exactamente una unidad del item de envio cotizado.',
+        expectedItem: cotizacion.itemId,
+        receivedItems: productosVirtuales.map((producto) => ({
+          item: producto.nombre,
+          cantidad: producto.cantidad,
+        })),
+      });
+    }
+
+    return cotizacion;
+  }
+
+  private async enviarPedidoADeliveryTelegram(pedido: Pedido): Promise<void> {
+    const mensaje = this.whatsappService.formatearMensajeParaDelivery(pedido);
+
+    if (pedido.delivery_config_id != null) {
+      await this.telegramService.enviarMensajeDeliveryGeneral(mensaje);
+      return;
+    }
+
+    await this.telegramService.enviarMensajeDelivery(mensaje);
+  }
+
+  private obtenerProvinciaEnvio(dto: CreatePedidoDto): string {
+    return (
+      dto.provincia_envio ??
+      dto.billing_address?.region ??
+      dto.region ??
+      ''
+    ).trim();
+  }
+
+  private obtenerDepartamentoEnvio(dto: CreatePedidoDto): string {
+    return (
+      dto.departamento_envio ??
+      dto.billing_address?.city ??
+      dto.ciudad ??
+      ''
+    ).trim();
+  }
+
   private esProductoEnvio(nombre?: string | null): boolean {
     return /^ENV-\d+K-GM-DELIVERY$/i.test(String(nombre ?? ''));
+  }
+
+  private esProductoEnvioPedido(
+    nombre?: string | null,
+    productoEnvioCotizadoId?: string,
+  ): boolean {
+    return (
+      this.esProductoEnvio(nombre) ||
+      (!!productoEnvioCotizadoId && nombre === productoEnvioCotizadoId)
+    );
   }
 
   private derivarCategoriaProducto(
@@ -1597,9 +1703,12 @@ export class PedidoService {
 
   private obtenerCostoEnvioDesdeProductos(
     productos: PedidoItem[],
+    productoEnvioCotizadoId?: string,
   ): number | null {
     const totalEnvio = productos
-      .filter((producto) => this.esProductoEnvio(producto.nombre))
+      .filter((producto) =>
+        this.esProductoEnvioPedido(producto.nombre, productoEnvioCotizadoId),
+      )
       .reduce((acc, producto) => acc + Number(producto.subtotal ?? 0), 0);
 
     return totalEnvio > 0 ? this.redondearPrecio(totalEnvio) : null;

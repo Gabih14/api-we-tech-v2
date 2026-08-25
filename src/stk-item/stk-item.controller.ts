@@ -7,6 +7,7 @@ import {
   Param,
   Delete,
   Query,
+  ParseFloatPipe,
 } from '@nestjs/common';
 import { StkItemService } from './stk-item.service';
 import { CreateStkItemDto } from './dto/create-stk-item.dto';
@@ -54,9 +55,16 @@ export class StkItemController {
   }
 
   @Get('costo/:distancia')
-  getCostoEnvio(@Param('distancia') distancia: string) {
-    const distanciaNum = parseFloat(distancia);
-    return this.stkItemService.getCostoEnvio(distanciaNum);
+  getCostoEnvio(
+    @Param('distancia', ParseFloatPipe) distancia: number,
+    @Query('provincia') provincia?: string,
+    @Query('departamento') departamento?: string,
+  ) {
+    return this.stkItemService.getCostoEnvio(
+      distancia,
+      provincia,
+      departamento,
+    );
   }
 
   /** Ficha técnica (atributos) de un ítem, fusionando los del padre GENERICO. */

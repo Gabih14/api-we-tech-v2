@@ -13,16 +13,29 @@ export class TelegramService {
   constructor(private readonly configService: ConfigService) {}
 
   async enviarMensaje(mensaje: string, chatId?: string): Promise<void> {
-    const chatIdToUse = chatId || this.configService.get<string>('TELEGRAM_CHAT_ID');
+    const chatIdToUse =
+      chatId || this.configService.get<string>('TELEGRAM_CHAT_ID');
     await this.enviarMensajeAChat(mensaje, chatIdToUse);
   }
 
   async enviarMensajeDelivery(mensaje: string): Promise<void> {
-    const chatIdToUse = this.configService.get<string>('DELIVERY_TELEGRAM_CHAT_ID');
+    const chatIdToUse = this.configService.get<string>(
+      'DELIVERY_TELEGRAM_CHAT_ID',
+    );
     await this.enviarMensajeAChat(mensaje, chatIdToUse);
   }
 
-  private async enviarMensajeAChat(mensaje: string, chatIdToUse?: string): Promise<void> {
+  async enviarMensajeDeliveryGeneral(mensaje: string): Promise<void> {
+    const chatIdToUse = this.configService.get<string>(
+      'DELIVERY_GENERAL_TELEGRAM_CHAT_ID',
+    );
+    await this.enviarMensajeAChat(mensaje, chatIdToUse);
+  }
+
+  private async enviarMensajeAChat(
+    mensaje: string,
+    chatIdToUse?: string,
+  ): Promise<void> {
     const botToken = this.configService.get<string>('TELEGRAM_BOT_TOKEN');
 
     if (!botToken || !chatIdToUse) {
@@ -35,7 +48,10 @@ export class TelegramService {
     const textoNormalizado = this.normalizarMensaje(mensaje);
     const timeoutMs = this.obtenerEnteroConfig('TELEGRAM_TIMEOUT_MS', 8000);
     const maxAttempts = this.obtenerEnteroConfig('TELEGRAM_RETRY_ATTEMPTS', 3);
-    const retryDelayMs = this.obtenerEnteroConfig('TELEGRAM_RETRY_DELAY_MS', 1000);
+    const retryDelayMs = this.obtenerEnteroConfig(
+      'TELEGRAM_RETRY_DELAY_MS',
+      1000,
+    );
     const payload = JSON.stringify({
       chat_id: chatIdToUse,
       text: textoNormalizado,
@@ -52,7 +68,10 @@ export class TelegramService {
           const body = await response.text();
           const error = new Error(`Error HTTP: ${response.status} - ${body}`);
 
-          if (!this.esHttpReintentable(response.status) || intento === maxAttempts) {
+          if (
+            !this.esHttpReintentable(response.status) ||
+            intento === maxAttempts
+          ) {
             throw error;
           }
 
@@ -84,8 +103,7 @@ export class TelegramService {
   }
 
   private normalizarMensaje(mensaje: string): string {
-    return this.escaparHtml(mensaje)
-      .replace(/\*(.*?)\*/g, '<b>$1</b>');
+    return this.escaparHtml(mensaje).replace(/\*(.*?)\*/g, '<b>$1</b>');
   }
 
   private escaparHtml(texto: string): string {
@@ -169,9 +187,13 @@ export class TelegramService {
 
     return (
       errorName.includes('abort') ||
-      ['ETIMEDOUT', 'ECONNRESET', 'ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN'].includes(
-        errorCode || '',
-      ) ||
+      [
+        'ETIMEDOUT',
+        'ECONNRESET',
+        'ECONNREFUSED',
+        'ENOTFOUND',
+        'EAI_AGAIN',
+      ].includes(errorCode || '') ||
       err.message === 'fetch failed'
     );
   }
