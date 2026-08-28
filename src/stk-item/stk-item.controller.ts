@@ -12,6 +12,7 @@ import {
 import { StkItemService } from './stk-item.service';
 import { CreateStkItemDto } from './dto/create-stk-item.dto';
 import { UpdateStkItemDto } from './dto/update-stk-item.dto';
+import { AuthType } from '../common/decorators/auth-type.decorator';
 
 @Controller('stk-item')
 export class StkItemController {
@@ -68,6 +69,12 @@ export class StkItemController {
   }
 
   /** Ficha técnica (atributos) de un ítem, fusionando los del padre GENERICO. */
+  @Get('envios-clientes')
+  @AuthType('dashboard')
+  getItemsEnviosAClientes() {
+    return this.stkItemService.getItemsEnviosAClientes();
+  }
+
   @Get(':id/atributos')
   getAtributos(@Param('id') id: string) {
     return this.stkItemService.getAtributos(id);

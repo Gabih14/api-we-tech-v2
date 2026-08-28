@@ -163,6 +163,34 @@ export class StkItemService {
     });
   }
 
+  async getItemsEnviosAClientes(): Promise<any[]> {
+    const items = await this.stkItemRepository.find({
+      where: { grupo: 'ENVIOS A CLIENTES' },
+      relations: ['stkPrecios', 'stkPrecios.moneda', 'stkExistencias', 'familia2'],
+      order: { id: 'ASC' },
+    });
+
+    return items.map((item) => {
+      const precioMinorista = item.stkPrecios?.find((p) => p.lista === 'MINORISTA');
+
+      let precioVtaCotizadoMin: string | null = null;
+      if (precioMinorista) {
+        const precioVta = parseFloat(precioMinorista.precioVta || '0');
+        const isDol = precioMinorista?.moneda?.id === 'DOL';
+        const cot = isDol ? parseFloat(precioMinorista?.moneda?.cotizacion || '1') : 1;
+        if (!isNaN(precioVta) && !isNaN(cot)) {
+          precioVtaCotizadoMin = (precioVta * cot).toFixed(2);
+        }
+      }
+
+      return {
+        ...item,
+        fotoUrl: this.extractFotoUrl(item.foto),
+        precioVtaCotizadoMin,
+      };
+    });
+  }
+
   async findOne(id: string, includeAtributos = false): Promise<any> {
     const item = await this.stkItemRepository.findOne({
       where: { id },
