@@ -174,6 +174,18 @@ export class VtaComprobanteService {
   async crearDesdePedido(pedido: Pedido): Promise<VtaComprobante> {
     if (!pedido) throw new NotFoundException('Pedido no encontrado');
 
+    const referenciaPedido = buildPedidoComprobanteReference(
+      pedido.external_id,
+    );
+    const comprobanteExistente = await this.comprobanteRepository.findOne({
+      where: { observaciones_int: referenciaPedido },
+      order: { fecha: 'DESC' },
+    });
+
+    if (comprobanteExistente) {
+      return comprobanteExistente;
+    }
+
     // 👤 Asegurar que el cliente exista (crear/actualizar según corresponda)
     const ubicacionParsed = this.parseUbicacion(
       pedido.cliente_direccion || pedido.cliente_ubicacion,
@@ -324,7 +336,7 @@ export class VtaComprobanteService {
       entregado: 0,
       entregado$: 0,
       trabajador: 'WEB',
-      observaciones_int: buildPedidoComprobanteReference(pedido.external_id),
+      observaciones_int: referenciaPedido,
       ...cobroFields,
       adjuntos: false,
       adjuntado: false,

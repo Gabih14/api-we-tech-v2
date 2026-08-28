@@ -22,6 +22,7 @@ describe('VtaComprobanteService crearDesdePedido', () => {
     ),
   };
   const comprobanteRepository = {
+    findOne: jest.fn<Promise<VtaComprobante | null>, any[]>(async () => null),
     create: jest.fn((data) => data),
     save: jest.fn(async (data) => data),
   };
@@ -92,6 +93,44 @@ describe('VtaComprobanteService crearDesdePedido', () => {
         observaciones_int: 'PEDIDO_WEB:pedido-test-123',
       }),
     );
+  });
+
+  it('reutiliza el comprobante existente del pedido en reintentos', async () => {
+    const existente = {
+      tipo: 'FX',
+      comprobante: 'X 00001 00000042',
+      observaciones_int: 'PEDIDO_WEB:pedido-test-123',
+    } as VtaComprobante;
+    comprobanteRepository.findOne.mockResolvedValueOnce(existente);
+
+    await expect(
+      service.crearDesdePedido(
+        pedidoBase(
+          [
+            {
+              nombre: 'ITEM-REINTENTO',
+              cantidad: 1,
+              precio_unitario: 100,
+              subtotal: 100,
+            },
+          ],
+          100,
+        ),
+      ),
+    ).resolves.toBe(existente);
+
+    expect(comprobanteRepository.findOne).toHaveBeenCalledWith({
+      where: { observaciones_int: 'PEDIDO_WEB:pedido-test-123' },
+      order: { fecha: 'DESC' },
+    });
+    expect(service['generarNumeroComprobante']).not.toHaveBeenCalled();
+    expect(clienteService.findOrCreateOrUpdate).not.toHaveBeenCalled();
+    expect(comprobanteRepository.create).not.toHaveBeenCalled();
+    expect(comprobanteRepository.save).not.toHaveBeenCalled();
+    expect(comprobanteItemService.create).not.toHaveBeenCalled();
+    expect(
+      vtaComprobanteAsientoService.createAsientoForComprobante,
+    ).not.toHaveBeenCalled();
   });
 
   it('registra ajuste de descuento usando ajuste_porcentaje del pedido', async () => {

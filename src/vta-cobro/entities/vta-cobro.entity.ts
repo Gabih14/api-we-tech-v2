@@ -70,9 +70,10 @@ export class VtaCobro {
     precision: 10,
     scale: 2,
   })
+  comision$: string | null;
 
   @Column("tinyint", {
-    name: "comisionliq",
+    name: "comisionx",
     nullable: true,
     width: 1,
     default: () => "'0'",
@@ -186,6 +187,7 @@ export class VtaCobro {
     precision: 12,
     scale: 2,
   })
+  cargos$: string | null;
 
   @Column("varchar", { name: "estado", nullable: true, length: 20 })
   estado: string | null;
