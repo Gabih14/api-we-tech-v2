@@ -8,6 +8,8 @@ import { Repository } from 'typeorm';
 import { StkExistencia } from './entities/stk-existencia.entity';
 import { CreateStkExistenciaDto } from './dto/create-stk-existencia.dto';
 import { UpdateStkExistenciaDto } from './dto/update-stk-existencia.dto';
+import { PedidoItem } from 'src/pedido/entities/pedido-item.entity';
+import { PedidoEstado } from 'src/pedido/entities/pedido.entity';
 
 export interface StockSolicitud {
   item: string;
@@ -27,11 +29,44 @@ export interface StockConfirmado {
   salidas: StockSalida[];
 }
 
+export interface StockComprometidoPedido {
+  pedido_id: number;
+  external_id: string;
+  estado: PedidoEstado;
+  metodo_pago: 'online' | 'transfer';
+  cliente_nombre: string;
+  cantidad: number;
+}
+
+export interface StockComprometidoDetalle {
+  item: string;
+  deposito: string;
+  cantidad: number;
+  comprometido: number;
+  cantidad_asignada_a_pedidos: number;
+  cantidad_sin_pedido: number;
+  diferencia_comprometido: number;
+  pedidos: StockComprometidoPedido[];
+}
+
+export interface StockComprometidoRestaurado {
+  item: string;
+  deposito: string;
+  cantidad_restaurada: number;
+  cantidad_anterior: number;
+  cantidad_nueva: number;
+  comprometido_anterior: number;
+  comprometido_nuevo: number;
+}
+
 @Injectable()
 export class StkExistenciaService {
   constructor(
     @InjectRepository(StkExistencia)
     private readonly stkExistenciaRepository: Repository<StkExistencia>,
+
+    @InjectRepository(PedidoItem, 'back')
+    private readonly pedidoItemRepository: Repository<PedidoItem>,
   ) {}
 
   async create(
@@ -45,6 +80,184 @@ export class StkExistenciaService {
 
   async findAll(): Promise<StkExistencia[]> {
     return await this.stkExistenciaRepository.find();
+  }
+
+  async findComprometidosConPedidos(): Promise<StockComprometidoDetalle[]> {
+    const existencias = await this.stkExistenciaRepository
+      .createQueryBuilder('existencia')
+      .where('COALESCE(existencia.comprometido, 0) > 0')
+      .orderBy('existencia.item', 'ASC')
+      .addOrderBy('existencia.deposito', 'ASC')
+      .getMany();
+
+    if (!existencias.length) {
+      return [];
+    }
+
+    const items = [...new Set(existencias.map((existencia) => existencia.item))];
+    const depositos = [
+      ...new Set(existencias.map((existencia) => existencia.deposito)),
+    ];
+
+    const asignaciones = await this.pedidoItemRepository
+      .createQueryBuilder('pedidoItem')
+      .innerJoin('pedidoItem.pedido', 'pedido')
+      .select('pedidoItem.nombre', 'item')
+      .addSelect('pedidoItem.deposito_reserva', 'deposito')
+      .addSelect('pedido.id', 'pedido_id')
+      .addSelect('pedido.external_id', 'external_id')
+      .addSelect('pedido.estado', 'estado')
+      .addSelect('pedido.metodo_pago', 'metodo_pago')
+      .addSelect('pedido.cliente_nombre', 'cliente_nombre')
+      .addSelect('SUM(pedidoItem.cantidad)', 'cantidad')
+      .where('pedido.estado IN (:...estados)', {
+        estados: ['PENDIENTE', 'ERROR_STOCK'],
+      })
+      .andWhere('pedidoItem.nombre IN (:...items)', { items })
+      .andWhere('pedidoItem.deposito_reserva IN (:...depositos)', { depositos })
+      .groupBy('pedidoItem.nombre')
+      .addGroupBy('pedidoItem.deposito_reserva')
+      .addGroupBy('pedido.id')
+      .addGroupBy('pedido.external_id')
+      .addGroupBy('pedido.estado')
+      .addGroupBy('pedido.metodo_pago')
+      .addGroupBy('pedido.cliente_nombre')
+      .getRawMany<{
+        item: string;
+        deposito: string;
+        pedido_id: number;
+        external_id: string;
+        estado: PedidoEstado;
+        metodo_pago: 'online' | 'transfer';
+        cliente_nombre: string;
+        cantidad: string;
+      }>();
+
+    const asignacionesPorExistencia = new Map<
+      string,
+      StockComprometidoPedido[]
+    >();
+
+    for (const asignacion of asignaciones) {
+      const key = this.stockKey(asignacion.item, asignacion.deposito);
+      const pedidos = asignacionesPorExistencia.get(key) ?? [];
+      pedidos.push({
+        pedido_id: Number(asignacion.pedido_id),
+        external_id: asignacion.external_id,
+        estado: asignacion.estado,
+        metodo_pago: asignacion.metodo_pago,
+        cliente_nombre: asignacion.cliente_nombre,
+        cantidad: Number(asignacion.cantidad),
+      });
+      asignacionesPorExistencia.set(key, pedidos);
+    }
+
+    return existencias.map((existencia) => {
+      const comprometido = Number(existencia.comprometido || 0);
+      const pedidos =
+        asignacionesPorExistencia.get(
+          this.stockKey(existencia.item, existencia.deposito),
+        ) ?? [];
+      const cantidadAsignada = pedidos.reduce(
+        (total, pedido) => total + pedido.cantidad,
+        0,
+      );
+      const diferencia = comprometido - cantidadAsignada;
+
+      return {
+        item: existencia.item,
+        deposito: existencia.deposito,
+        cantidad: Number(existencia.cantidad || 0),
+        comprometido,
+        cantidad_asignada_a_pedidos: cantidadAsignada,
+        cantidad_sin_pedido: Math.max(0, diferencia),
+        diferencia_comprometido: diferencia,
+        pedidos,
+      };
+    });
+  }
+
+  async restaurarComprometidosSinPedido(): Promise<{
+    restaurados: StockComprometidoRestaurado[];
+    total_items: number;
+    total_cantidad_restaurada: number;
+  }> {
+    const comprometidos = await this.findComprometidosConPedidos();
+    const pendientesRestaurar = comprometidos.filter(
+      (detalle) => detalle.cantidad_sin_pedido > 0,
+    );
+
+    if (!pendientesRestaurar.length) {
+      return {
+        restaurados: [],
+        total_items: 0,
+        total_cantidad_restaurada: 0,
+      };
+    }
+
+    const restaurados =
+      await this.stkExistenciaRepository.manager.transaction(
+        async (manager) => {
+          const repo = manager.getRepository(StkExistencia);
+          const resultado: StockComprometidoRestaurado[] = [];
+
+          for (const pendiente of pendientesRestaurar) {
+            const existencia = await repo.findOne({
+              where: {
+                item: pendiente.item,
+                deposito: pendiente.deposito,
+              },
+              lock: { mode: 'pessimistic_write' },
+            });
+
+            if (!existencia) {
+              throw new NotFoundException(
+                `Existencia no encontrada para ${pendiente.item} en ${pendiente.deposito}`,
+              );
+            }
+
+            const cantidadAnterior = Number(existencia.cantidad || 0);
+            const comprometidoAnterior = Number(existencia.comprometido || 0);
+            const cantidadRestaurada = Math.min(
+              pendiente.cantidad_sin_pedido,
+              comprometidoAnterior,
+            );
+
+            if (cantidadRestaurada <= 0) {
+              continue;
+            }
+
+            const cantidadNueva = cantidadAnterior + cantidadRestaurada;
+            const comprometidoNuevo =
+              comprometidoAnterior - cantidadRestaurada;
+
+            existencia.cantidad = cantidadNueva.toString();
+            existencia.comprometido = comprometidoNuevo.toString();
+            await repo.save(existencia);
+
+            resultado.push({
+              item: existencia.item,
+              deposito: existencia.deposito,
+              cantidad_restaurada: cantidadRestaurada,
+              cantidad_anterior: cantidadAnterior,
+              cantidad_nueva: cantidadNueva,
+              comprometido_anterior: comprometidoAnterior,
+              comprometido_nuevo: comprometidoNuevo,
+            });
+          }
+
+          return resultado;
+        },
+      );
+
+    return {
+      restaurados,
+      total_items: restaurados.length,
+      total_cantidad_restaurada: restaurados.reduce(
+        (total, restaurado) => total + restaurado.cantidad_restaurada,
+        0,
+      ),
+    };
   }
 
   async findOne(item: string, deposito: string): Promise<StkExistencia> {
@@ -67,6 +280,10 @@ export class StkExistenciaService {
     const existencia = await this.findOne(item, deposito);
     Object.assign(existencia, updateStkExistenciaDto);
     return await this.stkExistenciaRepository.save(existencia);
+  }
+
+  private stockKey(item: string, deposito: string): string {
+    return `${item}\u0000${deposito}`;
   }
 
   async remove(item: string, deposito: string): Promise<void> {

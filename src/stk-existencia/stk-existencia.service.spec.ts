@@ -4,10 +4,14 @@ describe('StkExistenciaService', () => {
   const repo = {
     findOne: jest.fn(),
     find: jest.fn(),
+    createQueryBuilder: jest.fn(),
     save: jest.fn(async (value) => value),
     manager: {
       transaction: jest.fn(),
     },
+  };
+  const pedidoItemRepo = {
+    createQueryBuilder: jest.fn(),
   };
 
   let service: StkExistenciaService;
@@ -17,8 +21,24 @@ describe('StkExistenciaService', () => {
     repo.manager.transaction.mockImplementation(async (callback) =>
       callback({ getRepository: () => repo }),
     );
-    service = new StkExistenciaService(repo as any);
+    service = new StkExistenciaService(repo as any, pedidoItemRepo as any);
   });
+
+  function mockQueryBuilder(result: any[]) {
+    return {
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      innerJoin: jest.fn().mockReturnThis(),
+      select: jest.fn().mockReturnThis(),
+      addSelect: jest.fn().mockReturnThis(),
+      groupBy: jest.fn().mockReturnThis(),
+      addGroupBy: jest.fn().mockReturnThis(),
+      orderBy: jest.fn().mockReturnThis(),
+      addOrderBy: jest.fn().mockReturnThis(),
+      getMany: jest.fn().mockResolvedValue(result),
+      getRawMany: jest.fn().mockResolvedValue(result),
+    };
+  }
 
   it('devuelve el deposito usado al confirmar stock', async () => {
     repo.findOne.mockResolvedValue({
@@ -31,6 +51,143 @@ describe('StkExistenciaService', () => {
     await expect(service.confirmarStock('ITEM-1', 1, 'DEPOSITO')).resolves.toBe(
       'DEPOSITO',
     );
+  });
+
+  it('lista comprometidos con pedidos asignados y saldo sin pedido', async () => {
+    repo.createQueryBuilder.mockReturnValue(
+      mockQueryBuilder([
+        {
+          item: 'ITEM-1',
+          deposito: 'DEPOSITO',
+          cantidad: '10',
+          comprometido: '3',
+        },
+      ]),
+    );
+    pedidoItemRepo.createQueryBuilder.mockReturnValue(
+      mockQueryBuilder([
+        {
+          item: 'ITEM-1',
+          deposito: 'DEPOSITO',
+          pedido_id: 7,
+          external_id: 'pedido-123',
+          estado: 'PENDIENTE',
+          metodo_pago: 'online',
+          cliente_nombre: 'Cliente Test',
+          cantidad: '2',
+        },
+      ]),
+    );
+
+    await expect(service.findComprometidosConPedidos()).resolves.toEqual([
+      {
+        item: 'ITEM-1',
+        deposito: 'DEPOSITO',
+        cantidad: 10,
+        comprometido: 3,
+        cantidad_asignada_a_pedidos: 2,
+        cantidad_sin_pedido: 1,
+        diferencia_comprometido: 1,
+        pedidos: [
+          {
+            pedido_id: 7,
+            external_id: 'pedido-123',
+            estado: 'PENDIENTE',
+            metodo_pago: 'online',
+            cliente_nombre: 'Cliente Test',
+            cantidad: 2,
+          },
+        ],
+      },
+    ]);
+  });
+
+  it('no consulta pedidos cuando no hay stock comprometido', async () => {
+    repo.createQueryBuilder.mockReturnValue(mockQueryBuilder([]));
+
+    await expect(service.findComprometidosConPedidos()).resolves.toEqual([]);
+    expect(pedidoItemRepo.createQueryBuilder).not.toHaveBeenCalled();
+  });
+
+  it('restaura a existencia solo el comprometido sin pedido asignado', async () => {
+    const existencia = {
+      item: 'ITEM-1',
+      deposito: 'DEPOSITO',
+      cantidad: '10',
+      comprometido: '3',
+    };
+    repo.createQueryBuilder.mockReturnValue(mockQueryBuilder([existencia]));
+    pedidoItemRepo.createQueryBuilder.mockReturnValue(
+      mockQueryBuilder([
+        {
+          item: 'ITEM-1',
+          deposito: 'DEPOSITO',
+          pedido_id: 7,
+          external_id: 'pedido-123',
+          estado: 'PENDIENTE',
+          metodo_pago: 'online',
+          cliente_nombre: 'Cliente Test',
+          cantidad: '2',
+        },
+      ]),
+    );
+    repo.findOne.mockResolvedValue(existencia);
+
+    await expect(service.restaurarComprometidosSinPedido()).resolves.toEqual({
+      restaurados: [
+        {
+          item: 'ITEM-1',
+          deposito: 'DEPOSITO',
+          cantidad_restaurada: 1,
+          cantidad_anterior: 10,
+          cantidad_nueva: 11,
+          comprometido_anterior: 3,
+          comprometido_nuevo: 2,
+        },
+      ],
+      total_items: 1,
+      total_cantidad_restaurada: 1,
+    });
+    expect(existencia).toMatchObject({
+      cantidad: '11',
+      comprometido: '2',
+    });
+    expect(repo.save).toHaveBeenCalledWith(existencia);
+  });
+
+  it('no modifica stock si todo el comprometido pertenece a pedidos', async () => {
+    repo.createQueryBuilder.mockReturnValue(
+      mockQueryBuilder([
+        {
+          item: 'ITEM-1',
+          deposito: 'DEPOSITO',
+          cantidad: '10',
+          comprometido: '2',
+        },
+      ]),
+    );
+    pedidoItemRepo.createQueryBuilder.mockReturnValue(
+      mockQueryBuilder([
+        {
+          item: 'ITEM-1',
+          deposito: 'DEPOSITO',
+          pedido_id: 7,
+          external_id: 'pedido-123',
+          estado: 'PENDIENTE',
+          metodo_pago: 'online',
+          cliente_nombre: 'Cliente Test',
+          cantidad: '2',
+        },
+      ]),
+    );
+
+    await expect(service.restaurarComprometidosSinPedido()).resolves.toEqual({
+      restaurados: [],
+      total_items: 0,
+      total_cantidad_restaurada: 0,
+    });
+    expect(repo.findOne).not.toHaveBeenCalled();
+    expect(repo.save).not.toHaveBeenCalled();
   });
 
   it('restaura existencia y compromiso despues de una confirmacion fallida', async () => {

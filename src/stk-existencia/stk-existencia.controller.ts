@@ -17,6 +17,16 @@ export class StkExistenciaController {
     return this.stkExistenciaService.findAll();
   }
 
+  @Get('comprometidos')
+  async findComprometidosConPedidos() {
+    return this.stkExistenciaService.findComprometidosConPedidos();
+  }
+
+  @Post('comprometidos/sin-pedido/restaurar')
+  async restaurarComprometidosSinPedido() {
+    return this.stkExistenciaService.restaurarComprometidosSinPedido();
+  }
+
   @Get(':item/:deposito')
   async findOne(@Param('item') item: string, @Param('deposito') deposito: string) {
     return this.stkExistenciaService.findOne(item, deposito);
