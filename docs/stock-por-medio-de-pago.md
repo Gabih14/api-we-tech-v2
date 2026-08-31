@@ -1,63 +1,76 @@
-# Stock por medio de pago
+# Modelo de reserva de stock
 
-## Regla de propiedad
+## Invariantes
 
-- **Online:** la API reserva, confirma, libera y compensa stock en
-  `stk_existencia`.
-- **Transferencia:** al crear el pedido, la API aumenta `comprometido` y el
-  comprobante `FX` del ERP descuenta la existencia física. Al aprobar, la API
-  reduce únicamente `comprometido`. Al cancelar, repone `cantidad` y reduce
-  `comprometido`.
+La API usa la misma regla para pagos online y transferencias:
 
-## Ejemplo del ciclo de una transferencia
+- `cantidad` es el stock que el ERP y las ventas presenciales pueden vender.
+- `comprometido` es stock retirado de la venta y reservado para pedidos.
+- Mientras un pedido esta pendiente, el stock fisico bajo custodia es
+  `cantidad + comprometido`.
+- Un comprobante `FX` no modifica por si solo `stk_existencia`.
 
-Para un artículo que comienza con `cantidad = 1` y `comprometido = 0`:
+Los movimientos validos son:
 
-| Evento                   | `cantidad` | `comprometido` |
-| ------------------------ | ---------- | -------------- |
-| Estado inicial           | 1          | 0              |
-| Se crea la transferencia | 0          | 1              |
-| Se aprueba               | 0          | 0              |
+| Evento                         |  `cantidad` | `comprometido` |
+| ------------------------------ | ----------: | -------------: |
+| Reservar                       |        `-N` |           `+N` |
+| Aprobar                        | Sin cambios |           `-N` |
+| Cancelar, rechazar o expirar   |        `+N` |           `-N` |
+| Restaurar una reserva huerfana |        `+N` |           `-N` |
 
-Si, en lugar de aprobarse, la transferencia se cancela desde el estado
-`cantidad = 0`, `comprometido = 1`, el resultado es `cantidad = 1` y
-`comprometido = 0`.
+La disponibilidad publicada por catalogo y lista de espera es la suma de
+`cantidad` de todos los depositos. No se vuelve a restar `comprometido`, porque
+la existencia ya bajo al crear la reserva.
 
-## Matriz del flujo
+## Ciclos de ejemplo
 
-| Operación                     | Online                           | Transferencia                                     |
-| ----------------------------- | -------------------------------- | ------------------------------------------------- |
-| Crear pedido                  | Aumenta `comprometido`           | Aumenta `comprometido`; el `FX` reduce `cantidad` |
-| Aprobar pago                  | Reduce existencia y compromiso   | Reduce solo `comprometido`                        |
-| Cancelar o expirar            | Reduce solo `comprometido`       | Repone `cantidad` y reduce `comprometido`         |
-| Compensar un error al aprobar | Restaura existencia y compromiso | Restaura solo `comprometido`                      |
-| Registrar la venta en el ERP  | Crea el comprobante al aprobar   | Crea el comprobante pendiente al crear el pedido  |
+Con `cantidad = 2` y `comprometido = 0`, reservar dos unidades deja
+`cantidad = 0` y `comprometido = 2`. El ERP ve cero unidades vendibles.
 
-## Motivo
+- Si el pedido se aprueba, queda `cantidad = 0`, `comprometido = 0`.
+- Si se cancela, rechaza o expira, vuelve a `cantidad = 2`,
+  `comprometido = 0`.
 
-Los comprobantes de transferencia generados en el ERP ya expresan su impacto
-físico mediante `vta_comprobante_item.cantidad_stk = -cantidad`. Por lo tanto,
-volver a descontar `cantidad` durante `aprobarTransferencia` sería un doble
-movimiento y puede fallar si una venta presencial dejó la existencia en cero o
-en negativo.
+Online y transferencia ejecutan exactamente los mismos movimientos. Los items
+virtuales cuyo codigo comienza con `ENV` no modifican stock y usan el deposito
+virtual `ENV`.
 
-La aprobación conserva las validaciones del pedido, comprobante y cobro, pero
-solo libera la reserva mediante `liberarStockLote`. Este método reduce
-`comprometido` y no valida ni modifica `cantidad`, por lo que también funciona
-si el ERP permite existencia física negativa.
+## Atomicidad y compensaciones
 
-La cancelación usa `revertirReservaTransferenciaLote`, que realiza en una
-transacción la operación inversa a la creación: suma a `cantidad` y resta de
-`comprometido` en el depósito donde se hizo la reserva.
+Las reservas, confirmaciones y liberaciones se procesan por lote dentro de una
+transaccion con bloqueo pesimista. Primero se valida el pedido completo y solo
+despues se guardan los cambios; una linea invalida revierte todo el lote.
 
-## Pedidos anteriores al cambio
+Si falla el guardado del pedido o la generacion del pago despues de reservar,
+se libera el lote: se repone `cantidad` y se reduce `comprometido`. Si una
+operacion critica falla despues de confirmar, se restaura unicamente
+`comprometido`, porque `cantidad` ya se habia descontado al reservar.
 
-Una transferencia histórica puede haber quedado en `ERROR_STOCK` porque la API
-intentó descontar nuevamente la existencia al aprobar. Estos pedidos se pueden
-reintentar si tienen un cobro válido: la aprobación reducirá únicamente su
-stock comprometido y los marcará como `APROBADO`.
+`POST /stk-existencia/comprometidos/sin-pedido/restaurar` repone `cantidad` y
+reduce `comprometido` solo por el excedente que no corresponde a pedidos
+`PENDIENTE` o `ERROR_STOCK`.
 
-Para que la reversión sea exacta, cada producto debe conservar
-`deposito_reserva`. Los pedidos nuevos lo guardan al momento de reservar. En
-pedidos históricos sin ese dato se elige una existencia del artículo que tenga
-compromiso suficiente.
+La restauracion debe ejecutarse sin creaciones, aprobaciones o cancelaciones de
+pedidos en paralelo, porque el stock del ERP y los pedidos viven en conexiones
+de base de datos diferentes y no comparten una transaccion distribuida.
+
+## Transicion desde el modelo anterior
+
+El modelo nuevo solo debe desplegarse cuando no queden compromisos creados con
+la logica anterior:
+
+1. Resolver o cancelar todos los pedidos `PENDIENTE` y `ERROR_STOCK`.
+2. Auditar compromisos sin pedido con `GET /stk-existencia/comprometidos`.
+3. Limpiar los huerfanos antiguos reduciendo solo `comprometido`, sin aumentar
+   `cantidad`; el endpoint de restauracion nuevo no debe usarse para esa tarea.
+4. Verificar que todas las filas tengan `comprometido = 0`.
+5. Desplegar la nueva version y ejecutar una reserva de control.
+
+Si la existencia disponible es menor que una reserva que debe migrarse, el
+proceso se bloquea y el faltante se corrige manualmente. No se permiten valores
+negativos ni ajustes silenciosos.
+
+No se debe volver a una version con la logica anterior mientras existan
+reservas nuevas. Antes de un rollback hay que cancelar/liberar esas reservas o
+convertir los datos explicitamente.

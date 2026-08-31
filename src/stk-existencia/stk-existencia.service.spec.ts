@@ -41,16 +41,59 @@ describe('StkExistenciaService', () => {
   }
 
   it('devuelve el deposito usado al confirmar stock', async () => {
-    repo.findOne.mockResolvedValue({
-      item: 'ITEM-1',
-      deposito: 'DEPOSITO',
-      cantidad: '10',
-      comprometido: '2',
-    });
+    repo.find.mockResolvedValue([
+      {
+        item: 'ITEM-1',
+        deposito: 'DEPOSITO',
+        cantidad: '10',
+        comprometido: '2',
+      },
+    ]);
 
     await expect(service.confirmarStock('ITEM-1', 1, 'DEPOSITO')).resolves.toBe(
       'DEPOSITO',
     );
+  });
+
+  it('reserva un lote restando existencia y aumentando compromiso', async () => {
+    const existencia = {
+      item: 'ITEM-1',
+      deposito: 'DEPOSITO',
+      cantidad: '2',
+      comprometido: '0',
+    };
+    repo.find.mockResolvedValue([existencia]);
+
+    await expect(
+      service.reservarStockLote([{ item: 'ITEM-1', cantidad: 2 }]),
+    ).resolves.toEqual([{ item: 'ITEM-1', cantidad: 2, deposito: 'DEPOSITO' }]);
+
+    expect(existencia).toMatchObject({ cantidad: '0', comprometido: '2' });
+    expect(repo.find).toHaveBeenCalledWith({
+      where: { item: 'ITEM-1' },
+      lock: { mode: 'pessimistic_write' },
+    });
+    expect(repo.save).toHaveBeenCalledWith([existencia]);
+  });
+
+  it('no reserva parcialmente cuando productos repetidos superan existencia', async () => {
+    const existencia = {
+      item: 'ITEM-1',
+      deposito: 'DEPOSITO',
+      cantidad: '2',
+      comprometido: '0',
+    };
+    repo.find.mockResolvedValue([existencia]);
+
+    await expect(
+      service.reservarStockLote([
+        { item: 'ITEM-1', cantidad: 1 },
+        { item: 'ITEM-1', cantidad: 2 },
+      ]),
+    ).rejects.toThrow('Stock insuficiente para ITEM-1');
+
+    expect(existencia).toMatchObject({ cantidad: '2', comprometido: '0' });
+    expect(repo.save).not.toHaveBeenCalled();
   });
 
   it('lista comprometidos con pedidos asignados y saldo sin pedido', async () => {
@@ -190,7 +233,7 @@ describe('StkExistenciaService', () => {
     expect(repo.save).not.toHaveBeenCalled();
   });
 
-  it('restaura existencia y compromiso despues de una confirmacion fallida', async () => {
+  it('restaura solo el compromiso despues de una confirmacion fallida', async () => {
     const existencia = {
       item: 'ITEM-1',
       deposito: 'DEPOSITO',
@@ -202,7 +245,7 @@ describe('StkExistenciaService', () => {
     await service.restaurarStockConfirmado('ITEM-1', 1, 'DEPOSITO');
 
     expect(existencia).toMatchObject({
-      cantidad: '10',
+      cantidad: '9',
       comprometido: '2',
     });
     expect(repo.save).toHaveBeenCalledWith(existencia);
@@ -214,7 +257,7 @@ describe('StkExistenciaService', () => {
     expect(repo.save).not.toHaveBeenCalled();
   });
 
-  it('valida el lote completo antes de modificar existencias', async () => {
+  it('valida todo el lote antes de confirmar compromisos', async () => {
     const itemValido = {
       item: 'ITEM-1',
       deposito: 'DEPOSITO',
@@ -225,7 +268,7 @@ describe('StkExistenciaService', () => {
       item: 'ITEM-2',
       deposito: 'DEPOSITO',
       cantidad: '0',
-      comprometido: '1',
+      comprometido: '0',
     };
     repo.find.mockImplementation(async ({ where }) =>
       where.item === 'ITEM-1' ? [itemValido] : [itemSinStockFisico],
@@ -236,9 +279,7 @@ describe('StkExistenciaService', () => {
         { item: 'ITEM-1', cantidad: 1 },
         { item: 'ITEM-2', cantidad: 1 },
       ]),
-    ).rejects.toThrow(
-      'Stock fisico insuficiente para ITEM-2. Utilizable entre depositos: 0, Solicitado: 1, Reserva en DEPOSITO: 1',
-    );
+    ).rejects.toThrow('Reserva insuficiente para ITEM-2');
 
     expect(itemValido).toMatchObject({
       cantidad: '10',
@@ -266,12 +307,11 @@ describe('StkExistenciaService', () => {
         item: 'ITEM-1',
         cantidad: 3,
         depositoReserva: 'DEPOSITO',
-        salidas: [{ deposito: 'DEPOSITO', cantidad: 3 }],
       },
     ]);
 
     expect(existencia).toMatchObject({
-      cantidad: '7',
+      cantidad: '10',
       comprometido: '0',
     });
     expect(repo.save).toHaveBeenCalledTimes(1);
@@ -291,18 +331,17 @@ describe('StkExistenciaService', () => {
         item: 'ITEM-1',
         cantidad: 3,
         depositoReserva: 'DEPOSITO',
-        salidas: [{ deposito: 'DEPOSITO', cantidad: 3 }],
       },
     ]);
 
     expect(existencia).toMatchObject({
-      cantidad: '10',
+      cantidad: '7',
       comprometido: '3',
     });
     expect(repo.save).toHaveBeenCalledWith([existencia]);
   });
 
-  it('mantiene la reserva original y permite sacar stock de otros depositos', async () => {
+  it('confirma la reserva sin tocar existencias de otros depositos', async () => {
     const garage = {
       item: 'ITEM-1',
       deposito: 'GARAGE',
@@ -332,16 +371,12 @@ describe('StkExistenciaService', () => {
         item: 'ITEM-1',
         cantidad: 2,
         depositoReserva: 'GARAGE',
-        salidas: [
-          { deposito: 'LOCAL', cantidad: 1 },
-          { deposito: 'DEPOSITO', cantidad: 1 },
-        ],
       },
     ]);
 
     expect(garage).toMatchObject({ cantidad: '0', comprometido: '0' });
-    expect(local.cantidad).toBe('0');
-    expect(deposito.cantidad).toBe('0');
+    expect(local.cantidad).toBe('1');
+    expect(deposito.cantidad).toBe('1');
 
     await service.restaurarStockConfirmadoLote(confirmaciones);
 
@@ -350,7 +385,7 @@ describe('StkExistenciaService', () => {
     expect(deposito.cantidad).toBe('1');
   });
 
-  it('no asigna dos veces el mismo stock fisico a reservas distintas', async () => {
+  it('confirma compromisos independientes sin volver a descontar existencia', async () => {
     const reservaA = {
       item: 'ITEM-1',
       deposito: 'RESERVA-A',
@@ -376,12 +411,12 @@ describe('StkExistenciaService', () => {
         { item: 'ITEM-1', cantidad: 1, deposito: 'RESERVA-A' },
         { item: 'ITEM-1', cantidad: 1, deposito: 'RESERVA-B' },
       ]),
-    ).rejects.toThrow('Stock fisico insuficiente para ITEM-1');
+    ).resolves.toHaveLength(2);
 
-    expect(reservaA.comprometido).toBe('1');
-    expect(reservaB.comprometido).toBe('1');
+    expect(reservaA.comprometido).toBe('0');
+    expect(reservaB.comprometido).toBe('0');
     expect(salida.cantidad).toBe('1');
-    expect(repo.save).not.toHaveBeenCalled();
+    expect(repo.save).toHaveBeenCalled();
   });
 
   it('libera un lote completo en una transaccion', async () => {
@@ -408,10 +443,12 @@ describe('StkExistenciaService', () => {
 
     expect(item1.comprometido).toBe('1');
     expect(item2.comprometido).toBe('1');
+    expect(item1.cantidad).toBe('12');
+    expect(item2.cantidad).toBe('6');
     expect(repo.save).toHaveBeenCalledWith([item1, item2]);
   });
 
-  it('aprueba una transferencia quitando el compromiso sin tocar existencia', async () => {
+  it('aprueba quitando el compromiso sin tocar existencia', async () => {
     const existencia = {
       item: 'ITEM-1',
       deposito: 'DEPOSITO',
@@ -420,7 +457,7 @@ describe('StkExistenciaService', () => {
     };
     repo.find.mockResolvedValue([existencia]);
 
-    await service.liberarStockLote([
+    await service.confirmarStockLote([
       { item: 'ITEM-1', cantidad: 1, deposito: 'DEPOSITO' },
     ]);
 
@@ -440,7 +477,7 @@ describe('StkExistenciaService', () => {
     };
     repo.find.mockResolvedValue([existencia]);
 
-    await service.revertirReservaTransferenciaLote([
+    await service.liberarStockLote([
       { item: 'ITEM-1', cantidad: 1, deposito: 'DEPOSITO' },
     ]);
 
@@ -458,10 +495,10 @@ describe('StkExistenciaService', () => {
       cantidad: '0',
       comprometido: '0',
     };
-    repo.findOne.mockResolvedValue(existencia);
+    repo.find.mockResolvedValue([existencia]);
 
-    await service.restaurarCompromisoLote([
-      { item: 'ITEM-1', cantidad: 1, deposito: 'DEPOSITO' },
+    await service.restaurarStockConfirmadoLote([
+      { item: 'ITEM-1', cantidad: 1, depositoReserva: 'DEPOSITO' },
     ]);
 
     expect(existencia).toMatchObject({

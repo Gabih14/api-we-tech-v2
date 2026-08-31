@@ -76,7 +76,7 @@ export interface CatalogoVariante {
   invoicePrice: string | null;
   /** Precio con el 15% de descuento base de filamentos aplicado. */
   promotionalPrice: string | null;
-  /** Stock disponible (cantidad − comprometido, sumado por depósito, mínimo 0). */
+  /** Stock que el ERP puede vender (cantidad sumada por depósito, mínimo 0). */
   stock: number;
   /** Peso en kg parseado de "Peso Neto" (null si no aplica, ej. "Kit 20 Colores"). */
   pesoKg: number | null;
@@ -614,16 +614,11 @@ export class StkItemService {
     return base * cot;
   }
 
-  /** Stock disponible del ítem: suma de (cantidad − comprometido) por depósito, mínimo 0. */
+  /** Stock que el ERP puede vender: suma de cantidad por depósito, mínimo 0. */
   private stockDisponible(item: StkItem): number {
     return (item.stkExistencias ?? []).reduce((total, e) => {
       const cantidad = parseFloat(e.cantidad ?? '0');
-      const comprometido = parseFloat(e.comprometido ?? '0');
-      const disponible = Math.max(
-        0,
-        (Number.isFinite(cantidad) ? cantidad : 0) -
-          (Number.isFinite(comprometido) ? comprometido : 0),
-      );
+      const disponible = Math.max(0, Number.isFinite(cantidad) ? cantidad : 0);
       return total + disponible;
     }, 0);
   }

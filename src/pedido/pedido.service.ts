@@ -15,7 +15,10 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Pedido } from './entities/pedido.entity';
 import { Brackets, Repository } from 'typeorm';
 import { CreatePedidoDto } from './dto/create-pedido.dto';
-import { StkExistenciaService } from 'src/stk-existencia/stk-existencia.service';
+import {
+  StkExistenciaService,
+  StockConfirmado,
+} from 'src/stk-existencia/stk-existencia.service';
 import { StkItem } from 'src/stk-item/entities/stk-item.entity';
 import { StkAtributo } from 'src/stk-item/entities/stk-atributo.entity';
 import { StkAtributoNodo } from 'src/stk-item/entities/stk-atributo-nodo.entity';
@@ -321,35 +324,16 @@ export class PedidoService {
       factura_iva_importe: facturaIvaImporte,
     });
 
-    const reservasRealizadas: PedidoItem[] = [];
-    try {
-      for (const p of productosValidados) {
-        p.deposito_reserva = await this.stockService.reservarStock(
-          p.nombre,
-          p.cantidad,
-        );
-        reservasRealizadas.push(p);
-      }
-    } catch (error) {
-      for (const reservado of reservasRealizadas.reverse()) {
-        try {
-          await this.stockService.liberarStock(
-            reservado.nombre,
-            reservado.cantidad,
-            reservado.deposito_reserva ?? undefined,
-          );
-        } catch (rollbackError) {
-          this.logger.error(
-            `Error liberando reserva incompleta de ${reservado.nombre}: ${
-              rollbackError instanceof Error
-                ? rollbackError.message
-                : String(rollbackError)
-            }`,
-          );
-        }
-      }
-      throw error;
-    }
+    const reservas = await this.stockService.reservarStockLote(
+      productosValidados.map((producto) => ({
+        item: producto.nombre,
+        cantidad: producto.cantidad,
+      })),
+    );
+    reservas.forEach((reserva, index) => {
+      productosValidados[index].deposito_reserva = reserva.deposito;
+    });
+    const reservasRealizadas: PedidoItem[] = productosValidados;
 
     const externalId = uuidv4().replace(/-/g, '');
     const direccionCliente = {
@@ -412,22 +396,22 @@ export class PedidoService {
     try {
       pedidoGuardado = await this.pedidoRepo.save(pedido);
     } catch (error) {
-      for (const reservado of reservasRealizadas.reverse()) {
-        try {
-          await this.stockService.liberarStock(
-            reservado.nombre,
-            reservado.cantidad,
-            reservado.deposito_reserva ?? undefined,
-          );
-        } catch (rollbackError) {
-          this.logger.error(
-            `Error liberando reserva de ${reservado.nombre} luego de fallar el guardado del pedido: ${
-              rollbackError instanceof Error
-                ? rollbackError.message
-                : String(rollbackError)
-            }`,
-          );
-        }
+      try {
+        await this.stockService.liberarStockLote(
+          reservasRealizadas.map((reservado) => ({
+            item: reservado.nombre,
+            cantidad: reservado.cantidad,
+            deposito: reservado.deposito_reserva ?? undefined,
+          })),
+        );
+      } catch (rollbackError) {
+        this.logger.error(
+          `Error liberando reservas luego de fallar el guardado del pedido: ${
+            rollbackError instanceof Error
+              ? rollbackError.message
+              : String(rollbackError)
+          }`,
+        );
       }
       throw error;
     }
@@ -441,19 +425,19 @@ export class PedidoService {
         pedidoGuardado.comprobante_numero = comp.comprobante;
         await this.pedidoRepo.save(pedidoGuardado);
       } catch (err) {
-        for (const p of reservasRealizadas) {
-          try {
-            await this.stockService.liberarStock(
-              p.nombre,
-              p.cantidad,
-              p.deposito_reserva ?? undefined,
-            );
-          } catch (e) {
-            console.error(
-              `Error liberando stock de ${p.nombre}:`,
-              e instanceof Error ? e.message : e,
-            );
-          }
+        try {
+          await this.stockService.liberarStockLote(
+            reservasRealizadas.map((producto) => ({
+              item: producto.nombre,
+              cantidad: producto.cantidad,
+              deposito: producto.deposito_reserva ?? undefined,
+            })),
+          );
+        } catch (e) {
+          console.error(
+            'Error liberando reservas por fallo del comprobante:',
+            e instanceof Error ? e.message : e,
+          );
         }
         pedidoGuardado.estado = 'CANCELADO';
         await this.pedidoRepo.save(pedidoGuardado);
@@ -518,20 +502,19 @@ export class PedidoService {
       return { pedido: pedidoGuardado, naveUrl };
     } catch (err) {
       // Rollback: liberar stock y marcar pedido como cancelado
-      for (const p of productosValidados) {
-        try {
-          await this.stockService.liberarStock(
-            p.nombre,
-            p.cantidad,
-            p.deposito_reserva ?? undefined,
-          );
-        } catch (e) {
-          // log y continuar intentando liberar el resto
-          console.error(
-            `Error liberando stock de ${p.nombre}:`,
-            e instanceof Error ? e.message : e,
-          );
-        }
+      try {
+        await this.stockService.liberarStockLote(
+          productosValidados.map((producto) => ({
+            item: producto.nombre,
+            cantidad: producto.cantidad,
+            deposito: producto.deposito_reserva ?? undefined,
+          })),
+        );
+      } catch (e) {
+        console.error(
+          'Error liberando reservas por fallo de Nave:',
+          e instanceof Error ? e.message : e,
+        );
       }
       pedidoGuardado.estado = 'CANCELADO';
       await this.pedidoRepo.save(pedidoGuardado);
@@ -907,50 +890,36 @@ export class PedidoService {
 
     switch (estado) {
       case 'APPROVED': {
-        const stockConfirmado: Array<{
-          item: string;
-          cantidad: number;
-          deposito: string;
-        }> = [];
+        let stockConfirmado: StockConfirmado[] = [];
+        let reservaReactivada = false;
 
         try {
           if (pedido.estado === 'CANCELADO') {
             console.log(
               `🔄 Pedido ${pedido.external_id} estaba CANCELADO. Re-reservando stock...`,
             );
-            for (const p of pedido.productos) {
-              try {
-                p.deposito_reserva = await this.stockService.reservarStock(
-                  p.nombre,
-                  p.cantidad,
-                );
-              } catch (err) {
-                console.error(
-                  `❌ No se pudo re-reservar stock para ${p.nombre}`,
-                  err,
-                );
-                throw new ConflictException(
-                  `No se pudo reactivar el pedido ${pedido.external_id}: stock insuficiente para ${p.nombre}`,
-                );
-              }
-            }
+            const nuevasReservas = await this.stockService.reservarStockLote(
+              pedido.productos.map((producto) => ({
+                item: producto.nombre,
+                cantidad: producto.cantidad,
+              })),
+            );
+            nuevasReservas.forEach((reserva, index) => {
+              pedido.productos[index].deposito_reserva = reserva.deposito;
+            });
+            reservaReactivada = true;
           }
 
           pedido.estado = 'APROBADO';
           pedido.aprobado = new Date();
 
-          for (const p of pedido.productos) {
-            const deposito = await this.stockService.confirmarStock(
-              p.nombre,
-              p.cantidad,
-              p.deposito_reserva ?? undefined,
-            );
-            stockConfirmado.push({
-              item: p.nombre,
-              cantidad: p.cantidad,
-              deposito,
-            });
-          }
+          stockConfirmado = await this.stockService.confirmarStockLote(
+            pedido.productos.map((producto) => ({
+              item: producto.nombre,
+              cantidad: producto.cantidad,
+              deposito: producto.deposito_reserva ?? undefined,
+            })),
+          );
 
           let comprobanteCreado: { tipo: string; comprobante: string };
 
@@ -996,18 +965,32 @@ export class PedidoService {
             throw err; // crítico => reintento Nave
           }
         } catch (err) {
-          // El webhook sera reintentado. Restaurar existencia y compromiso evita
-          // que el siguiente intento descuente el mismo pedido dos veces.
-          for (const confirmado of stockConfirmado.reverse()) {
+          // El webhook sera reintentado. La existencia ya se desconto al
+          // reservar; solo se restaura el compromiso confirmado.
+          if (stockConfirmado.length) {
             try {
-              await this.stockService.restaurarStockConfirmado(
-                confirmado.item,
-                confirmado.cantidad,
-                confirmado.deposito,
+              await this.stockService.restaurarStockConfirmadoLote(
+                stockConfirmado,
               );
             } catch (rollbackError) {
               console.error(
-                `Error restaurando stock de ${confirmado.item}:`,
+                'Error restaurando compromisos confirmados:',
+                rollbackError,
+              );
+            }
+          }
+          if (reservaReactivada) {
+            try {
+              await this.stockService.liberarStockLote(
+                pedido.productos.map((producto) => ({
+                  item: producto.nombre,
+                  cantidad: producto.cantidad,
+                  deposito: producto.deposito_reserva ?? undefined,
+                })),
+              );
+            } catch (rollbackError) {
+              console.error(
+                'Error liberando la reserva reactivada:',
                 rollbackError,
               );
             }
@@ -1056,14 +1039,17 @@ export class PedidoService {
       case 'REJECTED':
       case 'CANCELLED':
       case 'REFUNDED':
-        pedido.estado = 'CANCELADO';
-        for (const p of pedido.productos) {
-          await this.stockService.liberarStock(
-            p.nombre,
-            p.cantidad,
-            p.deposito_reserva ?? undefined,
-          );
+        if (pedido.estado === 'CANCELADO') {
+          break;
         }
+        pedido.estado = 'CANCELADO';
+        await this.stockService.liberarStockLote(
+          pedido.productos.map((producto) => ({
+            item: producto.nombre,
+            cantidad: producto.cantidad,
+            deposito: producto.deposito_reserva ?? undefined,
+          })),
+        );
         await this.eliminarComprobanteSiExiste(pedido);
         try {
           await this.notificarCancelacionCliente(
@@ -1242,13 +1228,7 @@ export class PedidoService {
       deposito: producto.deposito_reserva ?? undefined,
     }));
 
-    if (pedido.metodo_pago === 'transfer') {
-      await this.stockService.revertirReservaTransferenciaLote(
-        solicitudesStock,
-      );
-    } else {
-      await this.stockService.liberarStockLote(solicitudesStock);
-    }
+    await this.stockService.liberarStockLote(solicitudesStock);
 
     pedido.estado = 'CANCELADO';
     await this.eliminarComprobanteSiExiste(pedido);
@@ -1380,21 +1360,21 @@ export class PedidoService {
           cantidad: producto.cantidad,
           deposito: producto.deposito_reserva ?? undefined,
         }));
-        let compromisoLiberado = false;
+        let stockConfirmado: StockConfirmado[] = [];
 
         try {
-          // El comprobante del ERP ya desconto la existencia fisica. Al
-          // aprobar, la API convierte la reserva reduciendo solo comprometido.
-          await this.stockService.liberarStockLote(solicitudesStock);
-          compromisoLiberado = true;
+          stockConfirmado =
+            await this.stockService.confirmarStockLote(solicitudesStock);
 
           pedido.estado = 'APROBADO';
           pedido.aprobado = new Date();
           pedido = await pedidoRepo.save(pedido);
           aprobacionNueva = true;
         } catch (error) {
-          if (compromisoLiberado) {
-            await this.stockService.restaurarCompromisoLote(solicitudesStock);
+          if (stockConfirmado.length) {
+            await this.stockService.restaurarStockConfirmadoLote(
+              stockConfirmado,
+            );
           }
           throw error;
         }
