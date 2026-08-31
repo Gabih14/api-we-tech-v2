@@ -8,6 +8,8 @@ describe('PedidoExpirationService', () => {
   const originalEnabled = process.env.PEDIDO_TRANSFER_APPROVAL_ENABLED;
 
   afterEach(() => {
+    jest.useRealTimers();
+
     if (originalEnabled === undefined) {
       delete process.env.PEDIDO_TRANSFER_APPROVAL_ENABLED;
     } else {
@@ -107,5 +109,27 @@ describe('PedidoExpirationService', () => {
     await expect(service.run(30)).resolves.toMatchObject({ expirados: 0 });
 
     expect(pedidoService.cancelarPedidoPendiente).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['sabado', '2026-08-29T15:00:00.000Z'],
+    ['domingo', '2026-08-30T15:00:00.000Z'],
+    ['lunes antes de las 12', '2026-08-31T14:59:00.000Z'],
+  ])('no ejecuta la cancelacion automatica el %s', async (_, date) => {
+    jest.useFakeTimers().setSystemTime(new Date(date));
+    const { service, pedidoRepo } = createService();
+
+    await service.scheduledRun();
+
+    expect(pedidoRepo.find).not.toHaveBeenCalled();
+  });
+
+  it('reanuda la cancelacion automatica el lunes a las 12', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-08-31T15:00:00.000Z'));
+    const { service, pedidoRepo } = createService();
+
+    await service.scheduledRun();
+
+    expect(pedidoRepo.find).toHaveBeenCalledTimes(2);
   });
 });

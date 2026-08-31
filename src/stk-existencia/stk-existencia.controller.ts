@@ -2,6 +2,7 @@ import { Controller, Get, Post, Body, Param, Delete, Patch } from '@nestjs/commo
 import { StkExistenciaService } from './stk-existencia.service';
 import { CreateStkExistenciaDto } from './dto/create-stk-existencia.dto';
 import { UpdateStkExistenciaDto } from './dto/update-stk-existencia.dto';
+import { AuthType } from '../common/decorators/auth-type.decorator';
 
 @Controller('stk-existencia')
 export class StkExistenciaController {
@@ -18,11 +19,13 @@ export class StkExistenciaController {
   }
 
   @Get('comprometidos')
+  @AuthType('dashboard')
   async findComprometidosConPedidos() {
     return this.stkExistenciaService.findComprometidosConPedidos();
   }
 
   @Post('comprometidos/sin-pedido/restaurar')
+  @AuthType('write')
   async restaurarComprometidosSinPedido() {
     return this.stkExistenciaService.restaurarComprometidosSinPedido();
   }

@@ -64,7 +64,7 @@ describe('EsperaService', () => {
       grupo: 'FILAMENTOS',
     });
     stkExistenciaRepository.find!.mockResolvedValue([
-      { cantidad: '0.0000', comprometido: '0.0000' },
+      { cantidad: '0.0000', comprometido: '2.0000' },
     ]);
     esperaRepository.findOne!.mockResolvedValue(null);
 

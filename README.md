@@ -2,7 +2,7 @@
 
 # 📦 API WeTech V2
 
-API desarrollada con **NestJS**, orientada a la gestión de stock, pedidos y operaciones de venta para una plataforma de e-commerce.  
+API desarrollada con **NestJS**, orientada a la gestión de stock, pedidos y operaciones de venta para una plataforma de e-commerce.
 Integra servicios de pago externos (como **Nave**) y módulos de catálogo, stock, comprobantes y más.
 
 ---
@@ -77,6 +77,10 @@ npm run test
 # Compilar para producción
 npm run build
 ```
+
+## 📚 Documentación funcional
+
+- [Modelo de reserva de stock](docs/stock-por-medio-de-pago.md)
 
 ---
 

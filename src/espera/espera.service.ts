@@ -90,9 +90,7 @@ export class EsperaService {
 
     return existencias.reduce((total, existencia) => {
       const cantidad = Number(existencia.cantidad ?? 0);
-      const comprometido = Number(existencia.comprometido ?? 0);
-
-      return total + (cantidad - comprometido);
+      return total + cantidad;
     }, 0);
   }
 

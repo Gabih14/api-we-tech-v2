@@ -9,6 +9,7 @@ import { PedidoService } from './pedido.service';
 @Injectable()
 export class PedidoExpirationService {
   private readonly logger = new Logger(PedidoExpirationService.name);
+  private cancellationPauseLogged = false;
   private transferApprovalPauseLogged = false;
 
   constructor(
@@ -89,8 +90,21 @@ export class PedidoExpirationService {
     return { expirados, fallos, total: pendientes.length };
   }
 
-  @Cron(process.env.PEDIDO_TTL_CRON || '*/10 * * * *')
+  @Cron(process.env.PEDIDO_TTL_CRON || '*/10 * * * 1-5', {
+    timeZone: 'America/Argentina/Buenos_Aires',
+  })
   async scheduledRun() {
+    if (!this.isCancellationWindowOpen()) {
+      if (!this.cancellationPauseLogged) {
+        this.logger.warn(
+          'Cancelacion automatica pausada hasta el lunes a las 12:00 (hora de Buenos Aires)',
+        );
+        this.cancellationPauseLogged = true;
+      }
+      return;
+    }
+
+    this.cancellationPauseLogged = false;
     const ttlMin = Number(process.env.PEDIDO_TTL_MIN || 30);
     const resultado = await this.run(ttlMin);
 
@@ -158,5 +172,21 @@ export class PedidoExpirationService {
       process.env.PEDIDO_TRANSFER_APPROVAL_ENABLED?.trim().toLowerCase();
 
     return !['false', '0', 'no', 'off'].includes(value ?? '');
+  }
+
+  private isCancellationWindowOpen(now = new Date()): boolean {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/Argentina/Buenos_Aires',
+      weekday: 'short',
+      hour: 'numeric',
+      hourCycle: 'h23',
+    }).formatToParts(now);
+    const weekday = parts.find((part) => part.type === 'weekday')?.value;
+    const hour = Number(parts.find((part) => part.type === 'hour')?.value);
+
+    if (weekday === 'Sat' || weekday === 'Sun') return false;
+    if (weekday === 'Mon') return hour >= 12;
+
+    return true;
   }
 }

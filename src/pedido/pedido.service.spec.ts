@@ -61,10 +61,17 @@ describe('PedidoService recalculo de importes', () => {
   };
   const stockService = {
     reservarStock: jest.fn(async () => 'DEPOSITO'),
+    reservarStockLote: jest.fn(async (solicitudes) =>
+      solicitudes.map((solicitud) => ({
+        item: solicitud.item,
+        cantidad: solicitud.cantidad,
+        deposito: solicitud.item.startsWith('ENV')
+          ? 'ENV'
+          : (solicitud.deposito ?? 'DEPOSITO'),
+      })),
+    ),
     liberarStock: jest.fn(async () => undefined),
     liberarStockLote: jest.fn(async () => undefined),
-    revertirReservaTransferenciaLote: jest.fn(async () => undefined),
-    restaurarCompromisoLote: jest.fn(async () => undefined),
     confirmarStock: jest.fn(async () => 'DEPOSITO'),
     restaurarStockConfirmado: jest.fn(async () => undefined),
     confirmarStockLote: jest.fn(async (solicitudes) =>
@@ -74,14 +81,6 @@ describe('PedidoService recalculo de importes', () => {
         depositoReserva: solicitud.item.startsWith('ENV')
           ? 'ENV'
           : (solicitud.deposito ?? 'DEPOSITO'),
-        salidas: [
-          {
-            deposito: solicitud.item.startsWith('ENV')
-              ? 'ENV'
-              : (solicitud.deposito ?? 'DEPOSITO'),
-            cantidad: solicitud.cantidad,
-          },
-        ],
       })),
     ),
     restaurarStockConfirmadoLote: jest.fn(async () => undefined),
@@ -2033,16 +2032,40 @@ describe('PedidoService recalculo de importes', () => {
       }),
     ).rejects.toThrow('fallo de comprobante');
 
-    expect(stockService.confirmarStock).toHaveBeenCalledWith(
-      'ITEM-1',
-      1,
-      undefined,
-    );
-    expect(stockService.restaurarStockConfirmado).toHaveBeenCalledWith(
-      'ITEM-1',
-      1,
-      'DEPOSITO',
-    );
+    expect(stockService.confirmarStockLote).toHaveBeenCalledWith([
+      { item: 'ITEM-1', cantidad: 1, deposito: undefined },
+    ]);
+    expect(stockService.restaurarStockConfirmadoLote).toHaveBeenCalledWith([
+      { item: 'ITEM-1', cantidad: 1, depositoReserva: 'DEPOSITO' },
+    ]);
+    fetchSpy.mockRestore();
+  });
+
+  it('no libera dos veces un pedido ya cancelado ante webhooks repetidos', async () => {
+    const pedido = {
+      id: 893,
+      external_id: 'pedido-cancelado',
+      estado: 'CANCELADO',
+      metodo_pago: 'online',
+      productos: [
+        { nombre: 'ITEM-1', cantidad: 1, deposito_reserva: 'DEPOSITO' },
+      ],
+    };
+    createRepo.findOne.mockResolvedValue(pedido);
+    jest.spyOn(service, 'obtenerTokenDeNave').mockResolvedValue('token');
+    const fetchSpy = jest.spyOn(global, 'fetch').mockResolvedValue({
+      headers: new Headers({ 'content-type': 'application/json' }),
+      json: async () => ({ status: { name: 'REJECTED' } }),
+    } as Response);
+
+    await expect(
+      service.procesarNotificacionDeNave({
+        payment_check_url: 'https://api.ranty.io/payment',
+        external_payment_id: pedido.external_id,
+      }),
+    ).resolves.toMatchObject({ estado: 'CANCELADO' });
+
+    expect(stockService.liberarStockLote).not.toHaveBeenCalled();
     fetchSpy.mockRestore();
   });
 
@@ -2081,8 +2104,10 @@ describe('PedidoService recalculo de importes', () => {
       }),
     );
 
-    expect(stockService.reservarStock).toHaveBeenCalledWith('ITEM-TRANSFER', 1);
-    expect(stockService.liberarStock).not.toHaveBeenCalled();
+    expect(stockService.reservarStockLote).toHaveBeenCalledWith([
+      { item: 'ITEM-TRANSFER', cantidad: 1 },
+    ]);
+    expect(stockService.liberarStockLote).not.toHaveBeenCalled();
     expect(pedido.productos[0].deposito_reserva).toBe('DEPOSITO');
   });
 
@@ -2104,7 +2129,35 @@ describe('PedidoService recalculo de importes', () => {
       }),
     );
 
-    expect(stockService.reservarStock).toHaveBeenCalledWith('ITEM-ONLINE', 1);
+    expect(stockService.reservarStockLote).toHaveBeenCalledWith([
+      { item: 'ITEM-ONLINE', cantidad: 1 },
+    ]);
+  });
+
+  it('libera todo el lote si falla el guardado del pedido', async () => {
+    stkItemRepo.findOne.mockResolvedValue(itemConPrecio('ITEM-ONLINE', '10'));
+    createRepo.save.mockRejectedValueOnce(new Error('fallo guardando pedido'));
+
+    await expect(
+      service.crear(
+        dtoBase({
+          metodo_pago: 'online',
+          total: 10,
+          productos: [
+            {
+              nombre: 'ITEM-ONLINE',
+              cantidad: 1,
+              precio_unitario: 10,
+              subtotal: 10,
+            },
+          ],
+        }),
+      ),
+    ).rejects.toThrow('fallo guardando pedido');
+
+    expect(stockService.liberarStockLote).toHaveBeenCalledWith([
+      { item: 'ITEM-ONLINE', cantidad: 1, deposito: 'DEPOSITO' },
+    ]);
   });
 
   it('aprueba una transferencia liberando solo el stock comprometido', async () => {
@@ -2136,13 +2189,11 @@ describe('PedidoService recalculo de importes', () => {
       'X 00001 00000001',
       pedido,
     );
-    expect(stockService.confirmarStockLote).not.toHaveBeenCalled();
-    expect(stockService.confirmarStock).not.toHaveBeenCalled();
-    expect(stockService.liberarStock).not.toHaveBeenCalled();
-    expect(stockService.liberarStockLote).toHaveBeenCalledWith([
+    expect(stockService.confirmarStockLote).toHaveBeenCalledWith([
       { item: 'ITEM-1', cantidad: 1, deposito: 'DEPOSITO' },
       { item: 'ITEM-2', cantidad: 2, deposito: 'DEPOSITO' },
     ]);
+    expect(stockService.liberarStockLote).not.toHaveBeenCalled();
     expect(createRepo.save).toHaveBeenCalledWith(
       expect.objectContaining({ estado: 'APROBADO' }),
     );
@@ -2190,13 +2241,11 @@ describe('PedidoService recalculo de importes', () => {
       service.aprobarTransferencia(pedido.external_id),
     ).rejects.toThrow('fallo guardando pedido');
 
-    expect(stockService.confirmarStockLote).not.toHaveBeenCalled();
-    expect(stockService.restaurarStockConfirmadoLote).not.toHaveBeenCalled();
-    expect(stockService.liberarStockLote).toHaveBeenCalledWith([
+    expect(stockService.confirmarStockLote).toHaveBeenCalledWith([
       { item: 'ITEM-1', cantidad: 1, deposito: 'DEPOSITO' },
     ]);
-    expect(stockService.restaurarCompromisoLote).toHaveBeenCalledWith([
-      { item: 'ITEM-1', cantidad: 1, deposito: 'DEPOSITO' },
+    expect(stockService.restaurarStockConfirmadoLote).toHaveBeenCalledWith([
+      { item: 'ITEM-1', cantidad: 1, depositoReserva: 'DEPOSITO' },
     ]);
   });
 
@@ -2223,11 +2272,11 @@ describe('PedidoService recalculo de importes', () => {
     expect(createRepo.save).toHaveBeenCalledWith(
       expect.objectContaining({ estado: 'APROBADO' }),
     );
-    expect(stockService.confirmarStockLote).not.toHaveBeenCalled();
-    expect(stockService.restaurarStockConfirmadoLote).not.toHaveBeenCalled();
-    expect(stockService.liberarStockLote).toHaveBeenCalledWith([
+    expect(stockService.confirmarStockLote).toHaveBeenCalledWith([
       { item: 'ITEM-SIN-STOCK', cantidad: 2, deposito: 'GARAGE' },
     ]);
+    expect(stockService.restaurarStockConfirmadoLote).not.toHaveBeenCalled();
+    expect(stockService.liberarStockLote).not.toHaveBeenCalled();
   });
 
   it('permite cancelar un pedido marcado con ERROR_STOCK', async () => {
@@ -2267,10 +2316,9 @@ describe('PedidoService recalculo de importes', () => {
       service.cancelarPedidoPendiente(pedido.external_id),
     ).resolves.toMatchObject({ estado: 'CANCELADO' });
 
-    expect(stockService.revertirReservaTransferenciaLote).toHaveBeenCalledWith([
+    expect(stockService.liberarStockLote).toHaveBeenCalledWith([
       { item: 'ITEM-1', cantidad: 1, deposito: 'DEPOSITO' },
     ]);
-    expect(stockService.liberarStockLote).not.toHaveBeenCalled();
   });
 
   it('envia a delivery un pedido shipping marcado con ERROR_STOCK', async () => {
@@ -2411,7 +2459,7 @@ describe('PedidoService recalculo de importes', () => {
     await expect(primeraAprobacion).resolves.toMatchObject({
       pedido: expect.objectContaining({ estado: 'APROBADO' }),
     });
-    expect(stockService.confirmarStockLote).not.toHaveBeenCalled();
-    expect(stockService.liberarStockLote).toHaveBeenCalledTimes(1);
+    expect(stockService.confirmarStockLote).toHaveBeenCalledTimes(1);
+    expect(stockService.liberarStockLote).not.toHaveBeenCalled();
   });
 });
