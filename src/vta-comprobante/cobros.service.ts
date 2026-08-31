@@ -127,13 +127,14 @@ export class CobrosService {
 
       await manager.getRepository(VtaCobro).save(cobro);
 
-      // 5) Insert vta_cobro_medio (la línea visible en la pestaña Cobro)
+      // 5) Insert vta_cobro_modo (la línea visible en la pestaña Cobro)
       const medio = manager.getRepository(VtaCobroMedio).create({
         cobro: cobroNumero,
         linea: 1,
         importe: total.toFixed(2),
-        modalidad,
+        modalidad: modalidad === "CHEQUE_3RO" ? "CHEQUE3RO" : modalidad,
         conciliado: false,
+        anulado: false,
         imputacion: new Date().toISOString().slice(0, 10), // YYYY-MM-DD
 
         caja: modalidad === "CAJA" ? medioId : null,
