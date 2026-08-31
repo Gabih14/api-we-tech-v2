@@ -1,6 +1,5 @@
 import { Column, Entity, Index, JoinColumn, ManyToOne } from "typeorm";
 import { VtaCobro } from "../../vta-cobro/entities/vta-cobro.entity";
-import { BasMoneda } from "../../bas-moneda/entities/bas-moneda.entity";
 //import { FndCaja } from "./FndCaja";
 //import { FndCuenta } from "./FndCuenta";
 //import { FndTarjeta } from "./FndTarjeta";
@@ -14,10 +13,10 @@ import { BasMoneda } from "../../bas-moneda/entities/bas-moneda.entity";
 @Index("cuenta", ["cuenta"], {})
 @Index("tarjeta", ["tarjeta"], {})
 @Index("cheque", ["cheque"], {})
-@Index("cheque_3ro", ["cheque_3ro"], {})
+@Index("cheque3ro", ["cheque_3ro"], {})
 @Index("certificado", ["certificado", "cliente"], {})
-@Index("cobro_a_cuenta", ["cobroACuenta"], {})
-@Entity("vta_cobro_medio", { schema: "wetech" })
+@Index("cobroacuenta", ["cobroACuenta"], {})
+@Entity("vta_cobro_modo", { schema: "wetech" })
 export class VtaCobroMedio {
   @Column("varchar", { primary: true, name: "cobro", length: 16 })
   cobro: string;
@@ -28,7 +27,7 @@ export class VtaCobroMedio {
   @Column("decimal", {
     name: "importe",
     nullable: true,
-    precision: 12,
+    precision: 17,
     scale: 2,
   })
   importe: string | null;
@@ -45,14 +44,14 @@ export class VtaCobroMedio {
   cotizacion: string | null;
 
   @Column("enum", {
-    name: "modalidad",
+    name: "modo",
     nullable: true,
     enum: [
       "CAJA",
       "CUENTA",
       "TARJETA",
       "CHEQUE",
-      "CHEQUE_3RO",
+      "CHEQUE3RO",
       "CERTIFICADO",
       "CTACTE",
     ],
@@ -62,7 +61,7 @@ export class VtaCobroMedio {
     | "CUENTA"
     | "TARJETA"
     | "CHEQUE"
-    | "CHEQUE_3RO"
+    | "CHEQUE3RO"
     | "CERTIFICADO"
     | "CTACTE"
     | null;
@@ -79,7 +78,7 @@ export class VtaCobroMedio {
   @Column("varchar", { name: "cheque", nullable: true, length: 16 })
   cheque: string | null;
 
-  @Column("varchar", { name: "cheque_3ro", nullable: true, length: 16 })
+  @Column("varchar", { name: "cheque3ro", nullable: true, length: 16 })
   cheque_3ro: string | null;
 
   @Column("varchar", { name: "certificado", nullable: true, length: 20 })
@@ -88,10 +87,10 @@ export class VtaCobroMedio {
   @Column("varchar", { name: "cliente", nullable: true, length: 20 })
   cliente: string | null;
 
-  @Column("varchar", { name: "cobro_a_cuenta", nullable: true, length: 16 })
+  @Column("varchar", { name: "cobroacuenta", nullable: true, length: 16 })
   cobroACuenta: string | null;
 
-  @Column("varchar", { name: "detalle", nullable: true, length: 128 })
+  @Column("varchar", { name: "leyenda", nullable: true, length: 128 })
   detalle: string | null;
 
   @Column("date", { name: "imputacion", nullable: true })
@@ -104,6 +103,14 @@ export class VtaCobroMedio {
     default: () => "'0'",
   })
   conciliado: boolean | null;
+
+  @Column("tinyint", {
+    name: "anulado",
+    nullable: true,
+    width: 1,
+    default: () => "'0'",
+  })
+  anulado: boolean | null;
 
   @ManyToOne(() => VtaCobro, (vtaCobro) => vtaCobro.vtaCobroMedios, {
     onDelete: "CASCADE",
@@ -152,7 +159,7 @@ export class VtaCobroMedio {
     (fndCheque_3ro) => fndCheque_3ro.vtaCobroMedios,
     { onDelete: "SET NULL", onUpdate: "CASCADE" }
   )
-  @JoinColumn([{ name: "cheque_3ro", referencedColumnName: "numero" }])
+  @JoinColumn([{ name: "cheque3ro", referencedColumnName: "numero" }])
   cheque_3ro2: FndCheque_3ro;
 
   @ManyToOne(
@@ -170,6 +177,6 @@ export class VtaCobroMedio {
     onDelete: "SET NULL",
     onUpdate: "CASCADE",
   })
-  @JoinColumn([{ name: "cobro_a_cuenta", referencedColumnName: "numero" }])
+  @JoinColumn([{ name: "cobroacuenta", referencedColumnName: "numero" }])
   cobroACuenta2: VtaCobro;
 }
