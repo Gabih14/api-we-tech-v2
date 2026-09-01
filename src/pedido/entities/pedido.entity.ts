@@ -5,6 +5,7 @@ import { PedidoItem } from './pedido-item.entity';
 export type PedidoEstado =
   | 'PENDIENTE'
   | 'APROBADO'
+  | 'APROBADO_MANUAL'
   | 'CANCELADO'
   | 'ERROR_STOCK';
 

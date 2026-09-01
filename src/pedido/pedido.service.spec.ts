@@ -2160,6 +2160,71 @@ describe('PedidoService recalculo de importes', () => {
     ]);
   });
 
+  it('aprueba manualmente modificando solo la cabecera del pedido', async () => {
+    const pedido = {
+      id: 899,
+      external_id: 'pedido-manual',
+      estado: 'PENDIENTE',
+      metodo_pago: 'transfer',
+    };
+    createRepo.findOne.mockResolvedValue(pedido);
+
+    const resultado = await service.aprobarManual(pedido.external_id);
+
+    expect(createRepo.findOne).toHaveBeenCalledWith({
+      where: { external_id: pedido.external_id },
+      lock: { mode: 'pessimistic_write' },
+    });
+    expect(createRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        estado: 'APROBADO_MANUAL',
+        aprobado: expect.any(Date),
+      }),
+    );
+    expect(stockService.confirmarStockLote).not.toHaveBeenCalled();
+    expect(stockService.liberarStockLote).not.toHaveBeenCalled();
+    expect(resultado).toMatchObject({
+      pedido: { estado: 'APROBADO_MANUAL' },
+      yaAprobado: false,
+    });
+  });
+
+  it('no vuelve a modificar un pedido ya aprobado manualmente', async () => {
+    const pedido = {
+      id: 898,
+      external_id: 'pedido-ya-manual',
+      estado: 'APROBADO_MANUAL',
+      aprobado: new Date('2026-09-01T12:00:00Z'),
+    };
+    createRepo.findOne.mockResolvedValue(pedido);
+
+    await expect(service.aprobarManual(pedido.external_id)).resolves.toEqual({
+      pedido,
+      yaAprobado: true,
+    });
+
+    expect(createRepo.save).not.toHaveBeenCalled();
+    expect(stockService.confirmarStockLote).not.toHaveBeenCalled();
+    expect(stockService.liberarStockLote).not.toHaveBeenCalled();
+  });
+
+  it('rechaza la aprobacion manual de un pedido con estado final', async () => {
+    const pedido = {
+      id: 897,
+      external_id: 'pedido-aprobado-normal',
+      estado: 'APROBADO',
+    };
+    createRepo.findOne.mockResolvedValue(pedido);
+
+    await expect(service.aprobarManual(pedido.external_id)).rejects.toThrow(
+      'no puede aprobarse manualmente',
+    );
+
+    expect(createRepo.save).not.toHaveBeenCalled();
+    expect(stockService.confirmarStockLote).not.toHaveBeenCalled();
+    expect(stockService.liberarStockLote).not.toHaveBeenCalled();
+  });
+
   it('aprueba una transferencia liberando solo el stock comprometido', async () => {
     const pedido = {
       id: 900,
