@@ -26,7 +26,7 @@ import { VtaCobroMedio } from "../../vta-cobro-medio/entities/vta-cobro-medio.en
 @Index("estado", ["estado"], {})
 @Index("empresa", ["empresa"], {})
 @Index("terminal", ["terminal"], {})
-@Index("user", ["user"], {})
+@Index("usuario", ["user"], {})
 @Entity("vta_cobro", { schema: "wetech" })
 export class VtaCobro {
   @Column("varchar", { primary: true, name: "numero", length: 16 })
@@ -37,6 +37,9 @@ export class VtaCobro {
 
   @Column("datetime", { name: "fecha", nullable: true })
   fecha: Date | null;
+
+  @Column("datetime", { name: "imputacion", nullable: true })
+  imputacion: Date | null;
 
   @Column("date", { name: "vencimiento", nullable: true })
   vencimiento: string | null;
@@ -91,19 +94,19 @@ export class VtaCobro {
   })
   anulado: boolean | null;
 
-  @Column("text", { name: "observaciones", nullable: true })
+  @Column("text", { name: "notas", nullable: true })
   observaciones: string | null;
 
-  @Column("text", { name: "observaciones_int", nullable: true })
+  @Column("text", { name: "notas_int", nullable: true })
   observacionesInt: string | null;
 
-  @Column("decimal", { name: "caja", nullable: true, precision: 12, scale: 2 })
+  @Column("decimal", { name: "caja", nullable: true, precision: 17, scale: 2 })
   caja: string | null;
 
   @Column("decimal", {
     name: "cuenta",
     nullable: true,
-    precision: 12,
+    precision: 17,
     scale: 2,
   })
   cuenta: string | null;
@@ -111,7 +114,7 @@ export class VtaCobro {
   @Column("decimal", {
     name: "tarjeta",
     nullable: true,
-    precision: 12,
+    precision: 17,
     scale: 2,
   })
   tarjeta: string | null;
@@ -119,15 +122,15 @@ export class VtaCobro {
   @Column("decimal", {
     name: "cheque",
     nullable: true,
-    precision: 12,
+    precision: 17,
     scale: 2,
   })
   cheque: string | null;
 
   @Column("decimal", {
-    name: "cheque_3ro",
+    name: "cheque3ro",
     nullable: true,
-    precision: 12,
+    precision: 17,
     scale: 2,
   })
   cheque_3ro: string | null;
@@ -135,7 +138,7 @@ export class VtaCobro {
   @Column("decimal", {
     name: "certificado",
     nullable: true,
-    precision: 12,
+    precision: 17,
     scale: 2,
   })
   certificado: string | null;
@@ -143,18 +146,18 @@ export class VtaCobro {
   @Column("decimal", {
     name: "ctacte",
     nullable: true,
-    precision: 12,
+    precision: 17,
     scale: 2,
   })
   ctacte: string | null;
 
-  @Column("decimal", { name: "total", nullable: true, precision: 14, scale: 2 })
+  @Column("decimal", { name: "total", nullable: true, precision: 17, scale: 2 })
   total: string | null;
 
   @Column("decimal", {
     name: "subtotal_factura",
     nullable: true,
-    precision: 14,
+    precision: 17,
     scale: 2,
   })
   subtotalFactura: string | null;
@@ -162,7 +165,7 @@ export class VtaCobro {
   @Column("decimal", {
     name: "total_factura",
     nullable: true,
-    precision: 14,
+    precision: 17,
     scale: 2,
   })
   totalFactura: string | null;
@@ -173,7 +176,7 @@ export class VtaCobro {
   @Column("decimal", {
     name: "ajuste_total",
     nullable: true,
-    precision: 14,
+    precision: 17,
     scale: 2,
   })
   ajusteTotal: string | null;
@@ -184,7 +187,7 @@ export class VtaCobro {
   @Column("decimal", {
     name: "cargos$",
     nullable: true,
-    precision: 12,
+    precision: 17,
     scale: 2,
   })
   cargos$: string | null;
@@ -198,19 +201,47 @@ export class VtaCobro {
   @Column("varchar", { name: "terminal", nullable: true, length: 20 })
   terminal: string | null;
 
-  @Column("varchar", { name: "user", nullable: true, length: 20 })
+  @Column("varchar", { name: "usuario", nullable: true, length: 20 })
   user: string | null;
 
-  @Column("bit", { name: "adjuntos", nullable: true, default: () => "'b'0''" })
+  @Column("tinyint", {
+    name: "adjuntos",
+    nullable: true,
+    width: 1,
+    default: () => "'0'",
+  })
   adjuntos: boolean | null;
 
-  @Column("bit", { name: "adjuntado", nullable: true, default: () => "'b'0''" })
+  @Column("tinyint", {
+    name: "adjuntado",
+    nullable: true,
+    width: 1,
+    default: () => "'0'",
+  })
   adjuntado: boolean | null;
 
-  @Column("bit", { name: "mail", nullable: true, default: () => "'b'0''" })
+  @Column("tinyint", {
+    name: "mail",
+    nullable: true,
+    width: 1,
+    default: () => "'0'",
+  })
   mail: boolean | null;
 
-  @Column("bit", { name: "visible", nullable: true, default: () => "'b'1''" })
+  @Column("tinyint", {
+    name: "nivel",
+    nullable: true,
+    width: 4,
+    default: () => "'0'",
+  })
+  nivel: number | null;
+
+  @Column("tinyint", {
+    name: "visible",
+    nullable: true,
+    width: 1,
+    default: () => "'1'",
+  })
   visible: boolean | null;
 
   /* @ManyToOne(() => VtaCliente, (vtaCliente) => vtaCliente.vtaCobros, {
