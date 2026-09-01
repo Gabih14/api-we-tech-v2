@@ -36,6 +36,14 @@ Online y transferencia ejecutan exactamente los mismos movimientos. Los items
 virtuales cuyo codigo comienza con `ENV` no modifican stock y usan el deposito
 virtual `ENV`.
 
+## Aprobacion manual administrativa
+
+`POST /pedido/:externalId/aprobar-manual` cambia solamente la cabecera del
+pedido a `APROBADO_MANUAL` y registra la fecha de aprobacion. No consulta ni
+modifica `pedido_item`, `stk_existencia`, `cantidad` o `comprometido`. Solo
+admite pedidos `PENDIENTE` o `ERROR_STOCK` y es idempotente si el pedido ya se
+encuentra en `APROBADO_MANUAL`.
+
 ## Atomicidad y compensaciones
 
 Las reservas, confirmaciones y liberaciones se procesan por lote dentro de una

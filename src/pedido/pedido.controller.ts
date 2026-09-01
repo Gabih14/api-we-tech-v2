@@ -132,6 +132,19 @@ export class PedidoController {
     };
   }
 
+  @Post(':externalId/aprobar-manual')
+  @AuthType('write')
+  @HttpCode(HttpStatus.OK)
+  async aprobarManual(@Param('externalId') externalId: string) {
+    const resultado = await this.pedidoService.aprobarManual(externalId);
+    return {
+      message: resultado.yaAprobado
+        ? 'El pedido ya estaba aprobado manualmente'
+        : 'Pedido aprobado manualmente',
+      ...resultado,
+    };
+  }
+
   @Post(':externalId/rechazar')
   @AuthType('write')
   @HttpCode(HttpStatus.OK)

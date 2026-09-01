@@ -1135,9 +1135,13 @@ export class PedidoService {
 
     if (query.estado) {
       if (
-        !['PENDIENTE', 'APROBADO', 'CANCELADO', 'ERROR_STOCK'].includes(
-          query.estado,
-        )
+        ![
+          'PENDIENTE',
+          'APROBADO',
+          'APROBADO_MANUAL',
+          'CANCELADO',
+          'ERROR_STOCK',
+        ].includes(query.estado)
       ) {
         throw new BadRequestException('Estado inválido');
       }
@@ -1268,6 +1272,49 @@ export class PedidoService {
     await this.enviarPedidoADeliveryTelegram(pedido);
 
     return pedido;
+  }
+
+  /**
+   * Marca administrativamente un pedido como aprobado. Este flujo modifica
+   * solo la cabecera del pedido; no consulta ni mueve items o stock.
+   */
+  async aprobarManual(externalId: string): Promise<{
+    pedido: Pedido;
+    yaAprobado: boolean;
+  }> {
+    let pedido!: Pedido;
+    let aprobacionNueva = false;
+
+    await this.pedidoRepo.manager.transaction(async (manager) => {
+      const pedidoRepo = manager.getRepository(Pedido);
+      const pedidoEncontrado = await pedidoRepo.findOne({
+        where: { external_id: externalId },
+        lock: { mode: 'pessimistic_write' },
+      });
+
+      if (!pedidoEncontrado) {
+        throw new NotFoundException(`Pedido ${externalId} no encontrado`);
+      }
+
+      pedido = pedidoEncontrado;
+
+      if (pedido.estado === 'APROBADO_MANUAL') {
+        return;
+      }
+
+      if (pedido.estado !== 'PENDIENTE' && pedido.estado !== 'ERROR_STOCK') {
+        throw new ConflictException(
+          `Pedido ${externalId} no puede aprobarse manualmente (estado: ${pedido.estado})`,
+        );
+      }
+
+      pedido.estado = 'APROBADO_MANUAL';
+      pedido.aprobado = new Date();
+      pedido = await pedidoRepo.save(pedido);
+      aprobacionNueva = true;
+    });
+
+    return { pedido, yaAprobado: !aprobacionNueva };
   }
 
   // 💳 Aprobar pedido por transferencia
