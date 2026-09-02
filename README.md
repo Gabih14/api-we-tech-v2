@@ -33,12 +33,23 @@ TELEGRAM_CHAT_ID=tu_telegram_chat_id_secretaria
 DELIVERY_TELEGRAM_CHAT_ID=tu_telegram_chat_id_delivery
 DELIVERY_GENERAL_TELEGRAM_CHAT_ID=tu_telegram_chat_id_delivery_general
 PEDIDO_TRANSFER_APPROVAL_ENABLED=true
+PEDIDO_EXPIRATION_OPEN_HOUR=9
+PEDIDO_EXPIRATION_CLOSE_HOUR=19
+PEDIDO_EXPIRATION_MONDAY_OPEN_HOUR=12
+PEDIDO_EXPIRATION_TIMEZONE=America/Argentina/Buenos_Aires
 ```
 
 `PEDIDO_TRANSFER_APPROVAL_ENABLED` controla la aprobación automática de
 pedidos por transferencia. Su valor predeterminado es `true`; usar `false`,
 `0`, `no` u `off` pausa el proceso antes de que consulte o modifique pedidos.
 Reiniciar la aplicación después de cambiarla.
+
+`PEDIDO_TTL_MIN` y `PEDIDO_TRANSFER_TTL_MIN` se cuentan en minutos habiles
+para la cancelacion automatica. Por defecto, el horario habil es lunes desde
+las 12:00 y martes a viernes de 9:00 a 19:00, en
+`America/Argentina/Buenos_Aires`. Se puede ajustar con
+`PEDIDO_EXPIRATION_OPEN_HOUR`, `PEDIDO_EXPIRATION_CLOSE_HOUR`,
+`PEDIDO_EXPIRATION_MONDAY_OPEN_HOUR` y `PEDIDO_EXPIRATION_TIMEZONE`.
 
 ⚠️ Otros tokens, como el de Nave, están embebidos por ahora.
 **Se recomienda externalizarlos a `.env` por seguridad.**
