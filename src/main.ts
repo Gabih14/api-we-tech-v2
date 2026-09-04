@@ -13,9 +13,18 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   app.getHttpAdapter().getInstance().set('trust proxy', 1);
 
-  const allowedOrigins = process.env.ALLOWED_ORIGINS
-    ? process.env.ALLOWED_ORIGINS.split(',')
-    : ['https://shop.wetech.ar'];
+  const defaultAllowedOrigins = [
+    'https://shop.wetech.ar',
+    'http://localhost:3000',
+    'http://localhost:4173',
+    'http://localhost:5173',
+  ];
+  const configuredAllowedOrigins = process.env.ALLOWED_ORIGINS
+    ? process.env.ALLOWED_ORIGINS.split(',').map((origin) => origin.trim())
+    : [];
+  const allowedOrigins = Array.from(
+    new Set([...defaultAllowedOrigins, ...configuredAllowedOrigins]),
+  );
 
   app.enableCors({
     origin: allowedOrigins,
