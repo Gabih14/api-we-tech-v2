@@ -59,7 +59,7 @@ async function bootstrap() {
     allowedOrigins,
   );
   console.log(`Servidor corriendo en ${process.env.PORT ?? 3000}`);
-  console.log("Cambios: IVA")
+  console.log("Cambios: Cancelación pausada fuera de horario de atención")
   console.log(`Tiempo de CRON de aprobación de transferencias: ${process.env.PEDIDO_TRANSFER_APPROVAL_CRON ?? 'no configurado'}`);
   console.log(`Aprobación automática de transferencias habilitada: ${process.env.PEDIDO_TRANSFER_APPROVAL_ENABLED ?? 'true'}`);
   console.log(`Tiempo de TTL de transferencias: ${process.env.PEDIDO_TRANSFER_TTL_MIN ?? 'no configurado'}`);
