@@ -78,6 +78,7 @@ export interface CatalogoVariante {
   promotionalPrice: string | null;
   /** Stock que el ERP puede vender (cantidad sumada por depósito, mínimo 0). */
   stock: number;
+  updatedAt: string;
   /** Peso en kg parseado de "Peso Neto" (null si no aplica, ej. "Kit 20 Colores"). */
   pesoKg: number | null;
   /** Código de familia del ERP (lo usa el front para filtros de exclusión). */
@@ -557,6 +558,7 @@ export class StkItemService {
           invoicePrice: invoice != null ? invoice.toFixed(2) : null,
           promotionalPrice: promo != null ? promo.toFixed(2) : null,
           stock: this.stockDisponible(item),
+          updatedAt: this.updatedAtPublico(item),
           pesoKg: StkItemService.pesoAKg(pesoNeto),
           familia: item.familia ?? null,
           visible: !!item.visible,
@@ -621,6 +623,20 @@ export class StkItemService {
       const disponible = Math.max(0, Number.isFinite(cantidad) ? cantidad : 0);
       return total + disponible;
     }, 0);
+  }
+
+  private updatedAtPublico(item: StkItem): string {
+    const fechas = (item.stkPrecios ?? [])
+      .map((precio) => precio.fecha)
+      .filter((fecha): fecha is string => !!fecha)
+      .map((fecha) => new Date(`${fecha}T00:00:00.000Z`).getTime())
+      .filter((time) => Number.isFinite(time));
+
+    if (fechas.length === 0) {
+      return new Date(0).toISOString();
+    }
+
+    return new Date(Math.max(...fechas)).toISOString();
   }
 
   /** Convierte un texto de "Peso Neto" (ej. "1KG", "500GR", "2,5KG") a kg numéricos. */
