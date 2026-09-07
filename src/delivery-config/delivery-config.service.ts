@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { IsNull, Like, MoreThanOrEqual, Not, Repository } from 'typeorm';
+import { IsNull, Like, Not, Repository } from 'typeorm';
 import { CreateDeliveryConfigDto } from './dto/create-delivery-config.dto';
 import { UpdateDeliveryConfigDto } from './dto/update-delivery-config.dto';
 import { DeliveryConfig } from './entities/delivery-config.entity';
@@ -150,7 +150,6 @@ export class DeliveryConfigService {
     const configs = await this.deliveryConfigRepository.find({
       where: {
         activo: true,
-        kms: MoreThanOrEqual(distancia),
         item: Not(IsNull()),
       },
     });
@@ -160,6 +159,10 @@ export class DeliveryConfigService {
     return (
       configs
         .map((config): DeliveryConfigMatch | null => {
+            if (config.kms !== null && Number(config.kms) < distancia) {
+              return null;
+            }
+
           const specificity = this.obtenerEspecificidad(
             config,
             provinciaNormalizada,
@@ -169,10 +172,22 @@ export class DeliveryConfigService {
         })
         .filter((match): match is DeliveryConfigMatch => match !== null)
         .sort(
-          (a, b) =>
-            b.specificity - a.specificity ||
-            Number(a.config.kms) - Number(b.config.kms) ||
-            a.config.id - b.config.id,
+          (a, b) => {
+            const kmsA =
+              a.config.kms === null
+                ? Number.POSITIVE_INFINITY
+                : Number(a.config.kms);
+            const kmsB =
+              b.config.kms === null
+                ? Number.POSITIVE_INFINITY
+                : Number(b.config.kms);
+
+            return (
+              b.specificity - a.specificity ||
+              kmsA - kmsB ||
+              a.config.id - b.config.id
+            );
+          },
         )[0]?.config ?? null
     );
   }

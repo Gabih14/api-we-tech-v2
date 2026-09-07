@@ -19,7 +19,10 @@ La prioridad geografica es:
 4. Sin provincia ni departamento (configuracion global).
 
 Entre configuraciones con igual prioridad se elige primero el menor `kms` que
-cubra la distancia y luego el menor `id`.
+cubra la distancia y luego el menor `id`. Una configuracion con `kms` en
+`NULL` no tiene limite de kilometros: se considera aplicable a cualquier
+distancia, pero queda despues de las configuraciones con un limite numerico
+dentro de la misma prioridad geografica.
 
 ## Validacion del pedido
 
