@@ -2225,6 +2225,82 @@ describe('PedidoService recalculo de importes', () => {
     expect(stockService.liberarStockLote).not.toHaveBeenCalled();
   });
 
+  it('cancela manualmente modificando solo el estado del pedido', async () => {
+    const aprobado = new Date('2026-09-01T12:00:00Z');
+    const pedido = {
+      id: 896,
+      external_id: 'pedido-cancelacion-manual',
+      estado: 'APROBADO_MANUAL',
+      aprobado,
+      comprobante_tipo: 'FX',
+      comprobante_numero: 'X 00001 00000010',
+    };
+    createRepo.findOne.mockResolvedValue(pedido);
+
+    const resultado = await service.cancelarManual(pedido.external_id);
+
+    expect(createRepo.findOne).toHaveBeenCalledWith({
+      where: { external_id: pedido.external_id },
+      lock: { mode: 'pessimistic_write' },
+    });
+    expect(createRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        estado: 'CANCELADO_MANUAL',
+        aprobado,
+        comprobante_tipo: 'FX',
+        comprobante_numero: 'X 00001 00000010',
+      }),
+    );
+    expect(stockService.confirmarStockLote).not.toHaveBeenCalled();
+    expect(stockService.liberarStockLote).not.toHaveBeenCalled();
+    expect(
+      vtaComprobanteService.eliminarComprobantePorPedido,
+    ).not.toHaveBeenCalled();
+    expect(resultado).toMatchObject({
+      pedido: { estado: 'CANCELADO_MANUAL' },
+      yaCancelado: false,
+    });
+  });
+
+  it('no vuelve a modificar un pedido ya cancelado manualmente', async () => {
+    const pedido = {
+      id: 895,
+      external_id: 'pedido-ya-cancelado-manual',
+      estado: 'CANCELADO_MANUAL',
+    };
+    createRepo.findOne.mockResolvedValue(pedido);
+
+    await expect(service.cancelarManual(pedido.external_id)).resolves.toEqual({
+      pedido,
+      yaCancelado: true,
+    });
+
+    expect(createRepo.save).not.toHaveBeenCalled();
+    expect(stockService.liberarStockLote).not.toHaveBeenCalled();
+    expect(
+      vtaComprobanteService.eliminarComprobantePorPedido,
+    ).not.toHaveBeenCalled();
+  });
+
+  it('no reclasifica como manual un pedido cancelado por el flujo normal', async () => {
+    const pedido = {
+      id: 894,
+      external_id: 'pedido-cancelado-normal',
+      estado: 'CANCELADO',
+    };
+    createRepo.findOne.mockResolvedValue(pedido);
+
+    await expect(service.cancelarManual(pedido.external_id)).rejects.toThrow(
+      'ya fue cancelado por el flujo normal',
+    );
+
+    expect(createRepo.save).not.toHaveBeenCalled();
+    expect(stockService.liberarStockLote).not.toHaveBeenCalled();
+    expect(
+      vtaComprobanteService.eliminarComprobantePorPedido,
+    ).not.toHaveBeenCalled();
+  });
+
   it('aprueba una transferencia liberando solo el stock comprometido', async () => {
     const pedido = {
       id: 900,

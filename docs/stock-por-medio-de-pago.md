@@ -44,6 +44,12 @@ modifica `pedido_item`, `stk_existencia`, `cantidad` o `comprometido`. Solo
 admite pedidos `PENDIENTE` o `ERROR_STOCK` y es idempotente si el pedido ya se
 encuentra en `APROBADO_MANUAL`.
 
+`POST /pedido/:externalId/cancelar-manual` cambia solamente la cabecera del
+pedido a `CANCELADO_MANUAL`. No consulta ni modifica `pedido_item`,
+`stk_existencia`, `cantidad`, `comprometido` o comprobantes. Es idempotente si
+el pedido ya se encuentra en `CANCELADO_MANUAL`; rechaza pedidos que ya fueron
+`CANCELADO` mediante el flujo normal.
+
 ## Atomicidad y compensaciones
 
 Las reservas, confirmaciones y liberaciones se procesan por lote dentro de una
