@@ -145,6 +145,19 @@ export class PedidoController {
     };
   }
 
+  @Post(':externalId/cancelar-manual')
+  @AuthType('write')
+  @HttpCode(HttpStatus.OK)
+  async cancelarManual(@Param('externalId') externalId: string) {
+    const resultado = await this.pedidoService.cancelarManual(externalId);
+    return {
+      message: resultado.yaCancelado
+        ? 'El pedido ya estaba cancelado manualmente'
+        : 'Pedido cancelado manualmente',
+      ...resultado,
+    };
+  }
+
   @Post(':externalId/rechazar')
   @AuthType('write')
   @HttpCode(HttpStatus.OK)

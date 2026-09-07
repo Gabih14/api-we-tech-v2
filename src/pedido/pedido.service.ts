@@ -1140,6 +1140,7 @@ export class PedidoService {
           'APROBADO',
           'APROBADO_MANUAL',
           'CANCELADO',
+          'CANCELADO_MANUAL',
           'ERROR_STOCK',
         ].includes(query.estado)
       ) {
@@ -1315,6 +1316,49 @@ export class PedidoService {
     });
 
     return { pedido, yaAprobado: !aprobacionNueva };
+  }
+
+  /**
+   * Marca administrativamente un pedido como cancelado. Este flujo modifica
+   * solo la cabecera del pedido; no consulta ni mueve items, stock o
+   * comprobantes.
+   */
+  async cancelarManual(externalId: string): Promise<{
+    pedido: Pedido;
+    yaCancelado: boolean;
+  }> {
+    let pedido!: Pedido;
+    let cancelacionNueva = false;
+
+    await this.pedidoRepo.manager.transaction(async (manager) => {
+      const pedidoRepo = manager.getRepository(Pedido);
+      const pedidoEncontrado = await pedidoRepo.findOne({
+        where: { external_id: externalId },
+        lock: { mode: 'pessimistic_write' },
+      });
+
+      if (!pedidoEncontrado) {
+        throw new NotFoundException(`Pedido ${externalId} no encontrado`);
+      }
+
+      pedido = pedidoEncontrado;
+
+      if (pedido.estado === 'CANCELADO_MANUAL') {
+        return;
+      }
+
+      if (pedido.estado === 'CANCELADO') {
+        throw new ConflictException(
+          `Pedido ${externalId} ya fue cancelado por el flujo normal`,
+        );
+      }
+
+      pedido.estado = 'CANCELADO_MANUAL';
+      pedido = await pedidoRepo.save(pedido);
+      cancelacionNueva = true;
+    });
+
+    return { pedido, yaCancelado: !cancelacionNueva };
   }
 
   // 💳 Aprobar pedido por transferencia

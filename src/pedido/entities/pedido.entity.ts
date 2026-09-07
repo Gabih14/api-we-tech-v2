@@ -7,6 +7,7 @@ export type PedidoEstado =
   | 'APROBADO'
   | 'APROBADO_MANUAL'
   | 'CANCELADO'
+  | 'CANCELADO_MANUAL'
   | 'ERROR_STOCK';
 
 @Entity('pedido')

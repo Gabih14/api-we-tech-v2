@@ -38,6 +38,8 @@ describe('grouped endpoint auth types', () => {
     ColorGroupsController.prototype.create,
     ColorGroupsController.prototype.update,
     PedidoController.prototype.cancelarPedido,
+    PedidoController.prototype.aprobarManual,
+    PedidoController.prototype.cancelarManual,
     PedidoController.prototype.rechazarTransferencia,
   ];
 
