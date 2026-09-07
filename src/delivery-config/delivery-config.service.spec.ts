@@ -182,6 +182,38 @@ describe('DeliveryConfigService', () => {
     expect(quote.itemId).toBe('ENV-GLOBAL-50');
   });
 
+  it('usa kms null como ilimitado y respeta la prioridad geografica', async () => {
+    stkItemRepository.find.mockResolvedValue([]);
+    repository.find.mockResolvedValue([
+      configFor(20, null, null, 100, 'ENV-GLOBAL-100'),
+      configFor(21, null, 'Junin', null, 'ENV-JUNIN-ILIMITADO'),
+    ]);
+    stkItemRepository.findOne.mockResolvedValue(
+      itemEnv('ENV-JUNIN-ILIMITADO', '7000'),
+    );
+
+    const quote = await service.cotizarEnvio(57, 'Mendoza', 'Junin');
+
+    expect(quote.deliveryConfigId).toBe(21);
+    expect(quote.itemId).toBe('ENV-JUNIN-ILIMITADO');
+  });
+
+  it('prefiere un rango numerico al ilimitado en la misma zona', async () => {
+    stkItemRepository.find.mockResolvedValue([]);
+    repository.find.mockResolvedValue([
+      configFor(30, null, 'Junin', null, 'ENV-JUNIN-ILIMITADO'),
+      configFor(31, null, 'Junin', 80, 'ENV-JUNIN-80'),
+    ]);
+    stkItemRepository.findOne.mockResolvedValue(
+      itemEnv('ENV-JUNIN-80', '8000'),
+    );
+
+    const quote = await service.cotizarEnvio(57, 'Mendoza', 'Junin');
+
+    expect(quote.deliveryConfigId).toBe(31);
+    expect(quote.itemId).toBe('ENV-JUNIN-80');
+  });
+
   it('devuelve 404 si ningun ENV ni configuracion cubren el envio', async () => {
     stkItemRepository.find.mockResolvedValue([]);
     repository.find.mockResolvedValue([]);
@@ -209,7 +241,7 @@ describe('DeliveryConfigService', () => {
     id: number,
     provincia: string | null,
     departamento: string | null,
-    kms: number,
+    kms: number | null,
     item: string,
   ): DeliveryConfig {
     return {
