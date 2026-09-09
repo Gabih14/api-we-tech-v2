@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { StkItem } from './entities/stk-item.entity';
 import { StkAtributo } from './entities/stk-atributo.entity';
 import { StkAtributoNodo } from './entities/stk-atributo-nodo.entity';
+import { StkAtributoArbol } from './entities/stk-atributo-arbol.entity';
 import { StkFamilia } from '../stk_familia/entities/stk_familia.entity';
 import { StkItemService } from './stk-item.service';
 import { StkItemController } from './stk-item.controller';
@@ -15,6 +16,7 @@ import { DeliveryConfigModule } from '../delivery-config/delivery-config.module'
       StkItem,
       StkAtributo,
       StkAtributoNodo,
+      StkAtributoArbol,
       StkFamilia,
     ]),
     StkPrecioModule,
