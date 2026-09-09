@@ -9,7 +9,7 @@ import { Column, Entity, Index } from 'typeorm';
 @Index('clase', ['clase'], {})
 @Entity('stk_atributo')
 export class StkAtributo {
-  @Column('varchar', { primary: true, name: 'id', length: 4 })
+  @Column('varchar', { primary: true, name: 'id', length: 10 })
   id: string;
 
   @Column('varchar', { name: 'nombre', nullable: true, length: 30 })
@@ -17,6 +17,12 @@ export class StkAtributo {
 
   @Column('varchar', { name: 'clase', nullable: true, length: 20 })
   clase: string | null;
+
+  @Column('varchar', { name: 'grupo', nullable: true, length: 50 })
+  grupo: string | null;
+
+  @Column('varchar', { name: 'subgrupo', nullable: true, length: 50 })
+  subgrupo: string | null;
 
   @Column('varchar', { name: 'color', nullable: true, length: 11 })
   color: string | null;

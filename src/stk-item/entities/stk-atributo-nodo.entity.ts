@@ -16,9 +16,9 @@ export class StkAtributoNodo {
   @Column('varchar', { primary: true, name: 'camino', length: 64 })
   camino: string;
 
-  @Column('varchar', { name: 'atributo', nullable: true, length: 4 })
+  @Column('varchar', { name: 'atributo', nullable: true, length: 10 })
   atributo: string | null;
 
-  @Column('varchar', { name: 'atributo_padre', nullable: true, length: 4 })
+  @Column('varchar', { name: 'atributo_padre', nullable: true, length: 10 })
   atributoPadre: string | null;
 }

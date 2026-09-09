@@ -35,6 +35,10 @@ describe('grouped endpoint auth types', () => {
     CuponController.prototype.desactivar,
     ColorsController.prototype.create,
     ColorsController.prototype.update,
+    ColorsController.prototype.assignToItem,
+    ColorsController.prototype.unassignFromItem,
+    ColorsController.prototype.migrateLegacy,
+    ColorsController.prototype.linkLegacyBridge,
     ColorGroupsController.prototype.create,
     ColorGroupsController.prototype.update,
     PedidoController.prototype.cancelarPedido,
@@ -43,12 +47,9 @@ describe('grouped endpoint auth types', () => {
     PedidoController.prototype.rechazarTransferencia,
   ];
 
-  it.each(readOnlyHandlers)(
-    'requires explicit read auth for %p',
-    (handler) => {
-      expect(Reflect.getMetadata(AUTH_TYPE_KEY, handler)).toBe('read');
-    },
-  );
+  it.each(readOnlyHandlers)('requires explicit read auth for %p', (handler) => {
+    expect(Reflect.getMetadata(AUTH_TYPE_KEY, handler)).toBe('read');
+  });
 
   it.each(writeOnlyHandlers)(
     'requires explicit write auth for %p',
