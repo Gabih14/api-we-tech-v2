@@ -11,6 +11,19 @@ El backend consulta en una sola operacion todos los items con formato
 ninguno alcanza, consulta los registros activos de `delivery_config` cuyo
 `kms` cubra la distancia.
 
+Cada configuracion acepta varios departamentos mediante `departamentos`:
+
+```json
+{
+  "provincia": "Mendoza",
+  "departamentos": ["Capital", "Godoy Cruz", "Guaymallen"],
+  "kms": 50,
+  "item": "ENV-MENDOZA"
+}
+```
+
+Durante la transicion tambien se acepta `departamento` como entrada singular.
+
 La prioridad geografica es:
 
 1. Provincia y departamento.
