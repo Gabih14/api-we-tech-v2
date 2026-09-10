@@ -101,10 +101,14 @@ export class VtaComprobanteAsientoService {
       await qr.manager.save(CntAsiento, asiento);
 
       // 4) Movimientos: usar cuenta diferente según método de pago
+      // Para online (Nave): 1.1.01.005.0001 (valores a depositar - Nave)
       // Para transferencias: 1.1.03.001.0000 (deudores por venta)
-      // Para online (Nave): 1.1.01.001.0000 (caja/banco)
       const cuentaDebe =
-        metodoPago === 'transfer' ? '1.1.03.001.0000' : '1.1.01.001.0000';
+        metodoPago === 'online'
+          ? '1.1.01.005.0001'
+          : metodoPago === 'transfer'
+            ? '1.1.03.001.0000'
+            : '1.1.01.001.0000';
 
       const movs: Partial<CntMovimiento>[] = [
         {
