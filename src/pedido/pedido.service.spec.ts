@@ -2019,7 +2019,10 @@ describe('PedidoService recalculo de importes', () => {
     jest.spyOn(service, 'obtenerTokenDeNave').mockResolvedValue('token');
     const fetchSpy = jest.spyOn(global, 'fetch').mockResolvedValue({
       headers: new Headers({ 'content-type': 'application/json' }),
-      json: async () => ({ status: { name: 'APPROVED' } }),
+      json: async () => ({
+        status: { name: 'APPROVED' },
+        payment_method: { type: 'card_payment', card_type: 'CREDIT' },
+      }),
     } as Response);
     vtaComprobanteService.crearDesdePedido.mockRejectedValueOnce(
       new Error('fallo de comprobante'),

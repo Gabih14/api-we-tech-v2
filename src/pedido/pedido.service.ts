@@ -45,6 +45,7 @@ import {
   DeliveryConfigService,
   DeliveryQuote,
 } from '../delivery-config/delivery-config.service';
+import { mapNavePaymentToCobroInput } from './nave-payment.mapper';
 
 type PedidoMetodoPago = 'online' | 'transfer';
 
@@ -882,14 +883,42 @@ export class PedidoService {
         HttpStatus.BAD_GATEWAY,
       );
     }
-    const estado = pago.status?.name ?? 'PENDING';
+    const payment = pago?.payment ?? pago;
+    const estado = payment?.status?.name ?? 'PENDING';
     console.log('Estado de pago Nave obtenido:', {
-      payment_id: pago.id,
+      payment_id: payment?.id,
       estado,
     });
 
     switch (estado) {
       case 'APPROVED': {
+        let cobroNave;
+        try {
+          cobroNave = mapNavePaymentToCobroInput(pago);
+        } catch (error) {
+          this.logger.error(
+            `Pago Nave aprobado sin medio soportado: ${JSON.stringify({
+              payment_id: payment?.id,
+              payment_code: payment?.payment_code,
+              external_payment_id:
+                payment?.external_payment_id ?? external_payment_id,
+              payment_method_type: payment?.payment_method?.type,
+              card_type: payment?.payment_method?.card_type,
+              card_brand: payment?.payment_method?.card_brand,
+              mapping_error:
+                error instanceof Error ? error.message : String(error),
+            })}`,
+          );
+          throw new HttpException(
+            {
+              code: 'ERR_NAVE_UNSUPPORTED_PAYMENT_METHOD',
+              message: 'El medio de pago aprobado por Nave requiere revision.',
+              retryable: true,
+            },
+            HttpStatus.BAD_GATEWAY,
+          );
+        }
+
         let stockConfirmado: StockConfirmado[] = [];
         let reservaReactivada = false;
 
@@ -945,13 +974,10 @@ export class PedidoService {
           }
 
           try {
-            const cuentaNave =
-              this.configService.get<string>('NAVE_CUENTA_ID') ??
-              'BANCOGALICIA';
             await this.cobrosService.cobrarFactura(
               comprobanteCreado.tipo,
               comprobanteCreado.comprobante,
-              { modalidad: 'CUENTA', medioId: cuentaNave, puntoVenta: '00001' },
+              { ...cobroNave, puntoVenta: '00001' },
             );
             console.log(
               `💰 Cobro generado OK para comprobante:`,

@@ -1,20 +1,33 @@
-import { IsEnum, IsOptional, IsString, Length } from "class-validator";
+import { IsEnum, IsOptional, IsString, Length } from 'class-validator';
 
 export class CobrarFacturaDto {
-  @IsEnum(["CAJA","CUENTA","TARJETA","CHEQUE","CHEQUE_3RO","CERTIFICADO","CTACTE"])
+  @IsEnum([
+    'CAJA',
+    'CUENTA',
+    'TARJETA',
+    'CHEQUE',
+    'CHEQUE_3RO',
+    'CERTIFICADO',
+    'CTACTE',
+  ])
   modalidad:
-    | "CAJA"
-    | "CUENTA"
-    | "TARJETA"
-    | "CHEQUE"
-    | "CHEQUE_3RO"
-    | "CERTIFICADO"
-    | "CTACTE";
+    | 'CAJA'
+    | 'CUENTA'
+    | 'TARJETA'
+    | 'CHEQUE'
+    | 'CHEQUE_3RO'
+    | 'CERTIFICADO'
+    | 'CTACTE';
 
   // IDs reales que viste en la DB: "BANCO NACION", "EFECTIVO", etc.
   @IsString()
   @Length(1, 20)
   medioId: string;
+
+  @IsOptional()
+  @IsString()
+  @Length(1, 128)
+  leyenda?: string;
 
   @IsOptional()
   @IsString()

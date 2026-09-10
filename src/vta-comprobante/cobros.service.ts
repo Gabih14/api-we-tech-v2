@@ -1,19 +1,24 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from "@nestjs/common";
-import { InjectRepository } from "@nestjs/typeorm";
-import { DataSource, Repository } from "typeorm";
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { DataSource, Repository } from 'typeorm';
 
-import { VtaComprobante } from "./entities/vta-comprobante.entity";
-import { VtaCobro } from "../vta-cobro/entities/vta-cobro.entity";
-import { VtaCobroMedio } from "../vta-cobro-medio/entities/vta-cobro-medio.entity";
-import { VtaCobroFactura } from "../vta-cobro-factura/entities/vta-cobro-factura.entity";
-import { CobrarFacturaDto } from "./dto/cobrar-factura.dto";
-import { Pedido } from "../pedido/entities/pedido.entity";
+import { VtaComprobante } from './entities/vta-comprobante.entity';
+import { VtaCobro } from '../vta-cobro/entities/vta-cobro.entity';
+import { VtaCobroMedio } from '../vta-cobro-medio/entities/vta-cobro-medio.entity';
+import { VtaCobroFactura } from '../vta-cobro-factura/entities/vta-cobro-factura.entity';
+import { CobrarFacturaDto } from './dto/cobrar-factura.dto';
+import { Pedido } from '../pedido/entities/pedido.entity';
 import {
   buildPedidoComprobanteReference,
   PEDIDO_COMPROBANTE_REFERENCE_PREFIX,
-} from "../pedido/pedido-comprobante-reference";
+} from '../pedido/pedido-comprobante-reference';
 
-type Modalidad = CobrarFacturaDto["modalidad"];
+type Modalidad = CobrarFacturaDto['modalidad'];
 
 @Injectable()
 export class CobrosService {
@@ -35,17 +40,21 @@ export class CobrosService {
     private readonly cobroFacturaRepo: Repository<VtaCobroFactura>,
   ) {}
 
-  async cobrarFactura(tipo: string, comprobante: string, dto: CobrarFacturaDto) {
+  async cobrarFactura(
+    tipo: string,
+    comprobante: string,
+    dto: CobrarFacturaDto,
+  ) {
     const modalidad: Modalidad = dto.modalidad;
     const medioId = dto.medioId;
-    const trabajador = dto.trabajador ?? "MARTINA";
-    const user = dto.user ?? "martina";
-    const puntoVenta = dto.puntoVenta ?? "00001";
+    const trabajador = dto.trabajador ?? 'MARTINA';
+    const user = dto.user ?? 'martina';
+    const puntoVenta = dto.puntoVenta ?? '00001';
 
     return this.dataSource.transaction(async (manager) => {
-      if (modalidad === "CUENTA") {
+      if (modalidad === 'CUENTA') {
         const cuentaExiste = await manager.query(
-          "SELECT 1 FROM tsr_cuenta WHERE id = ? LIMIT 1",
+          'SELECT 1 FROM tsr_cuenta WHERE id = ? LIMIT 1',
           [medioId],
         );
 
@@ -61,7 +70,7 @@ export class CobrosService {
         where: { tipo, comprobante },
       });
 
-      if (!factura) throw new NotFoundException("Comprobante no encontrado");
+      if (!factura) throw new NotFoundException('Comprobante no encontrado');
 
       const total = Number(factura.total ?? 0);
       if (!Number.isFinite(total) || total <= 0) {
@@ -73,7 +82,9 @@ export class CobrosService {
         where: { tipo, factura: comprobante },
       });
       if (yaImputada) {
-        throw new BadRequestException(`Ya existe cobro imputado: ${yaImputada.cobro}`);
+        throw new BadRequestException(
+          `Ya existe cobro imputado: ${yaImputada.cobro}`,
+        );
       }
 
       // 3) Generar número de cobro: "F 00001 00017010"
@@ -92,11 +103,11 @@ export class CobrosService {
 
       const maxNumero: string | null = raw?.[0]?.maxNumero ?? null;
 
-      let nextSeq = "00000001";
+      let nextSeq = '00000001';
       if (maxNumero) {
         const seq = maxNumero.slice(prefix.length); // "00017010"
         const n = parseInt(seq, 10);
-        if (!isNaN(n)) nextSeq = String(n + 1).padStart(8, "0");
+        if (!isNaN(n)) nextSeq = String(n + 1).padStart(8, '0');
       }
 
       const cobroNumero = `${prefix}${nextSeq}`;
@@ -109,8 +120,8 @@ export class CobrosService {
         numero: cobroNumero,
         cliente: factura.cliente,
         fecha: new Date(),
-        moneda: "PES",
-        cotizacion: "1.0000",
+        moneda: 'PES',
+        cotizacion: '1.0000',
         trabajador,
         ...buckets,
         total: total.toFixed(2),
@@ -132,17 +143,18 @@ export class CobrosService {
         cobro: cobroNumero,
         linea: 1,
         importe: total.toFixed(2),
-        modalidad: modalidad === "CHEQUE_3RO" ? "CHEQUE3RO" : modalidad,
+        modalidad: modalidad === 'CHEQUE_3RO' ? 'CHEQUE3RO' : modalidad,
         conciliado: false,
         anulado: false,
         imputacion: new Date().toISOString().slice(0, 10), // YYYY-MM-DD
 
-        caja: modalidad === "CAJA" ? medioId : null,
-        cuenta: modalidad === "CUENTA" ? medioId : null,
-        tarjeta: modalidad === "TARJETA" ? medioId : null,
-        cheque: modalidad === "CHEQUE" ? medioId : null,
-        cheque_3ro: modalidad === "CHEQUE_3RO" ? medioId : null,
-        certificado: modalidad === "CERTIFICADO" ? medioId : null,
+        caja: modalidad === 'CAJA' ? medioId : null,
+        cuenta: modalidad === 'CUENTA' ? medioId : null,
+        tarjeta: modalidad === 'TARJETA' ? medioId : null,
+        cheque: modalidad === 'CHEQUE' ? medioId : null,
+        cheque_3ro: modalidad === 'CHEQUE_3RO' ? medioId : null,
+        certificado: modalidad === 'CERTIFICADO' ? medioId : null,
+        detalle: dto.leyenda ?? null,
         // CTACTE: a veces se maneja con cliente/detalle. Lo dejamos simple.
       });
 
@@ -155,10 +167,10 @@ export class CobrosService {
         factura: comprobante,
         linea: 1,
         importe: total.toFixed(2),
-        cotizacion: "1.0000",
+        cotizacion: '1.0000',
         ajusteximp: false,
-        ajuste: "0.00",
-        ajusteImporte: "0.00",
+        ajuste: '0.00',
+        ajusteImporte: '0.00',
       });
 
       await manager.getRepository(VtaCobroFactura).save(link);
@@ -184,7 +196,7 @@ export class CobrosService {
     comprobante: string,
     pedido: Pick<
       Pedido,
-      "external_id" | "cliente_cuit" | "cliente_mail" | "total" | "creado"
+      'external_id' | 'cliente_cuit' | 'cliente_mail' | 'total' | 'creado'
     >,
   ): Promise<boolean> {
     const factura = await this.comprobanteRepo.findOne({
@@ -209,14 +221,14 @@ export class CobrosService {
     factura: VtaComprobante,
     pedido: Pick<
       Pedido,
-      "external_id" | "cliente_cuit" | "cliente_mail" | "total" | "creado"
+      'external_id' | 'cliente_cuit' | 'cliente_mail' | 'total' | 'creado'
     >,
   ): boolean {
     const referencia = factura.observaciones_int?.trim();
     const referenciaEsperada = buildPedidoComprobanteReference(
       pedido.external_id,
     );
-    const clienteFactura = (factura.cliente || factura.numero_documento || "")
+    const clienteFactura = (factura.cliente || factura.numero_documento || '')
       .trim()
       .toLowerCase();
     const clientePedido = pedido.cliente_cuit.trim().toLowerCase();
@@ -254,13 +266,13 @@ export class CobrosService {
     const v = total.toFixed(2);
 
     return {
-      caja: modalidad === "CAJA" ? v : "0.00",
-      cuenta: modalidad === "CUENTA" ? v : "0.00",
-      tarjeta: modalidad === "TARJETA" ? v : "0.00",
-      cheque: modalidad === "CHEQUE" ? v : "0.00",
-      cheque_3ro: modalidad === "CHEQUE_3RO" ? v : "0.00",
-      certificado: modalidad === "CERTIFICADO" ? v : "0.00",
-      ctacte: modalidad === "CTACTE" ? v : "0.00",
+      caja: modalidad === 'CAJA' ? v : '0.00',
+      cuenta: modalidad === 'CUENTA' ? v : '0.00',
+      tarjeta: modalidad === 'TARJETA' ? v : '0.00',
+      cheque: modalidad === 'CHEQUE' ? v : '0.00',
+      cheque_3ro: modalidad === 'CHEQUE_3RO' ? v : '0.00',
+      certificado: modalidad === 'CERTIFICADO' ? v : '0.00',
+      ctacte: modalidad === 'CTACTE' ? v : '0.00',
     } satisfies Partial<VtaCobro>;
   }
 }
