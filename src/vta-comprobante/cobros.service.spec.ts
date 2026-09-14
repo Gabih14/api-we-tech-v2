@@ -42,12 +42,41 @@ describe('CobrosService tieneCobroFacturaDelPedido', () => {
     ).resolves.toBe(true);
   });
 
+  it('acepta un comprobante vinculado con notas agregadas despues de la referencia', async () => {
+    comprobanteRepo.findOne.mockResolvedValue({
+      cliente: pedido.cliente_cuit,
+      total: pedido.total,
+      anulado: false,
+      observaciones_int:
+        'PEDIDO_WEB:pedido-original | Nota contable agregada por el ERP',
+    });
+
+    await expect(
+      service.tieneCobroFacturaDelPedido('FX', 'X 00001 00000001', pedido),
+    ).resolves.toBe(true);
+  });
+
   it('rechaza un numero reutilizado vinculado a otro pedido', async () => {
     comprobanteRepo.findOne.mockResolvedValue({
       cliente: pedido.cliente_cuit,
       total: pedido.total,
       anulado: false,
       observaciones_int: 'PEDIDO_WEB:otro-pedido',
+    });
+
+    await expect(
+      service.tieneCobroFacturaDelPedido('FX', 'X 00001 00000001', pedido),
+    ).resolves.toBe(false);
+    expect(cobroFacturaRepo.findOne).not.toHaveBeenCalled();
+  });
+
+  it('rechaza una referencia de otro pedido aunque tenga notas agregadas', async () => {
+    comprobanteRepo.findOne.mockResolvedValue({
+      cliente: pedido.cliente_cuit,
+      total: pedido.total,
+      anulado: false,
+      observaciones_int:
+        'PEDIDO_WEB:otro-pedido | Nota contable agregada por el ERP',
     });
 
     await expect(
