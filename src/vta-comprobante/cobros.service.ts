@@ -241,7 +241,11 @@ export class CobrosService {
       Math.abs(totalFactura - totalPedido) < 0.01;
 
     if (referencia?.startsWith(PEDIDO_COMPROBANTE_REFERENCE_PREFIX)) {
-      return referencia === referenciaEsperada && datosPrincipalesCoinciden;
+      const referenciaPedido = referencia.split('|', 1)[0].trim();
+
+      return (
+        referenciaPedido === referenciaEsperada && datosPrincipalesCoinciden
+      );
     }
 
     // Compatibilidad para comprobantes creados antes de incorporar la referencia.
