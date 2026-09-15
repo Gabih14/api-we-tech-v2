@@ -575,7 +575,16 @@ export class StkItemService {
     const linea = valorCompartido('Línea');
     const origen = valorCompartido('Origen');
 
-    let nombre = [marca, material, linea].filter(Boolean).join(' ');
+    const esProductoIndividual =
+      variantes.length === 1 && !variantes[0]?.idPadre;
+
+    // Los ítems sin padre no tienen una familia de variantes que permita armar un
+    // nombre representativo solo con Marca, Material y Línea. En esos casos, la
+    // descripción del ERP identifica mejor qué producto es.
+    let nombre = esProductoIndividual
+      ? (variantes[0]?.descripcion ?? variantes[0]?.id ?? key)
+      : [marca, material, linea].filter(Boolean).join(' ');
+
     if (!nombre) nombre = variantes[0]?.descripcion ?? variantes[0]?.id ?? key;
 
     const precios = variantesOut
