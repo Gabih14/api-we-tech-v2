@@ -10,6 +10,7 @@ import { CreateDeliveryConfigDto } from './dto/create-delivery-config.dto';
 import { UpdateDeliveryConfigDto } from './dto/update-delivery-config.dto';
 import { DeliveryConfig } from './entities/delivery-config.entity';
 import { StkItem } from '../stk-item/entities/stk-item.entity';
+import { DeliveryConfigDepartamento } from './entities/delivery-config-departamento.entity';
 
 export interface DeliveryQuote {
   itemId: string;
@@ -48,12 +49,16 @@ export class DeliveryConfigService {
   }
 
   async findAll(): Promise<DeliveryConfig[]> {
-    return this.deliveryConfigRepository.find({ order: { id: 'ASC' } });
+    return this.deliveryConfigRepository.find({
+      relations: ['departamentos'],
+      order: { id: 'ASC' },
+    });
   }
 
   async findOne(id: number): Promise<DeliveryConfig> {
     const config = await this.deliveryConfigRepository.findOne({
       where: { id },
+      relations: ['departamentos'],
     });
 
     if (!config) {
@@ -152,6 +157,7 @@ export class DeliveryConfigService {
         activo: true,
         item: Not(IsNull()),
       },
+      relations: ['departamentos'],
     });
     const provinciaNormalizada = this.normalizarUbicacion(provincia);
     const departamentoNormalizado = this.normalizarUbicacion(departamento);
@@ -198,16 +204,20 @@ export class DeliveryConfigService {
     departamento: string,
   ): number | null {
     const configProvincia = this.normalizarUbicacion(config.provincia);
-    const configDepartamento = this.normalizarUbicacion(config.departamento);
+    const tieneDepartamentos = config.departamentos?.length > 0;
+    const coincideDepartamento = config.departamentos?.some(
+      ({ departamento: value }) =>
+        this.normalizarUbicacion(value) === departamento,
+    );
 
-    if (configProvincia && configDepartamento) {
+    if (configProvincia && tieneDepartamentos) {
       return configProvincia === provincia &&
-        configDepartamento === departamento
+        coincideDepartamento
         ? 4
         : null;
     }
-    if (configDepartamento) {
-      return configDepartamento === departamento ? 3 : null;
+    if (tieneDepartamentos) {
+      return coincideDepartamento ? 3 : null;
     }
     if (configProvincia) {
       return configProvincia === provincia ? 2 : null;
@@ -331,12 +341,31 @@ export class DeliveryConfigService {
     if (dto.provincia !== undefined) {
       values.provincia = dto.provincia?.trim() || null;
     }
-    if (dto.departamento !== undefined) {
-      values.departamento = dto.departamento?.trim() || null;
+    if (dto.departamentos !== undefined || dto.departamento !== undefined) {
+      const departamentos =
+        dto.departamentos !== undefined
+          ? dto.departamentos ?? []
+          : dto.departamento
+            ? [dto.departamento]
+            : [];
+      values.departamentos = this.normalizarDepartamentos(departamentos);
     }
     if (dto.kms !== undefined) values.kms = dto.kms;
     if (dto.activo !== undefined) values.activo = dto.activo;
 
     return values;
+  }
+
+  private normalizarDepartamentos(
+    departamentos: string[],
+  ): DeliveryConfigDepartamento[] {
+    const unicos = new Map<string, string>();
+    for (const departamento of departamentos) {
+      const value = departamento.trim();
+      if (value) unicos.set(this.normalizarUbicacion(value), value);
+    }
+    return [...unicos.values()].map(
+      (departamento) => ({ departamento }) as DeliveryConfigDepartamento,
+    );
   }
 }

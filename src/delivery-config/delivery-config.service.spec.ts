@@ -24,7 +24,7 @@ describe('DeliveryConfigService', () => {
     actualizado_en: new Date('2026-08-24T12:00:00Z'),
     item: 'ENV-07K-GM-DELIVERY',
     provincia: 'Mendoza',
-    departamento: 'Capital',
+    departamentos: [{ id: 1, departamento: 'Capital' } as any],
     kms: 7,
     activo: true,
   };
@@ -91,7 +91,10 @@ describe('DeliveryConfigService', () => {
     repository.find.mockResolvedValue([config]);
 
     await expect(service.findAll()).resolves.toEqual([config]);
-    expect(repository.find).toHaveBeenCalledWith({ order: { id: 'ASC' } });
+    expect(repository.find).toHaveBeenCalledWith({
+      relations: ['departamentos'],
+      order: { id: 'ASC' },
+    });
   });
 
   it('devuelve 404 cuando la configuracion no existe', async () => {
@@ -112,7 +115,23 @@ describe('DeliveryConfigService', () => {
     });
 
     expect(result.descripcion).toBe('Nueva descripcion');
-    expect(result.departamento).toBeNull();
+    expect(result.departamentos).toEqual([]);
+  });
+
+  it('crea varios departamentos eliminando vacios y duplicados normalizados', async () => {
+    repository.create.mockImplementation((value) => value as DeliveryConfig);
+    repository.save.mockResolvedValue(config);
+
+    await service.create({
+      departamentos: [' Capital ', 'capital', '', 'Godoy Cruz'],
+    });
+
+    expect(repository.create).toHaveBeenCalledWith({
+      departamentos: [
+        { departamento: 'capital' },
+        { departamento: 'Godoy Cruz' },
+      ],
+    });
   });
 
   it('elimina una configuracion existente', async () => {
@@ -164,6 +183,24 @@ describe('DeliveryConfigService', () => {
         deliveryConfigId: 4,
       }),
     );
+  });
+
+  it('aplica una configuracion si coincide cualquiera de sus departamentos', async () => {
+    stkItemRepository.find.mockResolvedValue([]);
+    repository.find.mockResolvedValue([
+      configFor(
+        5,
+        'Mendoza',
+        ['Capital', 'Godoy Cruz'],
+        60,
+        'ENV-MULTI',
+      ),
+    ]);
+    stkItemRepository.findOne.mockResolvedValue(itemEnv('ENV-MULTI', '6000'));
+
+    const quote = await service.cotizarEnvio(30, 'Mendoza', 'Godoy Cruz');
+
+    expect(quote.deliveryConfigId).toBe(5);
   });
 
   it('elige el menor rango dentro de la misma prioridad', async () => {
@@ -240,7 +277,7 @@ describe('DeliveryConfigService', () => {
   function configFor(
     id: number,
     provincia: string | null,
-    departamento: string | null,
+    departamentos: string | string[] | null,
     kms: number | null,
     item: string,
   ): DeliveryConfig {
@@ -248,7 +285,16 @@ describe('DeliveryConfigService', () => {
       ...config,
       id,
       provincia,
-      departamento,
+      departamentos:
+        departamentos === null
+          ? []
+          : (Array.isArray(departamentos)
+              ? departamentos
+              : [departamentos]
+            ).map((departamento, index) => ({
+              id: index + 1,
+              departamento,
+            })) as any,
       kms,
       item,
     };

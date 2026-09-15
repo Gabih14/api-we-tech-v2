@@ -2,9 +2,11 @@ import {
   Column,
   Entity,
   PrimaryGeneratedColumn,
+  OneToMany,
   UpdateDateColumn,
 } from 'typeorm';
 import { bitToBoolTransformer } from '../../common/transformers/bit-to-bool.transformer';
+import { DeliveryConfigDepartamento } from './delivery-config-departamento.entity';
 
 @Entity('delivery_config')
 export class DeliveryConfig {
@@ -35,8 +37,12 @@ export class DeliveryConfig {
   @Column({ type: 'varchar', length: 100, nullable: true })
   provincia: string | null;
 
-  @Column({ type: 'varchar', length: 100, nullable: true })
-  departamento: string | null;
+  @OneToMany(
+    () => DeliveryConfigDepartamento,
+    (departamento) => departamento.deliveryConfig,
+    { cascade: true },
+  )
+  departamentos: DeliveryConfigDepartamento[];
 
   @Column({
     type: 'decimal',

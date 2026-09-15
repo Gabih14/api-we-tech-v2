@@ -1,6 +1,7 @@
 import { Type } from 'class-transformer';
 import {
   IsBoolean,
+  IsArray,
   IsNumber,
   IsOptional,
   IsString,
@@ -42,6 +43,12 @@ export class CreateDeliveryConfigDto {
   @IsString()
   @MaxLength(100)
   departamento?: string | null;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  @MaxLength(100, { each: true })
+  departamentos?: string[] | null;
 
   @IsOptional()
   @Type(() => Number)
