@@ -474,11 +474,18 @@ export class StkItemService {
   private claveProducto(item: StkItem, atributos: ItemAtributo[]): string {
     if (!item.idPadre) return `item:${item.id}`;
     const valor = (clase: string) =>
-      atributos.find((a) => a.clase === clase)?.valor ?? '';
-    return [
-      'fam',
-      ...StkItemService.CLASES_IDENTIDAD.map((clase) => valor(clase)),
-    ].join('|');
+      atributos.find((a) => a.clase === clase)?.valor?.trim() ?? '';
+    const identidad = StkItemService.CLASES_IDENTIDAD.map((clase) =>
+      valor(clase),
+    );
+
+    // Si todavía no se cargaron atributos de identidad, usamos el padre para
+    // evitar que todos esos ítems colisionen en la clave vacía `fam||||`.
+    if (identidad.every((valorIdentidad) => !valorIdentidad)) {
+      return `padre:${item.idPadre}`;
+    }
+
+    return ['fam', ...identidad].join('|');
   }
 
   /** Construye un producto a partir de sus variantes y sus atributos ya fusionados. */
