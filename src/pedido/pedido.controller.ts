@@ -120,6 +120,20 @@ export class PedidoController {
     };
   }
 
+  @Post(':externalId/recuperacion/iniciar')
+  @AuthType('write')
+  @HttpCode(HttpStatus.OK)
+  async iniciarRecuperacion(@Param('externalId') externalId: string) {
+    return this.pedidoService.iniciarRecuperacionCancelacion(externalId);
+  }
+
+  @Post(':externalId/recuperacion/finalizar')
+  @AuthType('write')
+  @HttpCode(HttpStatus.OK)
+  async finalizarRecuperacion(@Param('externalId') externalId: string) {
+    return this.pedidoService.finalizarRecuperacionCancelacion(externalId);
+  }
+
   @Post(':externalId/error-stock/notificar-delivery')
   @AuthType('write')
   @HttpCode(HttpStatus.OK)

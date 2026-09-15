@@ -1,5 +1,9 @@
 // src/vta-comprobante/vta-comprobante.service.ts
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, DeepPartial, Repository } from 'typeorm';
 import { VtaComprobante } from './entities/vta-comprobante.entity';
@@ -9,8 +13,6 @@ import { VtaComprobanteItemService } from 'src/vta-comprobante-item/vta-comproba
 import { VtaClienteService } from 'src/vta_cliente/vta_cliente.service';
 import { CreateVtaClienteDto } from 'src/vta_cliente/dto/create-vta_cliente.dto';
 import { VtaComprobanteAsientoService } from 'src/vta_comprobante_asiento/vta_comprobante_asiento.service';
-import { VtaCobro } from 'src/vta-cobro/entities/vta-cobro.entity';
-import { VtaCobroMedio } from 'src/vta-cobro-medio/entities/vta-cobro-medio.entity';
 import { VtaCobroFactura } from 'src/vta-cobro-factura/entities/vta-cobro-factura.entity';
 import { VtaComprobanteAsiento } from 'src/vta_comprobante_asiento/entities/vta_comprobante_asiento.entity';
 import { VtaComprobanteItem } from 'src/vta-comprobante-item/entities/vta-comprobante-item.entity';
@@ -69,8 +71,6 @@ export class VtaComprobanteService {
       }
 
       const cobroFacturaRepo = manager.getRepository(VtaCobroFactura);
-      const cobroMedioRepo = manager.getRepository(VtaCobroMedio);
-      const cobroRepo = manager.getRepository(VtaCobro);
       const asientoLinkRepo = manager.getRepository(VtaComprobanteAsiento);
       const asientoRepo = manager.getRepository(CntAsiento);
       const comprobanteItemRepo = manager.getRepository(VtaComprobanteItem);
@@ -81,33 +81,13 @@ export class VtaComprobanteService {
 
       const cobrosVinculados = await cobroFacturaRepo.find({
         where: { tipo, factura: comprobante },
+        lock: { mode: 'pessimistic_write' },
       });
-      const cobroIds = Array.from(
-        new Set(cobrosVinculados.map((row) => row.cobro).filter(Boolean)),
-      );
-
-      if (cobroIds.length > 0) {
-        await cobroMedioRepo
-          .createQueryBuilder()
-          .delete()
-          .where('cobro IN (:...cobroIds)', { cobroIds })
-          .execute();
-
-        await cobroFacturaRepo
-          .createQueryBuilder()
-          .delete()
-          .where('cobro IN (:...cobroIds)', { cobroIds })
-          .execute();
-
-        await cobroRepo
-          .createQueryBuilder()
-          .delete()
-          .where('numero IN (:...cobroIds)', { cobroIds })
-          .execute();
-      } else {
-        await cobroFacturaRepo.delete({ tipo, factura: comprobante });
+      if (cobrosVinculados.length > 0) {
+        throw new ConflictException(
+          `No se puede eliminar ${tipo} ${comprobante}: tiene cobros asociados`,
+        );
       }
-
       let asientosEliminados = 0;
       let asientosPreservados = 0;
 

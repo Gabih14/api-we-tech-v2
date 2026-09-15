@@ -98,6 +98,7 @@ interface PedidoCuponResolucion {
 export class PedidoService {
   private readonly logger = new Logger(PedidoService.name);
   private readonly transferenciasEnAprobacion = new Set<string>();
+  private readonly recuperacionesEnCurso = new Set<string>();
 
   constructor(
     @InjectRepository(Pedido, 'back') // 👈 Base de datos propia
@@ -1168,6 +1169,7 @@ export class PedidoService {
           'CANCELADO',
           'CANCELADO_MANUAL',
           'ERROR_STOCK',
+          'RECUPERACION_PENDIENTE',
         ].includes(query.estado)
       ) {
         throw new BadRequestException('Estado inválido');
@@ -1253,6 +1255,22 @@ export class PedidoService {
       );
     }
 
+    if (
+      pedido.comprobante_tipo &&
+      pedido.comprobante_numero &&
+      (await this.cobrosService.tieneCobroFactura(
+        pedido.comprobante_tipo,
+        pedido.comprobante_numero,
+      ))
+    ) {
+      this.logger.error(
+        `[${pedido.external_id}] Cancelacion bloqueada: ${pedido.comprobante_tipo} ${pedido.comprobante_numero} tiene un cobro asociado`,
+      );
+      throw new ConflictException(
+        `Pedido ${externalId} tiene un cobro asociado y requiere revision manual`,
+      );
+    }
+
     const solicitudesStock = pedido.productos.map((producto) => ({
       item: producto.nombre,
       cantidad: producto.cantidad,
@@ -1272,6 +1290,273 @@ export class PedidoService {
     }
 
     return pedidoCancelado;
+  }
+
+  async iniciarRecuperacionCancelacion(
+    externalId: string,
+  ): Promise<{
+    pedido: Pedido;
+    comprobante: { tipo: string; comprobante: string };
+    yaIniciada: boolean;
+  }> {
+    if (this.recuperacionesEnCurso.has(externalId)) {
+      throw new ConflictException(
+        `La recuperacion del pedido ${externalId} ya esta en curso`,
+      );
+    }
+
+    this.recuperacionesEnCurso.add(externalId);
+    let reservasRealizadas: Array<{
+      item: string;
+      cantidad: number;
+      deposito: string;
+    }> = [];
+    const contexto: {
+      comprobanteCreado: { tipo: string; comprobante: string } | null;
+    } = { comprobanteCreado: null };
+
+    try {
+      return await this.pedidoRepo.manager.transaction(async (manager) => {
+        const pedidoRepo = manager.getRepository(Pedido);
+        const pedidoItemRepo = manager.getRepository(PedidoItem);
+        const pedidoEncontrado = await pedidoRepo.findOne({
+          where: { external_id: externalId },
+          relations: ['productos'],
+          lock: { mode: 'pessimistic_write' },
+        });
+
+        if (!pedidoEncontrado) {
+          throw new NotFoundException(`Pedido ${externalId} no encontrado`);
+        }
+        let pedido = pedidoEncontrado;
+
+        if (
+          pedido.estado === 'RECUPERACION_PENDIENTE' &&
+          pedido.comprobante_tipo &&
+          pedido.comprobante_numero
+        ) {
+          return {
+            pedido,
+            comprobante: {
+              tipo: pedido.comprobante_tipo,
+              comprobante: pedido.comprobante_numero,
+            },
+            yaIniciada: true,
+          };
+        }
+
+        if (pedido.estado !== 'CANCELADO') {
+          throw new ConflictException(
+            `Pedido ${externalId} no puede recuperarse (estado: ${pedido.estado})`,
+          );
+        }
+        if (pedido.metodo_pago !== 'transfer') {
+          throw new BadRequestException(
+            `Pedido ${externalId} no es de tipo transferencia`,
+          );
+        }
+        if (!pedido.productos?.length) {
+          throw new BadRequestException(
+            `Pedido ${externalId} no tiene productos para recuperar`,
+          );
+        }
+        if (pedido.comprobante_tipo || pedido.comprobante_numero) {
+          throw new ConflictException(
+            `Pedido ${externalId} ya tiene un comprobante asociado`,
+          );
+        }
+
+        reservasRealizadas = await this.stockService.reservarStockLote(
+          pedido.productos.map((producto) => ({
+            item: producto.nombre,
+            cantidad: producto.cantidad,
+          })),
+        );
+        reservasRealizadas.forEach((reserva, index) => {
+          pedido.productos[index].deposito_reserva = reserva.deposito;
+        });
+
+        const comprobante =
+          await this.vtaComprobanteService.crearDesdePedido(pedido);
+        contexto.comprobanteCreado = {
+          tipo: comprobante.tipo,
+          comprobante: comprobante.comprobante,
+        };
+
+        pedido.comprobante_tipo = comprobante.tipo;
+        pedido.comprobante_numero = comprobante.comprobante;
+        pedido.estado = 'RECUPERACION_PENDIENTE';
+        await pedidoItemRepo.save(pedido.productos);
+        pedido = await pedidoRepo.save(pedido);
+
+        return {
+          pedido,
+          comprobante: contexto.comprobanteCreado,
+          yaIniciada: false,
+        };
+      });
+    } catch (error) {
+      if (contexto.comprobanteCreado) {
+        try {
+          await this.vtaComprobanteService.eliminarComprobantePorPedido(
+            contexto.comprobanteCreado.tipo,
+            contexto.comprobanteCreado.comprobante,
+          );
+        } catch (cleanupError) {
+          this.logger.error(
+            `[${externalId}] No se pudo eliminar el comprobante de la recuperacion fallida: ${cleanupError?.message || cleanupError}`,
+          );
+        }
+      }
+      if (reservasRealizadas.length) {
+        try {
+          await this.stockService.liberarStockLote(reservasRealizadas);
+        } catch (rollbackError) {
+          this.logger.error(
+            `[${externalId}] No se pudo liberar el stock de la recuperacion fallida: ${rollbackError?.message || rollbackError}`,
+          );
+        }
+      }
+      throw error;
+    } finally {
+      this.recuperacionesEnCurso.delete(externalId);
+    }
+  }
+
+  async finalizarRecuperacionCancelacion(
+    externalId: string,
+  ): Promise<{
+    pedido: Pedido;
+    comprobante: { tipo: string; comprobante: string };
+    yaAprobado: boolean;
+  }> {
+    if (this.recuperacionesEnCurso.has(externalId)) {
+      throw new ConflictException(
+        `La recuperacion del pedido ${externalId} ya esta en curso`,
+      );
+    }
+
+    this.recuperacionesEnCurso.add(externalId);
+    let pedido!: Pedido;
+    let comprobante!: { tipo: string; comprobante: string };
+    let aprobacionNueva = false;
+
+    try {
+      await this.pedidoRepo.manager.transaction(async (manager) => {
+        const pedidoRepo = manager.getRepository(Pedido);
+        const pedidoEncontrado = await pedidoRepo.findOne({
+          where: { external_id: externalId },
+          relations: ['productos'],
+          lock: { mode: 'pessimistic_write' },
+        });
+
+        if (!pedidoEncontrado) {
+          throw new NotFoundException(`Pedido ${externalId} no encontrado`);
+        }
+        pedido = pedidoEncontrado;
+        if (pedido.estado === 'APROBADO') {
+          if (!pedido.comprobante_tipo || !pedido.comprobante_numero) {
+            throw new ConflictException(
+              `Pedido ${externalId} esta aprobado pero no tiene comprobante`,
+            );
+          }
+          comprobante = {
+            tipo: pedido.comprobante_tipo,
+            comprobante: pedido.comprobante_numero,
+          };
+          return;
+        }
+        if (pedido.estado !== 'RECUPERACION_PENDIENTE') {
+          throw new ConflictException(
+            `Pedido ${externalId} no esta pendiente de recuperacion`,
+          );
+        }
+        if (!pedido.productos?.length) {
+          throw new BadRequestException(
+            `Pedido ${externalId} no tiene productos para confirmar`,
+          );
+        }
+        if (!pedido.comprobante_tipo || !pedido.comprobante_numero) {
+          throw new ConflictException(
+            `Pedido ${externalId} no tiene comprobante de recuperacion`,
+          );
+        }
+
+        comprobante = {
+          tipo: pedido.comprobante_tipo,
+          comprobante: pedido.comprobante_numero,
+        };
+        const tieneCobro =
+          await this.cobrosService.tieneCobroFacturaDelPedido(
+            comprobante.tipo,
+            comprobante.comprobante,
+            pedido,
+          );
+        if (!tieneCobro) {
+          throw new ConflictException(
+            `Pedido ${externalId} no tiene un cobro valido asociado`,
+          );
+        }
+
+        let stockConfirmado: StockConfirmado[] = [];
+        try {
+          stockConfirmado = await this.stockService.confirmarStockLote(
+            pedido.productos.map((producto) => ({
+              item: producto.nombre,
+              cantidad: producto.cantidad,
+              deposito: producto.deposito_reserva ?? undefined,
+            })),
+          );
+          pedido.estado = 'APROBADO';
+          pedido.aprobado = new Date();
+          pedido = await pedidoRepo.save(pedido);
+          aprobacionNueva = true;
+        } catch (error) {
+          if (stockConfirmado.length) {
+            await this.stockService.restaurarStockConfirmadoLote(
+              stockConfirmado,
+            );
+          }
+          throw error;
+        }
+      });
+
+      if (aprobacionNueva) {
+        await this.registrarUsoCuponSiCorresponde(pedido);
+        try {
+          await this.notificarSecretaria(pedido);
+        } catch (error) {
+          this.logger.error(
+            `[${externalId}] Error notificando la recuperacion: ${error?.message || error}`,
+          );
+        }
+        try {
+          const mensaje = this.whatsappService.formatearMensajePedido(pedido);
+          await this.telegramService.enviarMensaje(mensaje);
+        } catch (error) {
+          this.logger.error(
+            `[${externalId}] Error notificando Telegram: ${error?.message || error}`,
+          );
+        }
+        if (pedido.delivery_method === 'shipping') {
+          try {
+            await this.enviarPedidoADeliveryTelegram(pedido);
+          } catch (error) {
+            this.logger.error(
+              `[${externalId}] Error notificando delivery: ${error?.message || error}`,
+            );
+          }
+        }
+      }
+
+      return {
+        pedido,
+        comprobante,
+        yaAprobado: !aprobacionNueva,
+      };
+    } finally {
+      this.recuperacionesEnCurso.delete(externalId);
+    }
   }
 
   async notificarDeliveryPedidoErrorStock(externalId: string): Promise<Pedido> {

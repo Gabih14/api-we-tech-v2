@@ -8,7 +8,8 @@ export type PedidoEstado =
   | 'APROBADO_MANUAL'
   | 'CANCELADO'
   | 'CANCELADO_MANUAL'
-  | 'ERROR_STOCK';
+  | 'ERROR_STOCK'
+  | 'RECUPERACION_PENDIENTE';
 
 @Entity('pedido')
 export class Pedido {

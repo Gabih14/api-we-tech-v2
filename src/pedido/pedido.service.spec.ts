@@ -113,6 +113,7 @@ describe('PedidoService recalculo de importes', () => {
   };
   const cobrosService = {
     cobrarFactura: jest.fn(async () => undefined),
+    tieneCobroFactura: jest.fn(async () => false),
     tieneCobroFacturaDelPedido: jest.fn(async () => true),
   };
   const cuponService = {
@@ -2463,6 +2464,155 @@ describe('PedidoService recalculo de importes', () => {
     expect(stockService.liberarStockLote).toHaveBeenCalledWith([
       { item: 'ITEM-1', cantidad: 1, deposito: 'DEPOSITO' },
     ]);
+  });
+
+  it('bloquea la cancelacion si el comprobante tiene un cobro asociado', async () => {
+    const pedido = {
+      id: 910,
+      external_id: 'pedido-transfer-cobrado',
+      estado: 'PENDIENTE',
+      metodo_pago: 'transfer',
+      comprobante_tipo: 'FX',
+      comprobante_numero: 'X 00001 00000010',
+      productos: [
+        { nombre: 'ITEM-1', cantidad: 1, deposito_reserva: 'DEPOSITO' },
+      ],
+    };
+    createRepo.findOne.mockResolvedValue(pedido);
+    cobrosService.tieneCobroFactura.mockResolvedValueOnce(true);
+
+    await expect(
+      service.cancelarPedidoPendiente(pedido.external_id),
+    ).rejects.toThrow('tiene un cobro asociado y requiere revision manual');
+
+    expect(stockService.liberarStockLote).not.toHaveBeenCalled();
+    expect(
+      vtaComprobanteService.eliminarComprobantePorPedido,
+    ).not.toHaveBeenCalled();
+    expect(createRepo.save).not.toHaveBeenCalled();
+  });
+
+  it('inicia la recuperacion reservando stock y creando un comprobante nuevo', async () => {
+    const pedido = {
+      id: 911,
+      external_id: 'pedido-recuperable',
+      estado: 'CANCELADO',
+      metodo_pago: 'transfer',
+      comprobante_tipo: null,
+      comprobante_numero: null,
+      productos: [
+        { nombre: 'ITEM-1', cantidad: 2, deposito_reserva: 'ANTERIOR' },
+      ],
+    };
+    createRepo.findOne.mockResolvedValue(pedido);
+    vtaComprobanteService.crearDesdePedido.mockResolvedValueOnce({
+      tipo: 'FX',
+      comprobante: 'X 00001 00000011',
+    });
+
+    await expect(
+      service.iniciarRecuperacionCancelacion(pedido.external_id),
+    ).resolves.toMatchObject({
+      pedido: {
+        estado: 'RECUPERACION_PENDIENTE',
+        comprobante_tipo: 'FX',
+        comprobante_numero: 'X 00001 00000011',
+      },
+      yaIniciada: false,
+    });
+
+    expect(stockService.reservarStockLote).toHaveBeenCalledWith([
+      { item: 'ITEM-1', cantidad: 2 },
+    ]);
+    expect(pedido.productos[0].deposito_reserva).toBe('DEPOSITO');
+    expect(vtaComprobanteService.crearDesdePedido).toHaveBeenCalledWith(pedido);
+  });
+
+  it('compensa el stock si falla la creacion del comprobante de recuperacion', async () => {
+    const pedido = {
+      id: 912,
+      external_id: 'pedido-recuperacion-fallida',
+      estado: 'CANCELADO',
+      metodo_pago: 'transfer',
+      comprobante_tipo: null,
+      comprobante_numero: null,
+      productos: [{ nombre: 'ITEM-1', cantidad: 1 }],
+    };
+    createRepo.findOne.mockResolvedValue(pedido);
+    vtaComprobanteService.crearDesdePedido.mockRejectedValueOnce(
+      new Error('fallo creando comprobante'),
+    );
+
+    await expect(
+      service.iniciarRecuperacionCancelacion(pedido.external_id),
+    ).rejects.toThrow('fallo creando comprobante');
+
+    expect(stockService.liberarStockLote).toHaveBeenCalledWith([
+      { item: 'ITEM-1', cantidad: 1, deposito: 'DEPOSITO' },
+    ]);
+    expect(createRepo.save).not.toHaveBeenCalled();
+  });
+
+  it('finaliza la recuperacion cuando el operador ya registro el cobro', async () => {
+    const pedido = {
+      id: 913,
+      external_id: 'pedido-recuperacion-cobrada',
+      estado: 'RECUPERACION_PENDIENTE',
+      metodo_pago: 'transfer',
+      comprobante_tipo: 'FX',
+      comprobante_numero: 'X 00001 00000012',
+      codigo_cupon: null,
+      delivery_method: 'pickup',
+      costo_envio: 0,
+      total: 100,
+      productos: [
+        {
+          nombre: 'ITEM-1',
+          cantidad: 1,
+          deposito_reserva: 'DEPOSITO',
+          precio_unitario: 100,
+          subtotal: 100,
+        },
+      ],
+    };
+    createRepo.findOne.mockResolvedValue(pedido);
+
+    await expect(
+      service.finalizarRecuperacionCancelacion(pedido.external_id),
+    ).resolves.toMatchObject({
+      pedido: { estado: 'APROBADO' },
+      comprobante: { tipo: 'FX', comprobante: 'X 00001 00000012' },
+      yaAprobado: false,
+    });
+
+    expect(cobrosService.tieneCobroFacturaDelPedido).toHaveBeenCalledWith(
+      'FX',
+      'X 00001 00000012',
+      pedido,
+    );
+    expect(stockService.confirmarStockLote).toHaveBeenCalledWith([
+      { item: 'ITEM-1', cantidad: 1, deposito: 'DEPOSITO' },
+    ]);
+  });
+
+  it('mantiene la recuperacion pendiente cuando aun no existe un cobro valido', async () => {
+    const pedido = {
+      id: 914,
+      external_id: 'pedido-recuperacion-sin-cobro',
+      estado: 'RECUPERACION_PENDIENTE',
+      comprobante_tipo: 'FX',
+      comprobante_numero: 'X 00001 00000013',
+      productos: [{ nombre: 'ITEM-1', cantidad: 1 }],
+    };
+    createRepo.findOne.mockResolvedValue(pedido);
+    cobrosService.tieneCobroFacturaDelPedido.mockResolvedValueOnce(false);
+
+    await expect(
+      service.finalizarRecuperacionCancelacion(pedido.external_id),
+    ).rejects.toThrow('no tiene un cobro valido asociado');
+
+    expect(stockService.confirmarStockLote).not.toHaveBeenCalled();
+    expect(createRepo.save).not.toHaveBeenCalled();
   });
 
   it('envia a delivery un pedido shipping marcado con ERROR_STOCK', async () => {

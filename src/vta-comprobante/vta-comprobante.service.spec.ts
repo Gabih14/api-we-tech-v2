@@ -682,6 +682,39 @@ describe('VtaComprobanteService crearDesdePedido', () => {
 });
 
 describe('VtaComprobanteService eliminarComprobantePorPedido', () => {
+  it('rechaza eliminar un comprobante que tiene cobros asociados', async () => {
+    const comprobanteRepo = {
+      findOne: jest.fn().mockResolvedValue({
+        tipo: 'FX',
+        comprobante: 'X 00001 00000001',
+      }),
+    };
+    const cobroFacturaRepo = {
+      find: jest.fn().mockResolvedValue([
+        { cobro: 'F 00001 00000001', tipo: 'FX', factura: 'X 00001 00000001' },
+      ]),
+    };
+    const manager = {
+      getRepository: jest.fn((target) =>
+        target === VtaComprobante ? comprobanteRepo : cobroFacturaRepo,
+      ),
+    };
+    const dataSource = {
+      transaction: jest.fn(async (callback) => callback(manager)),
+    };
+    const service = new VtaComprobanteService(
+      dataSource as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+    );
+
+    await expect(
+      service.eliminarComprobantePorPedido('FX', 'X 00001 00000001'),
+    ).rejects.toThrow('tiene cobros asociados');
+  });
+
   it('consulta tsr_movimiento_asiento al validar usos externos', async () => {
     const comprobanteRepo = {
       findOne: jest.fn().mockResolvedValue({
