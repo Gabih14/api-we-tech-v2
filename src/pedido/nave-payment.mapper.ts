@@ -1,15 +1,10 @@
 export interface NaveCobroInput {
-  modalidad: 'TARJETA' | 'CUENTA';
-  medioId: string;
+  modalidad: 'TARJETA';
+  medioId: 'CREDITO NAVE' | 'DEBITO NAVE';
   leyenda: string | null;
 }
 
-export const DEFAULT_NAVE_CUENTA_ID = '1.1.01.003.0003';
-
-export function mapNavePaymentToCobroInput(
-  raw: any,
-  naveCuentaId = DEFAULT_NAVE_CUENTA_ID,
-): NaveCobroInput {
+export function mapNavePaymentToCobroInput(raw: any): NaveCobroInput {
   const payment = raw?.payment ?? raw;
   const status = payment?.status?.name;
   const type = payment?.payment_method?.type;
@@ -20,8 +15,8 @@ export function mapNavePaymentToCobroInput(
   }
   if (type === 'transfer_payment') {
     return {
-      modalidad: 'CUENTA',
-      medioId: naveCuentaId,
+      modalidad: 'TARJETA',
+      medioId: 'DEBITO NAVE',
       leyenda: payment?.payment_code || null,
     };
   }

@@ -45,10 +45,7 @@ import {
   DeliveryConfigService,
   DeliveryQuote,
 } from '../delivery-config/delivery-config.service';
-import {
-  DEFAULT_NAVE_CUENTA_ID,
-  mapNavePaymentToCobroInput,
-} from './nave-payment.mapper';
+import { mapNavePaymentToCobroInput } from './nave-payment.mapper';
 
 type PedidoMetodoPago = 'online' | 'transfer';
 
@@ -897,11 +894,7 @@ export class PedidoService {
       case 'APPROVED': {
         let cobroNave;
         try {
-          cobroNave = mapNavePaymentToCobroInput(
-            pago,
-            this.configService.get<string>('NAVE_CUENTA_ID') ??
-              DEFAULT_NAVE_CUENTA_ID,
-          );
+          cobroNave = mapNavePaymentToCobroInput(pago);
         } catch (error) {
           this.logger.error(
             `Pago Nave aprobado sin medio soportado: ${JSON.stringify({

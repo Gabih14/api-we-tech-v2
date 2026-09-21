@@ -31,7 +31,7 @@ describe('mapNavePaymentToCobroInput', () => {
     });
   });
 
-  it('mapea transfer_payment a la cuenta bancaria configurada', () => {
+  it('mapea transfer_payment como debito Nave', () => {
     expect(
       mapNavePaymentToCobroInput({
         status: { name: 'APPROVED' },
@@ -39,25 +39,9 @@ describe('mapNavePaymentToCobroInput', () => {
         payment_code: 'PAY-TRANSFER-1',
       }),
     ).toEqual({
-      modalidad: 'CUENTA',
-      medioId: '1.1.01.003.0003',
+      modalidad: 'TARJETA',
+      medioId: 'DEBITO NAVE',
       leyenda: 'PAY-TRANSFER-1',
-    });
-  });
-
-  it('permite configurar otra cuenta para transfer_payment', () => {
-    expect(
-      mapNavePaymentToCobroInput(
-        {
-          status: { name: 'APPROVED' },
-          payment_method: { type: 'transfer_payment' },
-        },
-        'CUENTA NAVE TEST',
-      ),
-    ).toEqual({
-      modalidad: 'CUENTA',
-      medioId: 'CUENTA NAVE TEST',
-      leyenda: null,
     });
   });
 
