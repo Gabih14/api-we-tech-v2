@@ -31,6 +31,36 @@ describe('mapNavePaymentToCobroInput', () => {
     });
   });
 
+  it('mapea transfer_payment a la cuenta bancaria configurada', () => {
+    expect(
+      mapNavePaymentToCobroInput({
+        status: { name: 'APPROVED' },
+        payment_method: { type: 'transfer_payment' },
+        payment_code: 'PAY-TRANSFER-1',
+      }),
+    ).toEqual({
+      modalidad: 'CUENTA',
+      medioId: '1.1.01.003.0003',
+      leyenda: 'PAY-TRANSFER-1',
+    });
+  });
+
+  it('permite configurar otra cuenta para transfer_payment', () => {
+    expect(
+      mapNavePaymentToCobroInput(
+        {
+          status: { name: 'APPROVED' },
+          payment_method: { type: 'transfer_payment' },
+        },
+        'CUENTA NAVE TEST',
+      ),
+    ).toEqual({
+      modalidad: 'CUENTA',
+      medioId: 'CUENTA NAVE TEST',
+      leyenda: null,
+    });
+  });
+
   it.each([
     [{ status: { name: 'APPROVED' } }, 'Medio de pago'],
     [

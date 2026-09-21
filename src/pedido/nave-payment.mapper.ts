@@ -1,10 +1,15 @@
 export interface NaveCobroInput {
-  modalidad: 'TARJETA';
-  medioId: 'CREDITO NAVE' | 'DEBITO NAVE';
+  modalidad: 'TARJETA' | 'CUENTA';
+  medioId: string;
   leyenda: string | null;
 }
 
-export function mapNavePaymentToCobroInput(raw: any): NaveCobroInput {
+export const DEFAULT_NAVE_CUENTA_ID = '1.1.01.003.0003';
+
+export function mapNavePaymentToCobroInput(
+  raw: any,
+  naveCuentaId = DEFAULT_NAVE_CUENTA_ID,
+): NaveCobroInput {
   const payment = raw?.payment ?? raw;
   const status = payment?.status?.name;
   const type = payment?.payment_method?.type;
@@ -12,6 +17,13 @@ export function mapNavePaymentToCobroInput(raw: any): NaveCobroInput {
 
   if (status !== 'APPROVED') {
     throw new Error(`Estado Nave no cobrable: ${status ?? 'ausente'}`);
+  }
+  if (type === 'transfer_payment') {
+    return {
+      modalidad: 'CUENTA',
+      medioId: naveCuentaId,
+      leyenda: payment?.payment_code || null,
+    };
   }
   if (type !== 'card_payment') {
     throw new Error(`Medio de pago Nave no soportado: ${type ?? 'ausente'}`);
