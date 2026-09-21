@@ -13,6 +13,13 @@ export function mapNavePaymentToCobroInput(raw: any): NaveCobroInput {
   if (status !== 'APPROVED') {
     throw new Error(`Estado Nave no cobrable: ${status ?? 'ausente'}`);
   }
+  if (type === 'transfer_payment') {
+    return {
+      modalidad: 'TARJETA',
+      medioId: 'DEBITO NAVE',
+      leyenda: payment?.payment_code || null,
+    };
+  }
   if (type !== 'card_payment') {
     throw new Error(`Medio de pago Nave no soportado: ${type ?? 'ausente'}`);
   }

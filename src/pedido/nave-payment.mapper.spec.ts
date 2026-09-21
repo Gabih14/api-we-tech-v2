@@ -31,6 +31,20 @@ describe('mapNavePaymentToCobroInput', () => {
     });
   });
 
+  it('mapea transfer_payment como debito Nave', () => {
+    expect(
+      mapNavePaymentToCobroInput({
+        status: { name: 'APPROVED' },
+        payment_method: { type: 'transfer_payment' },
+        payment_code: 'PAY-TRANSFER-1',
+      }),
+    ).toEqual({
+      modalidad: 'TARJETA',
+      medioId: 'DEBITO NAVE',
+      leyenda: 'PAY-TRANSFER-1',
+    });
+  });
+
   it.each([
     [{ status: { name: 'APPROVED' } }, 'Medio de pago'],
     [
