@@ -56,6 +56,20 @@ describe('CobrosService tieneCobroFacturaDelPedido', () => {
     ).resolves.toBe(true);
   });
 
+  it('acepta notas agregadas con un espacio aunque no tengan separador', async () => {
+    comprobanteRepo.findOne.mockResolvedValue({
+      cliente: pedido.cliente_cuit,
+      total: pedido.total,
+      anulado: false,
+      observaciones_int:
+        'PEDIDO_WEB:pedido-original PAGO: Cliente CUIL: 20-12345678-9',
+    });
+
+    await expect(
+      service.tieneCobroFacturaDelPedido('FX', 'X 00001 00000001', pedido),
+    ).resolves.toBe(true);
+  });
+
   it('rechaza un numero reutilizado vinculado a otro pedido', async () => {
     comprobanteRepo.findOne.mockResolvedValue({
       cliente: pedido.cliente_cuit,
@@ -77,6 +91,20 @@ describe('CobrosService tieneCobroFacturaDelPedido', () => {
       anulado: false,
       observaciones_int:
         'PEDIDO_WEB:otro-pedido | Nota contable agregada por el ERP',
+    });
+
+    await expect(
+      service.tieneCobroFacturaDelPedido('FX', 'X 00001 00000001', pedido),
+    ).resolves.toBe(false);
+    expect(cobroFacturaRepo.findOne).not.toHaveBeenCalled();
+  });
+
+  it('rechaza otro pedido aunque las notas no tengan separador', async () => {
+    comprobanteRepo.findOne.mockResolvedValue({
+      cliente: pedido.cliente_cuit,
+      total: pedido.total,
+      anulado: false,
+      observaciones_int: 'PEDIDO_WEB:otro-pedido PAGO: Cliente',
     });
 
     await expect(

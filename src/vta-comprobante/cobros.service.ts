@@ -258,7 +258,12 @@ export class CobrosService {
       Math.abs(totalFactura - totalPedido) < 0.01;
 
     if (referencia?.startsWith(PEDIDO_COMPROBANTE_REFERENCE_PREFIX)) {
-      const referenciaPedido = referencia.split('|', 1)[0].trim();
+      const externalIdReferencia = referencia
+        .slice(PEDIDO_COMPROBANTE_REFERENCE_PREFIX.length)
+        .split(/[\s|]/, 1)[0];
+      const referenciaPedido = buildPedidoComprobanteReference(
+        externalIdReferencia,
+      );
 
       return (
         referenciaPedido === referenciaEsperada && datosPrincipalesCoinciden
