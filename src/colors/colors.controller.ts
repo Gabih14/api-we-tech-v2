@@ -15,6 +15,7 @@ import {
   ColorAssignmentResponse,
   ColorResponse,
   ColorsService,
+  ItemWithoutColorsResponse,
   LegacyColorsMigrationResponse,
 } from './colors.service';
 import { AssignColorDto } from './dto/assign-color.dto';
@@ -52,6 +53,12 @@ export class ColorsController {
     @Param('colorId') colorId: string,
   ): Promise<ColorResponse> {
     return this.colorsService.linkLegacyBridge(bridgeId, colorId);
+  }
+
+  @Get('items/unassigned')
+  @AuthType('dashboard')
+  getItemsWithoutColors(): Promise<ItemWithoutColorsResponse[]> {
+    return this.colorsService.getItemsWithoutColors();
   }
 
   @Get('items/:itemId')

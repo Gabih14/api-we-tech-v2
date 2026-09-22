@@ -9,6 +9,7 @@ import { StkAtributo } from '../stk-item/entities/stk-atributo.entity';
 import { StkAtributoArbol } from '../stk-item/entities/stk-atributo-arbol.entity';
 import { StkAtributoNodo } from '../stk-item/entities/stk-atributo-nodo.entity';
 import { StkItem } from '../stk-item/entities/stk-item.entity';
+import { FILAMENT_CATEGORIES } from '../pricing/discounts';
 import { AssignColorDto } from './dto/assign-color.dto';
 import { CreateColorDto } from './dto/create-color.dto';
 import { UpdateColorDto } from './dto/update-color.dto';
@@ -34,6 +35,11 @@ export interface ColorResponse {
 export interface ColorAssignmentResponse {
   itemId: string;
   colors: ColorResponse[];
+}
+
+export interface ItemWithoutColorsResponse {
+  id: string;
+  descripcion: string | null;
 }
 
 export interface LegacyColorsMigrationResponse {
@@ -188,6 +194,31 @@ export class ColorsService {
         this.toResponseFromRaw(row, bridgeById.get(row.id)),
       ),
     };
+  }
+
+  async getItemsWithoutColors(): Promise<ItemWithoutColorsResponse[]> {
+    return this.dataSource
+      .getRepository(StkItem)
+      .createQueryBuilder('i')
+      .select('i.id', 'id')
+      .addSelect('i.descripcion', 'descripcion')
+      .where(
+        `NOT EXISTS (
+          SELECT 1
+          FROM stk_atributo_nodo n
+          INNER JOIN stk_atributo a
+            ON a.id = n.atributo
+           AND a.clase = :colorClass
+          WHERE n.arbol = i.id
+        )`,
+        { colorClass: 'Colores' },
+      )
+      .andWhere('UPPER(TRIM(i.grupo)) IN (:...filamentGroups)', {
+        filamentGroups: [...FILAMENT_CATEGORIES],
+      })
+      .orderBy('i.descripcion', 'ASC')
+      .addOrderBy('i.id', 'ASC')
+      .getRawMany<ItemWithoutColorsResponse>();
   }
 
   async assignToItem(
