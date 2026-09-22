@@ -2,7 +2,11 @@
 import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
-import { AUTH_TYPE_KEY, AuthType } from '../decorators/auth-type.decorator';
+import {
+  AUTH_TYPE_KEY,
+  AuthType,
+  AuthTypeRequirement,
+} from '../decorators/auth-type.decorator';
 
 @Injectable()
 export class ApiTokenGuard implements CanActivate {
@@ -15,14 +19,17 @@ export class ApiTokenGuard implements CanActivate {
     const request = context.switchToHttp().getRequest();
 
     // Tipo de auth requerido por metadata (clase o handler). Default si no hay.
-    const requiredAuthType =
-      this.reflector.getAllAndOverride<AuthType>(AUTH_TYPE_KEY, [
+    const authRequirement =
+      this.reflector.getAllAndOverride<AuthTypeRequirement>(AUTH_TYPE_KEY, [
         context.getHandler(),
         context.getClass(),
       ]) || 'default';
+    const requiredAuthTypes: AuthType[] = Array.isArray(authRequirement)
+      ? authRequirement
+      : [authRequirement];
 
     // Si es público, permitir el acceso sin token
-    if (requiredAuthType === 'public') {
+    if (requiredAuthTypes.includes('public')) {
       return true;
     }
 
@@ -42,26 +49,48 @@ export class ApiTokenGuard implements CanActivate {
     const readToken = this.configService.get<string>('READ_API_TOKEN');
     const writeToken = this.configService.get<string>('WRITE_API_TOKEN');
 
-    if (requiredAuthType === 'default' && token !== defaultToken) {
-      throw new UnauthorizedException('Token inválido para API general');
+    if (requiredAuthTypes.length === 1) {
+      const [requiredAuthType] = requiredAuthTypes;
+
+      if (requiredAuthType === 'default' && token !== defaultToken) {
+        throw new UnauthorizedException('Token inválido para API general');
+      }
+
+      if (requiredAuthType === 'nave' && token !== naveToken) {
+        throw new UnauthorizedException('Token inválido para Nave');
+      }
+
+      if (requiredAuthType === 'dashboard' && token !== dashboardToken) {
+        throw new UnauthorizedException('Token inválido para Dashboard');
+      }
+
+      if (requiredAuthType === 'read' && token !== readToken) {
+        throw new UnauthorizedException('Token invalido para solo lectura');
+      }
+
+      if (requiredAuthType === 'write' && token !== writeToken) {
+        throw new UnauthorizedException('Token invalido para escritura');
+      }
+
+      return true;
     }
 
-    if (requiredAuthType === 'nave' && token !== naveToken) {
-      throw new UnauthorizedException('Token inválido para Nave');
+    const tokensByAuthType: Partial<Record<AuthType, string | undefined>> = {
+      default: defaultToken,
+      nave: naveToken,
+      dashboard: dashboardToken,
+      read: readToken,
+      write: writeToken,
+    };
+
+    if (
+      requiredAuthTypes.some(
+        (authType) => token === tokensByAuthType[authType],
+      )
+    ) {
+      return true;
     }
 
-    if (requiredAuthType === 'dashboard' && token !== dashboardToken) {
-      throw new UnauthorizedException('Token inválido para Dashboard');
-    }
-
-    if (requiredAuthType === 'read' && token !== readToken) {
-      throw new UnauthorizedException('Token invalido para solo lectura');
-    }
-
-    if (requiredAuthType === 'write' && token !== writeToken) {
-      throw new UnauthorizedException('Token invalido para escritura');
-    }
-
-    return true;
+    throw new UnauthorizedException('Token inválido para este recurso');
   }
 }

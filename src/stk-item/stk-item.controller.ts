@@ -51,6 +51,7 @@ export class StkItemController {
    * (peso, color, etc.) y atributos, para reemplazar el armado manual en la web.
    */
   @Get('catalogo')
+  @AuthType('default', 'dashboard')
   getCatalogo() {
     return this.stkItemService.getCatalogo();
   }

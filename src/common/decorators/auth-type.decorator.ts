@@ -10,4 +10,7 @@ export type AuthType =
   | 'read'
   | 'write';
 
-export const AuthType = (type: AuthType) => SetMetadata(AUTH_TYPE_KEY, type);
+export type AuthTypeRequirement = AuthType | AuthType[];
+
+export const AuthType = (...types: AuthType[]) =>
+  SetMetadata(AUTH_TYPE_KEY, types.length === 1 ? types[0] : types);
