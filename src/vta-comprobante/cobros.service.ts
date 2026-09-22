@@ -17,6 +17,8 @@ import {
   buildPedidoComprobanteReference,
   PEDIDO_COMPROBANTE_REFERENCE_PREFIX,
 } from '../pedido/pedido-comprobante-reference';
+import { PedidoWebAccionLog } from './entities/pedido-web-accion-log.entity';
+import { registrarAccionComprobante } from './comprobante-audit';
 
 type Modalidad = CobrarFacturaDto['modalidad'];
 
@@ -176,9 +178,24 @@ export class CobrosService {
       await manager.getRepository(VtaCobroFactura).save(link);
 
       // 7) Mantener coherente la factura
+      const cobradoAnterior = Number(factura.cobrado ?? 0);
       factura.cobrado = total;
       factura.fecha_cobro = new Date();
       await manager.getRepository(VtaComprobante).save(factura);
+
+      await registrarAccionComprobante(
+        manager.getRepository(PedidoWebAccionLog),
+        'MODIFICACION_COMPROBANTE',
+        tipo,
+        comprobante,
+        {
+          motivo: 'COBRO_IMPUTADO',
+          cobro: cobroNumero,
+          cobradoAnterior,
+          cobrado: total,
+          usuarioCobro: user,
+        },
+      );
 
       return { cobroNumero, tipo, comprobante, total };
     });
