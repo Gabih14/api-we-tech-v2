@@ -7,6 +7,7 @@ import { VtaCobroMedio } from 'src/vta-cobro-medio/entities/vta-cobro-medio.enti
 import { VtaCobroFactura } from 'src/vta-cobro-factura/entities/vta-cobro-factura.entity';
 import { VtaComprobanteAsiento } from 'src/vta_comprobante_asiento/entities/vta_comprobante_asiento.entity';
 import { CntAsiento } from 'src/cnt-asiento/entities/cnt-asiento.entity';
+import { PedidoWebAccionLog } from './entities/pedido-web-accion-log.entity';
 
 describe('VtaComprobanteService crearDesdePedido', () => {
   const comprobanteDelete = jest.fn(async () => undefined);
@@ -28,6 +29,10 @@ describe('VtaComprobanteService crearDesdePedido', () => {
   };
   const comprobanteItemService = {
     create: jest.fn(async (data) => data),
+  };
+  const accionLogRepository = {
+    create: jest.fn((data) => data),
+    save: jest.fn(async (data) => data),
   };
   const clienteService = {
     findOrCreateOrUpdate: jest.fn(async (data) => ({
@@ -61,6 +66,7 @@ describe('VtaComprobanteService crearDesdePedido', () => {
     service = new VtaComprobanteService(
       dataSource as any,
       comprobanteRepository as any,
+      accionLogRepository as any,
       comprobanteItemService as any,
       clienteService as any,
       vtaComprobanteAsientoService as any,
@@ -91,6 +97,15 @@ describe('VtaComprobanteService crearDesdePedido', () => {
     expect(comprobanteRepository.create).toHaveBeenCalledWith(
       expect.objectContaining({
         observaciones_int: 'PEDIDO_WEB:pedido-test-123',
+      }),
+    );
+    expect(accionLogRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        accion: 'ALTA_COMPROBANTE',
+        usuario: 'WEB',
+        rol: 'SISTEMA',
+        origen: 'remoto',
+        referencia: 'FX X 00001 00000001',
       }),
     );
   });
@@ -709,6 +724,10 @@ describe('VtaComprobanteService eliminarComprobantePorPedido', () => {
     };
     const asientoRepo = { delete: jest.fn() };
     const comprobanteItemRepo = { delete: jest.fn() };
+    const accionLogRepo = {
+      create: jest.fn((data) => data),
+      save: jest.fn(async (data) => data),
+    };
     const query = jest.fn().mockResolvedValue([
       {
         in_cmp_comp: 0,
@@ -725,6 +744,7 @@ describe('VtaComprobanteService eliminarComprobantePorPedido', () => {
       [VtaComprobanteAsiento, asientoLinkRepo],
       [CntAsiento, asientoRepo],
       [VtaComprobanteItem, comprobanteItemRepo],
+      [PedidoWebAccionLog, accionLogRepo],
     ]);
     const manager = {
       getRepository: jest.fn((target) => repositories.get(target)),
@@ -735,6 +755,7 @@ describe('VtaComprobanteService eliminarComprobantePorPedido', () => {
     };
     const service = new VtaComprobanteService(
       dataSource as any,
+      {} as any,
       {} as any,
       {} as any,
       {} as any,
@@ -750,5 +771,11 @@ describe('VtaComprobanteService eliminarComprobantePorPedido', () => {
     expect(sql).toContain('FROM tsr_movimiento_asiento');
     expect(sql).not.toContain('fnd_movimiento_asiento');
     expect(asientoRepo.delete).not.toHaveBeenCalled();
+    expect(accionLogRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        accion: 'BORRADO_COMPROBANTE',
+        referencia: 'FX X 00001 00000001',
+      }),
+    );
   });
 });

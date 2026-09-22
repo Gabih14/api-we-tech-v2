@@ -16,6 +16,8 @@ import { VtaComprobanteAsiento } from 'src/vta_comprobante_asiento/entities/vta_
 import { VtaComprobanteItem } from 'src/vta-comprobante-item/entities/vta-comprobante-item.entity';
 import { CntAsiento } from 'src/cnt-asiento/entities/cnt-asiento.entity';
 import { parseProductWeightFromDescription } from 'src/pricing/discounts';
+import { PedidoWebAccionLog } from './entities/pedido-web-accion-log.entity';
+import { registrarAccionComprobante } from './comprobante-audit';
 
 type RawResumenMetricas = {
   totalVentas: string | null;
@@ -48,6 +50,9 @@ export class VtaComprobanteService {
 
     @InjectRepository(VtaComprobante)
     private readonly comprobanteRepository: Repository<VtaComprobante>,
+
+    @InjectRepository(PedidoWebAccionLog)
+    private readonly accionLogRepository: Repository<PedidoWebAccionLog>,
 
     private readonly comprobanteItemService: VtaComprobanteItemService,
     private readonly clienteService: VtaClienteService,
@@ -165,6 +170,18 @@ export class VtaComprobanteService {
 
       await comprobanteItemRepo.delete({ tipo, comprobante });
       await comprobanteRepo.delete({ tipo, comprobante });
+
+      await registrarAccionComprobante(
+        manager.getRepository(PedidoWebAccionLog),
+        'BORRADO_COMPROBANTE',
+        tipo,
+        comprobante,
+        {
+          cliente: comprobanteEntity.cliente,
+          total: Number(comprobanteEntity.total ?? 0),
+          referenciaPedido: comprobanteEntity.observaciones_int ?? null,
+        },
+      );
 
       return { eliminado: true };
     });
@@ -387,6 +404,18 @@ export class VtaComprobanteService {
         comprobanteGuardado.tipo,
         comprobanteGuardado.comprobante,
         pedido.metodo_pago ?? 'online',
+      );
+
+      await registrarAccionComprobante(
+        this.accionLogRepository,
+        'ALTA_COMPROBANTE',
+        comprobanteGuardado.tipo,
+        comprobanteGuardado.comprobante,
+        {
+          pedido: pedido.external_id,
+          cliente: comprobanteGuardado.cliente,
+          total: Number(comprobanteGuardado.total ?? 0),
+        },
       );
 
       return comprobanteGuardado;

@@ -14,6 +14,7 @@ import { CobrosService } from './cobros.service';
 import { VtaCobro } from 'src/vta-cobro/entities/vta-cobro.entity';
 import { VtaCobroMedio } from 'src/vta-cobro-medio/entities/vta-cobro-medio.entity';
 import { VtaCobroFactura } from 'src/vta-cobro-factura/entities/vta-cobro-factura.entity';
+import { PedidoWebAccionLog } from './entities/pedido-web-accion-log.entity';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { VtaCobroFactura } from 'src/vta-cobro-factura/entities/vta-cobro-factur
       VtaCobro,
       VtaCobroMedio,
       VtaCobroFactura,
+      PedidoWebAccionLog,
     ]),
     VtaComprobanteItemModule,
     VtaClienteModule,
