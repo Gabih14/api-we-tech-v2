@@ -42,6 +42,8 @@ export interface ItemWithoutColorsResponse {
   descripcion: string | null;
 }
 
+export type ColorItemResponse = ItemWithoutColorsResponse;
+
 export interface LegacyColorsMigrationResponse {
   linked: number;
   alreadyLinked: number;
@@ -116,9 +118,54 @@ export class ColorsService {
         .filter((bridge) => bridge.stkAtributoId != null)
         .map((bridge) => [bridge.stkAtributoId!, bridge]),
     );
-    return colors.map((color) =>
-      this.toResponse(color, bridgeById.get(color.id)),
+    return colors
+      .filter((color) => bridgeById.get(color.id)?.active !== false)
+      .map((color) => this.toResponse(color, bridgeById.get(color.id)));
+  }
+
+  async deactivate(idParam: string): Promise<ColorResponse> {
+    const id = idParam.trim().toUpperCase();
+    const color = await this.atributosRepository.findOne({
+      where: { id, clase: 'Colores' },
+    });
+    if (!color) throw new NotFoundException(`Color ${id} no encontrado`);
+
+    let bridge = await this.colorsBridgeRepository.findOne({
+      where: { stkAtributoId: id },
+      relations: { colorGroup: true },
+    });
+    if (bridge?.active === false)
+      throw new NotFoundException(`Color ${id} no encontrado`);
+
+    bridge ??= this.colorsBridgeRepository.create({ stkAtributoId: id });
+    bridge.active = false;
+    return this.toResponse(
+      color,
+      await this.colorsBridgeRepository.save(bridge),
     );
+  }
+
+  async getColorItems(idParam: string): Promise<ColorItemResponse[]> {
+    const id = idParam.trim().toUpperCase();
+    const color = await this.atributosRepository.findOne({
+      where: { id, clase: 'Colores' },
+    });
+    if (!color) throw new NotFoundException(`Color ${id} no encontrado`);
+
+    return this.dataSource
+      .getRepository(StkItem)
+      .createQueryBuilder('i')
+      .innerJoin(StkAtributoNodo, 'n', 'n.arbol = i.id AND n.atributo = :id', {
+        id,
+      })
+      .select('i.id', 'id')
+      .addSelect('i.descripcion', 'descripcion')
+      .where('UPPER(TRIM(i.grupo)) IN (:...filamentGroups)', {
+        filamentGroups: [...FILAMENT_CATEGORIES],
+      })
+      .orderBy('i.descripcion', 'ASC')
+      .addOrderBy('i.id', 'ASC')
+      .getRawMany<ColorItemResponse>();
   }
 
   async update(idParam: string, dto: UpdateColorDto): Promise<ColorResponse> {
@@ -237,6 +284,11 @@ export class ColorsService {
         where: { id: colorId, clase: 'Colores' },
       });
       if (!color) throw new NotFoundException(`Color ${colorId} no encontrado`);
+      const bridge = await this.colorsBridgeRepository.findOne({
+        where: { stkAtributoId: colorId },
+      });
+      if (bridge?.active === false)
+        throw new NotFoundException(`Color ${colorId} no encontrado`);
 
       await manager
         .createQueryBuilder()

@@ -13,6 +13,7 @@ import {
 } from '@nestjs/common';
 import {
   ColorAssignmentResponse,
+  ColorItemResponse,
   ColorResponse,
   ColorsService,
   ItemWithoutColorsResponse,
@@ -87,6 +88,18 @@ export class ColorsController {
     @Param('itemId') itemId: string,
   ): Promise<void> {
     await this.colorsService.unassignFromItem(id, itemId);
+  }
+
+  @Get(':id/items')
+  @AuthType('dashboard')
+  getColorItems(@Param('id') id: string): Promise<ColorItemResponse[]> {
+    return this.colorsService.getColorItems(id);
+  }
+
+  @Delete(':id')
+  @AuthType('write')
+  deactivate(@Param('id') id: string): Promise<ColorResponse> {
+    return this.colorsService.deactivate(id);
   }
 
   @Patch(':id')

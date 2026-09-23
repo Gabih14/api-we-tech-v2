@@ -35,6 +35,7 @@ describe('grouped endpoint auth types', () => {
     CuponController.prototype.desactivar,
     ColorsController.prototype.create,
     ColorsController.prototype.update,
+    ColorsController.prototype.deactivate,
     ColorsController.prototype.assignToItem,
     ColorsController.prototype.unassignFromItem,
     ColorsController.prototype.migrateLegacy,

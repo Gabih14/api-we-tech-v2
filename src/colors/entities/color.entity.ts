@@ -34,6 +34,9 @@ export class Color {
   @Column({ name: 'color_group_id', type: 'int', nullable: true })
   colorGroupId: number | null;
 
+  @Column({ name: 'active', type: 'boolean', default: true })
+  active: boolean;
+
   @ManyToOne(() => ColorGroup, (colorGroup) => colorGroup.colors, {
     nullable: true,
     onDelete: 'SET NULL',
