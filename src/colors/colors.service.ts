@@ -176,7 +176,6 @@ export class ColorsService {
     if (!color) throw new NotFoundException(`Color ${id} no encontrado`);
     let bridge = await this.colorsBridgeRepository.findOne({
       where: { stkAtributoId: id },
-      relations: { colorGroup: true },
     });
     if (dto.id !== undefined && dto.id.trim().toUpperCase() !== id) {
       throw new BadRequestException(
@@ -202,6 +201,11 @@ export class ColorsService {
       const savedBridge = await this.colorsBridgeRepository.save(bridge);
       bridge = await this.colorsBridgeRepository.findOneOrFail({
         where: { id: savedBridge.id },
+        relations: { colorGroup: true },
+      });
+    } else if (bridge) {
+      bridge = await this.colorsBridgeRepository.findOneOrFail({
+        where: { id: bridge.id },
         relations: { colorGroup: true },
       });
     }
