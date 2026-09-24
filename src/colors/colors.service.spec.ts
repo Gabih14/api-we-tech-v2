@@ -3,6 +3,99 @@ import { StkItem } from '../stk-item/entities/stk-item.entity';
 import { FILAMENT_CATEGORIES } from '../pricing/discounts';
 
 describe('ColorsService', () => {
+  it('permite crear colores con nombres repetidos si el id es distinto', async () => {
+    const savedColor = {
+      id: 'AMAR2',
+      nombre: 'Amarillo',
+      color: '#FFEE00',
+      orden: null,
+    };
+    const atributosRepository = {
+      findOne: jest.fn().mockResolvedValue(null),
+      create: jest.fn().mockImplementation((value) => value),
+      save: jest.fn().mockResolvedValue(savedColor),
+    };
+    const colorsBridgeRepository = {
+      create: jest.fn().mockImplementation((value) => value),
+      save: jest.fn().mockResolvedValue({ id: 1, stkAtributoId: 'AMAR2' }),
+    };
+    const service = new ColorsService(
+      atributosRepository as never,
+      colorsBridgeRepository as never,
+      { exist: jest.fn() } as never,
+      {} as never,
+    );
+
+    await expect(
+      service.create({ id: 'AMAR2', name: 'Amarillo', hex: '#FFEE00' }),
+    ).resolves.toMatchObject({ id: 'AMAR2', name: 'Amarillo' });
+    expect(atributosRepository.findOne).toHaveBeenCalledWith({
+      where: { id: 'AMAR2' },
+    });
+  });
+
+  it('reactiva un color eliminado logicamente al crearlo con el mismo id', async () => {
+    const color = {
+      id: 'AMARM',
+      nombre: 'Amarillo anterior',
+      color: '#000000',
+      orden: 1,
+    };
+    const bridge = {
+      id: 1,
+      stkAtributoId: 'AMARM',
+      colorGroupId: 6,
+      active: false,
+    };
+    const atributosRepository = {
+      findOne: jest.fn().mockResolvedValue(color),
+      save: jest.fn().mockImplementation(async (value) => value),
+    };
+    const colorsBridgeRepository = {
+      findOne: jest.fn().mockResolvedValue(bridge),
+      save: jest.fn().mockImplementation(async (value) => value),
+      findOneOrFail: jest.fn().mockImplementation(async () => ({
+        ...bridge,
+        colorGroup: {
+          id: 7,
+          name: 'Amarillo',
+          hex: '#FFFF00',
+          sortOrder: 0,
+        },
+      })),
+    };
+    const service = new ColorsService(
+      atributosRepository as never,
+      colorsBridgeRepository as never,
+      { exist: jest.fn().mockResolvedValue(true) } as never,
+      {} as never,
+    );
+
+    await expect(
+      service.create({
+        id: 'amarm',
+        name: 'Amarillo Matte',
+        hex: '#ffdd00',
+        order: 10,
+        colorGroupId: 7,
+      }),
+    ).resolves.toMatchObject({
+      id: 'AMARM',
+      name: 'Amarillo Matte',
+      hex: '#FFDD00',
+      order: 10,
+      colorGroupId: 7,
+    });
+    expect(bridge).toMatchObject({ colorGroupId: 7, active: true });
+    expect(atributosRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        nombre: 'Amarillo Matte',
+        color: '#FFDD00',
+        orden: 10,
+      }),
+    );
+  });
+
   it('lista los items que no tienen atributos de color asignados', async () => {
     const expected = [{ id: 'ITEM-1', descripcion: 'Item sin color' }];
     const queryBuilder = {
