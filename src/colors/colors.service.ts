@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Not, Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { StkAtributo } from '../stk-item/entities/stk-atributo.entity';
 import { StkAtributoArbol } from '../stk-item/entities/stk-atributo-arbol.entity';
 import { StkAtributoNodo } from '../stk-item/entities/stk-atributo-nodo.entity';
@@ -70,14 +70,31 @@ export class ColorsService {
     await this.ensureColorGroupExists(dto.colorGroupId);
 
     const duplicate = await this.atributosRepository.findOne({
-      where: [{ id }, { clase: 'Colores', nombre: name }],
+      where: { id },
     });
     if (duplicate) {
-      throw new BadRequestException(
-        duplicate.id === id
-          ? `El codigo de color ${id} ya existe`
-          : `El color ${name} ya existe con el codigo ${duplicate.id}`,
-      );
+      const bridge = await this.colorsBridgeRepository.findOne({
+        where: { stkAtributoId: id },
+      });
+      if (bridge?.active === false) {
+        duplicate.nombre = name;
+        duplicate.color = hex;
+        duplicate.orden = dto.order ?? null;
+        bridge.colorGroupId = dto.colorGroupId ?? null;
+        bridge.active = true;
+        const [savedColor, savedBridge] = await Promise.all([
+          this.atributosRepository.save(duplicate),
+          this.colorsBridgeRepository.save(bridge),
+        ]);
+        return this.toResponse(
+          savedColor,
+          await this.colorsBridgeRepository.findOneOrFail({
+            where: { id: savedBridge.id },
+            relations: { colorGroup: true },
+          }),
+        );
+      }
+      throw new BadRequestException(`El codigo de color ${id} ya existe`);
     }
 
     const color = await this.atributosRepository.save(
@@ -185,11 +202,6 @@ export class ColorsService {
     if (dto.name !== undefined) {
       const name = dto.name.trim();
       if (!name) throw new BadRequestException('name no puede estar vacio');
-      const duplicate = await this.atributosRepository.findOne({
-        where: { clase: 'Colores', nombre: name, id: Not(id) },
-      });
-      if (duplicate)
-        throw new BadRequestException(`El color ${name} ya existe`);
       color.nombre = name;
     }
     if (dto.hex !== undefined) color.color = dto.hex.trim().toUpperCase();
