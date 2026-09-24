@@ -100,4 +100,38 @@ describe('ColorsService', () => {
     expect(colorsBridgeRepository.save).toHaveBeenCalledWith(bridge);
     expect(atributosRepository).not.toHaveProperty('delete');
   });
+
+  it('cambia un color de un grupo existente a otro', async () => {
+    const color = { id: 'AMARM', nombre: 'Amarillo Matte', color: '#FFDD00' };
+    const bridge = { id: 1, stkAtributoId: 'AMARM', colorGroupId: 6 };
+    const updatedBridge = {
+      ...bridge,
+      colorGroupId: 7,
+      colorGroup: { id: 7, name: 'Nuevo grupo', hex: null, sortOrder: 0 },
+    };
+    const colorsBridgeRepository = {
+      findOne: jest.fn().mockResolvedValue(bridge),
+      save: jest.fn().mockImplementation(async (value) => ({ ...value })),
+      findOneOrFail: jest.fn().mockResolvedValue(updatedBridge),
+    };
+    const service = new ColorsService(
+      {
+        findOne: jest.fn().mockResolvedValue(color),
+        save: jest.fn().mockResolvedValue(color),
+      } as never,
+      colorsBridgeRepository as never,
+      { exist: jest.fn().mockResolvedValue(true) } as never,
+      {} as never,
+    );
+
+    await expect(
+      service.update('AMARM', { colorGroupId: 7 }),
+    ).resolves.toMatchObject({ colorGroupId: 7, colorGroup: { id: 7 } });
+    expect(colorsBridgeRepository.findOne).toHaveBeenCalledWith({
+      where: { stkAtributoId: 'AMARM' },
+    });
+    expect(colorsBridgeRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({ colorGroupId: 7 }),
+    );
+  });
 });
