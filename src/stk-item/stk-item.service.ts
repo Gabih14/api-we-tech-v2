@@ -472,6 +472,13 @@ export class StkItemService {
    * no tienen padre quedan solos (cada uno es su propio producto).
    */
   private claveProducto(item: StkItem, atributos: ItemAtributo[]): string {
+    if (
+      item.grupo?.trim().toUpperCase() ===
+      'COMPLEMENTOS PARA IMPRESION 3D'
+    ) {
+      return `item:${item.id}`;
+    }
+
     if (!item.idPadre) return `item:${item.id}`;
     const valor = (clase: string) =>
       atributos.find((a) => a.clase === clase)?.valor?.trim() ?? '';

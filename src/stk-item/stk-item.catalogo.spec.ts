@@ -10,6 +10,16 @@ describe('StkItemService clave de catálogo', () => {
     ).toBe('item:ITEM-1');
   });
 
+  it('mantiene separados los complementos aunque compartan padre', () => {
+    expect(
+      claveProducto({
+        id: 'ADH-CIANO-B100',
+        idPadre: 'ADH-CIANO-GENE',
+        grupo: 'COMPLEMENTOS PARA IMPRESION 3D',
+      }),
+    ).toBe('item:ADH-CIANO-B100');
+  });
+
   it('usa el padre cuando faltan todos los atributos de identidad', () => {
     expect(
       claveProducto({ id: 'ITEM-1', idPadre: 'PADRE-ADHESIVOS' }),
