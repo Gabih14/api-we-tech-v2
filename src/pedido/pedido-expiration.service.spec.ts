@@ -43,9 +43,11 @@ describe('PedidoExpirationService', () => {
   function createService(pedidos: any[] = []) {
     const pedidoRepo = {
       find: jest.fn().mockResolvedValue(pedidos),
+      save: jest.fn(async (pedido) => pedido),
     };
     const cobrosService = {
       tieneCobroFacturaDelPedido: jest.fn().mockResolvedValue(false),
+      tieneCobroFactura: jest.fn().mockResolvedValue(false),
     };
     const pedidoService = {
       aprobarTransferencia: jest.fn(),
@@ -101,6 +103,25 @@ describe('PedidoExpirationService', () => {
     expect(pedidoService.aprobarTransferencia).not.toHaveBeenCalled();
   });
 
+  it('marca para atencion al detectar un cobro de otro comprobante', async () => {
+    delete process.env.PEDIDO_TRANSFER_APPROVAL_ENABLED;
+    const pedido = {
+      external_id: 'pedido-inconsistente',
+      estado: 'PENDIENTE',
+      comprobante_tipo: 'FX',
+      comprobante_numero: 'X 00001 00000004',
+    };
+    const { service, pedidoRepo, cobrosService, pedidoService } =
+      createService([pedido]);
+    cobrosService.tieneCobroFactura.mockResolvedValueOnce(true);
+
+    await service.scheduledTransferApproval();
+
+    expect(pedido.estado).toBe('REQUIERE_ATENCION');
+    expect(pedidoRepo.save).toHaveBeenCalledWith(pedido);
+    expect(pedidoService.aprobarTransferencia).not.toHaveBeenCalled();
+  });
+
   it('cancela un pedido online expirado usando el flujo completo', async () => {
     const pedido = {
       external_id: 'pedido-online-expirado',
@@ -124,7 +145,7 @@ describe('PedidoExpirationService', () => {
       metodo_pago: 'transfer',
       comprobante_tipo: 'FX',
       comprobante_numero: 'X 00001 00000002',
-      creado: new Date(Date.now() - 2881 * 60_000),
+      creado: new Date(Date.now() - 14 * 24 * 60 * 60_000),
     };
     const { service, pedidoRepo, cobrosService, pedidoService } =
       createService();
@@ -181,6 +202,27 @@ describe('PedidoExpirationService', () => {
 
     await expect(service.run(240)).resolves.toMatchObject({ expirados: 0 });
 
+    expect(pedidoService.cancelarPedidoPendiente).not.toHaveBeenCalled();
+  });
+
+  it('marca para atencion y no cancela una transferencia cobrada con comprobante inconsistente', async () => {
+    const pedido = {
+      external_id: 'pedido-comprobante-inconsistente',
+      estado: 'PENDIENTE',
+      metodo_pago: 'transfer',
+      comprobante_tipo: 'FX',
+      comprobante_numero: 'X 00001 00000003',
+      creado: new Date(Date.now() - 14 * 24 * 60 * 60_000),
+    };
+    const { service, pedidoRepo, cobrosService, pedidoService } =
+      createService();
+    pedidoRepo.find.mockResolvedValueOnce([]).mockResolvedValueOnce([pedido]);
+    cobrosService.tieneCobroFactura.mockResolvedValueOnce(true);
+
+    await expect(service.run(30)).resolves.toMatchObject({ expirados: 0 });
+
+    expect(pedido.estado).toBe('REQUIERE_ATENCION');
+    expect(pedidoRepo.save).toHaveBeenCalledWith(pedido);
     expect(pedidoService.cancelarPedidoPendiente).not.toHaveBeenCalled();
   });
 

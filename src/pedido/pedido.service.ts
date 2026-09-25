@@ -1247,7 +1247,11 @@ export class PedidoService {
       throw new NotFoundException(`Pedido ${externalId} no encontrado`);
     }
 
-    if (pedido.estado !== 'PENDIENTE' && pedido.estado !== 'ERROR_STOCK') {
+    if (
+      pedido.estado !== 'PENDIENTE' &&
+      pedido.estado !== 'ERROR_STOCK' &&
+      pedido.estado !== 'REQUIERE_ATENCION'
+    ) {
       throw new ConflictException(
         `Pedido ${externalId} no puede cancelarse (estado: ${pedido.estado})`,
       );
@@ -1329,7 +1333,11 @@ export class PedidoService {
         return;
       }
 
-      if (pedido.estado !== 'PENDIENTE' && pedido.estado !== 'ERROR_STOCK') {
+      if (
+        pedido.estado !== 'PENDIENTE' &&
+        pedido.estado !== 'ERROR_STOCK' &&
+        pedido.estado !== 'REQUIERE_ATENCION'
+      ) {
         throw new ConflictException(
           `Pedido ${externalId} no puede aprobarse manualmente (estado: ${pedido.estado})`,
         );
@@ -1438,7 +1446,11 @@ export class PedidoService {
           return;
         }
 
-        if (pedido.estado !== 'PENDIENTE' && pedido.estado !== 'ERROR_STOCK') {
+        if (
+          pedido.estado !== 'PENDIENTE' &&
+          pedido.estado !== 'ERROR_STOCK' &&
+          pedido.estado !== 'REQUIERE_ATENCION'
+        ) {
           throw new ConflictException(
             `Pedido ${externalId} no puede aprobarse (estado: ${pedido.estado})`,
           );
