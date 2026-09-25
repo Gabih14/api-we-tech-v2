@@ -86,6 +86,14 @@ export class PedidoExpirationService {
             );
             continue;
           }
+
+          if (await this.cobrosService.tieneCobroFactura(
+            pedido.comprobante_tipo,
+            pedido.comprobante_numero,
+          )) {
+            await this.marcarRequiereAtencion(pedido);
+            continue;
+          }
         }
 
         await this.pedidoService.cancelarPedidoPendiente(
@@ -146,7 +154,7 @@ export class PedidoExpirationService {
 
     const pendientes = await this.pedidoRepo.find({
       where: {
-        estado: In(['PENDIENTE', 'ERROR_STOCK']),
+        estado: In(['PENDIENTE', 'ERROR_STOCK', 'REQUIERE_ATENCION']),
         metodo_pago: 'transfer',
         comprobante_tipo: Not(IsNull()),
         comprobante_numero: Not(IsNull()),
@@ -168,7 +176,12 @@ export class PedidoExpirationService {
           comprobante,
           pedido,
         );
-        if (!tieneCobro) continue;
+        if (!tieneCobro) {
+          if (await this.cobrosService.tieneCobroFactura(tipo, comprobante)) {
+            await this.marcarRequiereAtencion(pedido);
+          }
+          continue;
+        }
 
         await this.pedidoService.aprobarTransferencia(pedido.external_id);
         this.logger.log(
@@ -187,6 +200,16 @@ export class PedidoExpirationService {
       process.env.PEDIDO_TRANSFER_APPROVAL_ENABLED?.trim().toLowerCase();
 
     return !['false', '0', 'no', 'off'].includes(value ?? '');
+  }
+
+  private async marcarRequiereAtencion(pedido: Pedido): Promise<void> {
+    if (pedido.estado === 'REQUIERE_ATENCION') return;
+
+    pedido.estado = 'REQUIERE_ATENCION';
+    await this.pedidoRepo.save(pedido);
+    this.logger.warn(
+      `[${pedido.external_id}] Marcado REQUIERE_ATENCION: tiene un cobro, pero el comprobante no coincide con el pedido`,
+    );
   }
 
   private isCancellationWindowOpen(now = new Date()): boolean {
