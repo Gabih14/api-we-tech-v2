@@ -1733,7 +1733,13 @@ export class PedidoService {
     const mensaje = this.whatsappService.formatearMensajeParaDelivery(pedido);
 
     if (pedido.delivery_config_id != null) {
-      await this.telegramService.enviarMensajeDeliveryGeneral(mensaje);
+      const deliveryConfig = await this.deliveryConfigService.findOne(
+        pedido.delivery_config_id,
+      );
+      await this.telegramService.enviarMensajeDeliveryGeneral(
+        mensaje,
+        deliveryConfig.telegram_chat_id ?? undefined,
+      );
       return;
     }
 

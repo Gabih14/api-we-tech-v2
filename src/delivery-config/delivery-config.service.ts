@@ -334,6 +334,9 @@ export class DeliveryConfigService {
     if (dto.api_key !== undefined) {
       values.api_key = dto.api_key?.trim() || null;
     }
+    if (dto.telegram_chat_id !== undefined) {
+      values.telegram_chat_id = dto.telegram_chat_id?.trim() || null;
+    }
     if (dto.descripcion !== undefined) {
       values.descripcion = dto.descripcion?.trim() || null;
     }

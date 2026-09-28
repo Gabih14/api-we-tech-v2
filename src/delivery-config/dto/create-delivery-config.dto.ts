@@ -26,6 +26,12 @@ export class CreateDeliveryConfigDto {
 
   @IsOptional()
   @IsString()
+  @Length(1, 100)
+  @Matches(/\S/, { message: 'telegram_chat_id no puede estar vacio' })
+  telegram_chat_id?: string | null;
+
+  @IsOptional()
+  @IsString()
   @MaxLength(255)
   descripcion?: string | null;
 

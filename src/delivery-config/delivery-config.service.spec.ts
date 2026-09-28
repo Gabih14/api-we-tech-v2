@@ -20,6 +20,7 @@ describe('DeliveryConfigService', () => {
     id: 1,
     telefono: '2615551234',
     api_key: 'secret',
+    telegram_chat_id: '-1001234567890',
     descripcion: 'Delivery Mendoza',
     actualizado_en: new Date('2026-08-24T12:00:00Z'),
     item: 'ENV-07K-GM-DELIVERY',
@@ -55,6 +56,7 @@ describe('DeliveryConfigService', () => {
       service.create({
         telefono: ' 2615551234 ',
         api_key: ' secret ',
+        telegram_chat_id: ' -1001234567890 ',
         descripcion: ' Delivery Mendoza ',
         kms: 7,
       }),
@@ -63,6 +65,7 @@ describe('DeliveryConfigService', () => {
     expect(repository.create).toHaveBeenCalledWith({
       telefono: '2615551234',
       api_key: 'secret',
+      telegram_chat_id: '-1001234567890',
       descripcion: 'Delivery Mendoza',
       kms: 7,
     });

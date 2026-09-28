@@ -19,6 +19,14 @@ export class DeliveryConfig {
   @Column({ name: 'api_key', type: 'varchar', length: 255, nullable: true })
   api_key: string | null;
 
+  @Column({
+    name: 'telegram_chat_id',
+    type: 'varchar',
+    length: 100,
+    nullable: true,
+  })
+  telegram_chat_id: string | null;
+
   @Column({ type: 'varchar', length: 255, nullable: true })
   descripcion: string | null;
 

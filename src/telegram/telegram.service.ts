@@ -25,10 +25,13 @@ export class TelegramService {
     await this.enviarMensajeAChat(mensaje, chatIdToUse);
   }
 
-  async enviarMensajeDeliveryGeneral(mensaje: string): Promise<void> {
-    const chatIdToUse = this.configService.get<string>(
-      'DELIVERY_GENERAL_TELEGRAM_CHAT_ID',
-    );
+  async enviarMensajeDeliveryGeneral(
+    mensaje: string,
+    chatId?: string,
+  ): Promise<void> {
+    const chatIdToUse =
+      chatId ||
+      this.configService.get<string>('DELIVERY_GENERAL_TELEGRAM_CHAT_ID');
     await this.enviarMensajeAChat(mensaje, chatIdToUse);
   }
 
