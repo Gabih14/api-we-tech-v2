@@ -64,6 +64,14 @@ describe('TelegramService', () => {
     expect(body.chat_id).toBe('delivery-general-chat-id');
   });
 
+  it('prioriza el chat configurado para el delivery config', async () => {
+    await service.enviarMensajeDeliveryGeneral('*Cliente:* Juan', '-100999');
+
+    const body = JSON.parse(postJsonMock.mock.calls[0][1]);
+
+    expect(body.chat_id).toBe('-100999');
+  });
+
   it('reintenta errores temporales de red antes de fallar', async () => {
     const warnSpy = jest.spyOn(console, 'warn').mockImplementation();
     const error = new TypeError('fetch failed') as Error & {

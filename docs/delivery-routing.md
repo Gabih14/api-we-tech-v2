@@ -63,7 +63,8 @@ pedido que registran la distancia, la zona y el `delivery_config` utilizado.
 Los pedidos cotizados con productos `ENV-<n>K-GM-DELIVERY` se notifican al
 chat configurado en `DELIVERY_TELEGRAM_CHAT_ID`. Cuando el pedido tiene un
 `delivery_config_id`, se notifica al chat configurado en
-`DELIVERY_GENERAL_TELEGRAM_CHAT_ID`.
+`DELIVERY_GENERAL_TELEGRAM_CHAT_ID`. Si el registro de `delivery_config` tiene
+un `telegram_chat_id`, ese chat tiene prioridad sobre el chat general.
 
 Los campos `telefono` y `api_key` de `delivery_config` son opcionales y pueden
 quedar en `NULL`. Para actualizar una base que conserva ambas columnas como

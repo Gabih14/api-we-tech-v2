@@ -124,6 +124,7 @@ describe('PedidoService recalculo de importes', () => {
   };
   const deliveryConfigService = {
     cotizarEnvio: jest.fn(),
+    findOne: jest.fn(),
   };
 
   let service: PedidoService;
@@ -2516,13 +2517,41 @@ describe('PedidoService recalculo de importes', () => {
       productos: [],
     };
     createRepo.findOne.mockResolvedValue(pedido);
+    deliveryConfigService.findOne.mockResolvedValue({
+      id: 7,
+      telegram_chat_id: null,
+    });
 
     await service.notificarDeliveryPedidoErrorStock(pedido.external_id);
 
     expect(telegramService.enviarMensajeDeliveryGeneral).toHaveBeenCalledWith(
       'msg',
+      undefined,
     );
     expect(telegramService.enviarMensajeDelivery).not.toHaveBeenCalled();
+  });
+
+  it('envia un pedido al chat configurado en delivery config', async () => {
+    const pedido = {
+      external_id: 'pedido-delivery-chat-propio',
+      estado: 'ERROR_STOCK',
+      delivery_method: 'shipping',
+      delivery_config_id: 8,
+      productos: [],
+    };
+    createRepo.findOne.mockResolvedValue(pedido);
+    deliveryConfigService.findOne.mockResolvedValue({
+      id: 8,
+      telegram_chat_id: '-100888',
+    });
+
+    await service.notificarDeliveryPedidoErrorStock(pedido.external_id);
+
+    expect(deliveryConfigService.findOne).toHaveBeenCalledWith(8);
+    expect(telegramService.enviarMensajeDeliveryGeneral).toHaveBeenCalledWith(
+      'msg',
+      '-100888',
+    );
   });
 
   it('no envia a delivery si el pedido no esta en ERROR_STOCK', async () => {
