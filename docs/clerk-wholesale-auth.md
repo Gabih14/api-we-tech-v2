@@ -21,6 +21,26 @@ const response = await fetch(`${import.meta.env.VITE_API_URL}/auth/me`, {
 siempre con `NO_SOLICITADO`. No crea un cliente ERP. `GET /mayorista/status`
 requiere que el registro tenga `estado_mayorista = 'APROBADO'`.
 
+El estado se administra con el token interno de escritura del backend:
+
+```http
+PATCH /admin/ecommerce-usuarios/123/estado
+Authorization: Bearer <WRITE_API_TOKEN>
+Content-Type: application/json
+
+{"estado":"APROBADO"}
+```
+
+El panel administrativo puede obtener usuarios con el token de lectura:
+
+```http
+GET /admin/ecommerce-usuarios?page=1&limit=20&estado=PENDIENTE
+Authorization: Bearer <READ_API_TOKEN>
+
+GET /admin/ecommerce-usuarios/123
+Authorization: Bearer <READ_API_TOKEN>
+```
+
 Variables requeridas en el backend:
 
 ```env
