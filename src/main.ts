@@ -19,9 +19,13 @@ async function bootstrap() {
     'http://localhost:4173',
     'http://localhost:5173',
   ];
-  const configuredAllowedOrigins = process.env.ALLOWED_ORIGINS
-    ? process.env.ALLOWED_ORIGINS.split(',').map((origin) => origin.trim())
-    : [];
+  const configuredAllowedOrigins = [
+    process.env.FRONTEND_URL,
+    process.env.ALLOWED_ORIGINS,
+  ]
+    .flatMap((value) => value?.split(',') ?? [])
+    .map((origin) => origin.trim())
+    .filter(Boolean);
   const allowedOrigins = Array.from(
     new Set([...defaultAllowedOrigins, ...configuredAllowedOrigins]),
   );
