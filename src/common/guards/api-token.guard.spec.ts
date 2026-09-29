@@ -40,4 +40,18 @@ describe('ApiTokenGuard con múltiples tipos de autenticación', () => {
       UnauthorizedException,
     );
   });
+
+  it('mantiene publicas las rutas explicitamente anonimas', () => {
+    const publicReflector = {
+      getAllAndOverride: jest.fn().mockReturnValue('public'),
+    } as unknown as Reflector;
+    const guard = new ApiTokenGuard(publicReflector, configService);
+    const context = {
+      switchToHttp: () => ({ getRequest: () => ({ headers: {} }) }),
+      getHandler: () => undefined,
+      getClass: () => undefined,
+    } as unknown as ExecutionContext;
+
+    expect(guard.canActivate(context)).toBe(true);
+  });
 });

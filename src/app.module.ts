@@ -30,6 +30,7 @@ import { ColorsModule } from './colors/colors.module';
 import { EsperaModule } from './espera/espera.module';
 import { DeliveryConfigModule } from './delivery-config/delivery-config.module';
 import { SeoModule } from './seo/seo.module';
+import { AuthModule } from './auth/auth.module';
 import {
   DEFAULT_RATE_LIMIT_GLOBAL,
   DEFAULT_RATE_LIMIT_TTL_MS,
@@ -136,6 +137,7 @@ function getConfiguredRateLimit(
     EsperaModule,
     DeliveryConfigModule,
     SeoModule,
+    AuthModule,
   ],
   providers: [
     {
