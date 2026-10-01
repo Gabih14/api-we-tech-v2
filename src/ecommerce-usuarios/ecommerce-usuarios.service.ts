@@ -1,6 +1,7 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { ClerkService } from '../auth/clerk.service';
 import {
   EcommerceUsuario,
   EstadoMayorista,
@@ -8,7 +9,12 @@ import {
 import { ListEcommerceUsuariosDto } from './dto/list-ecommerce-usuarios.dto';
 
 export interface EcommerceUsuariosPage {
-  data: EcommerceUsuario[];
+  data: Array<
+    EcommerceUsuario & {
+      email: string | null;
+      nombre: string | null;
+    }
+  >;
   pagination: {
     page: number;
     limit: number;
@@ -19,9 +25,12 @@ export interface EcommerceUsuariosPage {
 
 @Injectable()
 export class EcommerceUsuariosService {
+  private readonly logger = new Logger(EcommerceUsuariosService.name);
+
   constructor(
     @InjectRepository(EcommerceUsuario, 'back')
     private readonly repository: Repository<EcommerceUsuario>,
+    private readonly clerk: ClerkService,
   ) {}
 
   findByClerkUserId(clerkUserId: string): Promise<EcommerceUsuario | null> {
@@ -39,8 +48,42 @@ export class EcommerceUsuariosService {
       take: limit,
     });
 
+    let identities = new Map<
+      string,
+      { email: string | null; nombre: string | null }
+    >();
+
+    if (data.length) {
+      try {
+        const clerkUsers = await this.clerk.client.users.getUserList({
+          userId: data.map(({ clerkUserId }) => clerkUserId),
+          limit: data.length,
+        });
+
+        identities = new Map(
+          clerkUsers.data.map((user) => [
+            user.id,
+            {
+              email:
+                user.emailAddresses.find(
+                  ({ id }) => id === user.primaryEmailAddressId,
+                )?.emailAddress ?? null,
+              nombre:
+                [user.firstName, user.lastName].filter(Boolean).join(' ') ||
+                null,
+            },
+          ]),
+        );
+      } catch {
+        this.logger.warn('No se pudieron obtener las identidades desde Clerk');
+      }
+    }
+
     return {
-      data,
+      data: data.map((user) => ({
+        ...user,
+        ...(identities.get(user.clerkUserId) ?? { email: null, nombre: null }),
+      })),
       pagination: {
         page,
         limit,

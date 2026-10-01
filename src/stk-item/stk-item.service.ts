@@ -166,7 +166,7 @@ export class StkItemService {
 
   async getItemsEnviosAClientes(): Promise<any[]> {
     const items = await this.stkItemRepository.find({
-      where: { grupo: 'ENVIOS A CLIENTES' },
+      where: { grupo: 'ENVIOS A CLIENTES', visible: true },
       relations: ['stkPrecios', 'stkPrecios.moneda', 'stkExistencias', 'familia2'],
       order: { id: 'ASC' },
     });
