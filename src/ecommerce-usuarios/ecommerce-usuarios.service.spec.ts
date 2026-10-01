@@ -4,7 +4,7 @@ import {
   EcommerceUsuario,
   EstadoMayorista,
 } from './entities/ecommerce-usuario.entity';
-import { NotFoundException } from '@nestjs/common';
+import { ConflictException, NotFoundException } from '@nestjs/common';
 import { ClerkService } from '../auth/clerk.service';
 
 describe('EcommerceUsuariosService', () => {
@@ -141,6 +141,65 @@ describe('EcommerceUsuariosService', () => {
     ).resolves.toMatchObject({ estadoMayorista: EstadoMayorista.APROBADO });
     expect(findOne).toHaveBeenCalledWith({ where: { id: 7 } });
     expect(save).toHaveBeenCalledWith(user);
+  });
+
+  it('guarda la solicitud y pasa el usuario a pendiente', async () => {
+    const user = {
+      id: 7,
+      clerkUserId: 'user_123',
+      estadoMayorista: EstadoMayorista.NO_SOLICITADO,
+    } as EcommerceUsuario;
+    const updatedUser = {
+      ...user,
+      cuit: '20123456789',
+      razonSocial: 'Empresa SA',
+      telefono: '2615551234',
+      estadoMayorista: EstadoMayorista.PENDIENTE,
+    } as EcommerceUsuario;
+    const update = jest.fn().mockResolvedValue({ affected: 1 });
+    const repository = { update } as unknown as Repository<EcommerceUsuario>;
+    const service = new EcommerceUsuariosService(repository, clerk);
+    jest.spyOn(service, 'findOrCreateByClerkUserId').mockResolvedValue(user);
+    jest.spyOn(service, 'findOneById').mockResolvedValue(updatedUser);
+
+    await expect(
+      service.solicitarMayorista('user_123', {
+        cuit: '20123456789',
+        razonSocial: 'Empresa SA',
+        telefono: '2615551234',
+      }),
+    ).resolves.toMatchObject({
+      cuit: '20123456789',
+      razonSocial: 'Empresa SA',
+      telefono: '2615551234',
+      estadoMayorista: EstadoMayorista.PENDIENTE,
+    });
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 7 }),
+      {
+        cuit: '20123456789',
+        razonSocial: 'Empresa SA',
+        telefono: '2615551234',
+        estadoMayorista: EstadoMayorista.PENDIENTE,
+      },
+    );
+  });
+
+  it('rechaza una solicitud si el usuario ya esta pendiente', async () => {
+    const repository = {} as Repository<EcommerceUsuario>;
+    const service = new EcommerceUsuariosService(repository, clerk);
+    jest.spyOn(service, 'findOrCreateByClerkUserId').mockResolvedValue({
+      id: 7,
+      estadoMayorista: EstadoMayorista.PENDIENTE,
+    } as EcommerceUsuario);
+
+    await expect(
+      service.solicitarMayorista('user_123', {
+        cuit: '20123456789',
+        razonSocial: 'Empresa SA',
+        telefono: '2615551234',
+      }),
+    ).rejects.toThrow(ConflictException);
   });
 
   it('devuelve 404 si el usuario ecommerce no existe', async () => {

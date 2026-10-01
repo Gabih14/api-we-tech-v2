@@ -1,12 +1,18 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { ClerkService } from '../auth/clerk.service';
 import {
   EcommerceUsuario,
   EstadoMayorista,
 } from './entities/ecommerce-usuario.entity';
 import { ListEcommerceUsuariosDto } from './dto/list-ecommerce-usuarios.dto';
+import { SolicitarMayoristaDto } from './dto/solicitar-mayorista.dto';
 
 export interface EcommerceUsuariosPage {
   data: Array<
@@ -109,6 +115,44 @@ export class EcommerceUsuariosService {
 
     user.estadoMayorista = estadoMayorista;
     return this.repository.save(user);
+  }
+
+  async solicitarMayorista(
+    clerkUserId: string,
+    dto: SolicitarMayoristaDto,
+  ): Promise<EcommerceUsuario> {
+    const user = await this.findOrCreateByClerkUserId(clerkUserId);
+
+    if (
+      ![
+        EstadoMayorista.NO_SOLICITADO,
+        EstadoMayorista.RECHAZADO,
+      ].includes(user.estadoMayorista)
+    ) {
+      throw new ConflictException(
+        `No se puede solicitar acceso mayorista desde el estado ${user.estadoMayorista}`,
+      );
+    }
+
+    const result = await this.repository.update(
+      {
+        id: user.id,
+        estadoMayorista: In([
+          EstadoMayorista.NO_SOLICITADO,
+          EstadoMayorista.RECHAZADO,
+        ]),
+      },
+      {
+        ...dto,
+        estadoMayorista: EstadoMayorista.PENDIENTE,
+      },
+    );
+
+    if (result.affected !== 1) {
+      throw new ConflictException('El estado mayorista cambio durante la solicitud');
+    }
+
+    return this.findOneById(user.id);
   }
 
   async findOrCreateByClerkUserId(
