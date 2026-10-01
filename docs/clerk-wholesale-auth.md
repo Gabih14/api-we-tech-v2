@@ -21,6 +21,24 @@ const response = await fetch(`${import.meta.env.VITE_API_URL}/auth/me`, {
 siempre con `NO_SOLICITADO`. No crea un cliente ERP. `GET /mayorista/status`
 requiere que el registro tenga `estado_mayorista = 'APROBADO'`.
 
+El usuario puede solicitar acceso mayorista desde `NO_SOLICITADO` o volver a
+solicitarlo desde `RECHAZADO`:
+
+```http
+POST /mayorista/solicitud
+Authorization: Bearer <token Clerk>
+Content-Type: application/json
+
+{
+  "cuit": "20123456789",
+  "razonSocial": "Empresa SA",
+  "telefono": "2615551234"
+}
+```
+
+La solicitud guarda los datos localmente y cambia el estado a `PENDIENTE`. No
+crea un cliente ERP.
+
 El estado se administra con el token interno de escritura del backend:
 
 ```http

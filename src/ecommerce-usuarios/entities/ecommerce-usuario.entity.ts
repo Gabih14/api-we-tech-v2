@@ -27,6 +27,15 @@ export class EcommerceUsuario {
   @Column({ name: 'cliente_id', type: 'varchar', length: 20, nullable: true })
   clienteId: string | null;
 
+  @Column({ type: 'varchar', length: 11, nullable: true })
+  cuit: string | null;
+
+  @Column({ name: 'razon_social', type: 'varchar', length: 100, nullable: true })
+  razonSocial: string | null;
+
+  @Column({ type: 'varchar', length: 30, nullable: true })
+  telefono: string | null;
+
   @Column({
     name: 'estado_mayorista',
     type: 'enum',
