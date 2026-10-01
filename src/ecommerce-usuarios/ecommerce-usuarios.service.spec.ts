@@ -5,15 +5,38 @@ import {
   EstadoMayorista,
 } from './entities/ecommerce-usuario.entity';
 import { NotFoundException } from '@nestjs/common';
+import { ClerkService } from '../auth/clerk.service';
 
 describe('EcommerceUsuariosService', () => {
+  const clerk = {
+    client: { users: { getUserList: jest.fn() } },
+  } as unknown as ClerkService;
+
+  beforeEach(() => jest.clearAllMocks());
+
   it('lista usuarios paginados y permite filtrar por estado', async () => {
-    const users = [{ id: 2 }, { id: 1 }] as EcommerceUsuario[];
+    const users = [
+      { id: 2, clerkUserId: 'user_2' },
+      { id: 1, clerkUserId: 'user_1' },
+    ] as EcommerceUsuario[];
     const findAndCount = jest.fn().mockResolvedValue([users, 22]);
     const repository = {
       findAndCount,
     } as unknown as Repository<EcommerceUsuario>;
-    const service = new EcommerceUsuariosService(repository);
+    (clerk.client.users.getUserList as jest.Mock).mockResolvedValue({
+      data: [
+        {
+          id: 'user_2',
+          firstName: 'Ana',
+          lastName: 'Pérez',
+          primaryEmailAddressId: 'email_2',
+          emailAddresses: [
+            { id: 'email_2', emailAddress: 'ana@example.com' },
+          ],
+        },
+      ],
+    });
+    const service = new EcommerceUsuariosService(repository, clerk);
 
     await expect(
       service.findAll({
@@ -22,7 +45,20 @@ describe('EcommerceUsuariosService', () => {
         estado: EstadoMayorista.PENDIENTE,
       }),
     ).resolves.toEqual({
-      data: users,
+      data: [
+        {
+          id: 2,
+          clerkUserId: 'user_2',
+          email: 'ana@example.com',
+          nombre: 'Ana Pérez',
+        },
+        {
+          id: 1,
+          clerkUserId: 'user_1',
+          email: null,
+          nombre: null,
+        },
+      ],
       pagination: { page: 2, limit: 10, total: 22, totalPages: 3 },
     });
     expect(findAndCount).toHaveBeenCalledWith({
@@ -31,13 +67,17 @@ describe('EcommerceUsuariosService', () => {
       skip: 10,
       take: 10,
     });
+    expect(clerk.client.users.getUserList).toHaveBeenCalledWith({
+      userId: ['user_2', 'user_1'],
+      limit: 2,
+    });
   });
 
   it('obtiene un usuario por id', async () => {
     const user = { id: 7 } as EcommerceUsuario;
     const findOne = jest.fn().mockResolvedValue(user);
     const repository = { findOne } as unknown as Repository<EcommerceUsuario>;
-    const service = new EcommerceUsuariosService(repository);
+    const service = new EcommerceUsuariosService(repository, clerk);
 
     await expect(service.findOneById(7)).resolves.toBe(user);
     expect(findOne).toHaveBeenCalledWith({ where: { id: 7 } });
@@ -68,7 +108,7 @@ describe('EcommerceUsuariosService', () => {
       createQueryBuilder: jest.fn().mockReturnValue(queryBuilder),
       findOne,
     } as unknown as Repository<EcommerceUsuario>;
-    const service = new EcommerceUsuariosService(repository);
+    const service = new EcommerceUsuariosService(repository, clerk);
 
     await expect(service.findOrCreateByClerkUserId('user_123')).resolves.toBe(
       existingUser,
@@ -94,7 +134,7 @@ describe('EcommerceUsuariosService', () => {
       findOne,
       save,
     } as unknown as Repository<EcommerceUsuario>;
-    const service = new EcommerceUsuariosService(repository);
+    const service = new EcommerceUsuariosService(repository, clerk);
 
     await expect(
       service.updateEstadoMayorista(7, EstadoMayorista.APROBADO),
@@ -107,7 +147,7 @@ describe('EcommerceUsuariosService', () => {
     const repository = {
       findOne: jest.fn().mockResolvedValue(null),
     } as unknown as Repository<EcommerceUsuario>;
-    const service = new EcommerceUsuariosService(repository);
+    const service = new EcommerceUsuariosService(repository, clerk);
 
     await expect(
       service.updateEstadoMayorista(999, EstadoMayorista.APROBADO),
