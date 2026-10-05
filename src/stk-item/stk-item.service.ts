@@ -76,6 +76,8 @@ export interface CatalogoVariante {
   invoicePrice: string | null;
   /** Precio con el 15% de descuento base de filamentos aplicado. */
   promotionalPrice: string | null;
+  /** Precio de la lista MAYORISTA cotizado. */
+  wholesalePrice?: string | null;
   /** Stock que el ERP puede vender (cantidad sumada por depósito, mínimo 0). */
   stock: number;
   updatedAt: string;
@@ -106,6 +108,8 @@ export interface CatalogoProducto {
   subgrupo: string | null;
   /** Precio mínimo entre las variantes ("desde $..."). */
   precioDesde: string | null;
+  /** Precio mayorista mínimo entre las variantes. */
+  wholesalePriceFrom?: string | null;
   atributos: ItemAtributo[];
   dimensiones: CatalogoDimension[];
   variantes: CatalogoVariante[];
@@ -390,7 +394,7 @@ export class StkItemService {
    * elegir peso, color, etc. Los ítems sin padre (sin agrupar) quedan como productos
    * de una sola variante, de modo que el catálogo cubre todos los ítems.
    */
-  async getCatalogo(): Promise<CatalogoProducto[]> {
+  async getCatalogo(includeWholesale = false): Promise<CatalogoProducto[]> {
     // Todos los ítems vendibles (excluimos los padres GENERICO, que no se venden).
     const items = (
       await this.stkItemRepository.find({
@@ -410,7 +414,7 @@ export class StkItemService {
     }
 
     const productos = Array.from(grupos, ([key, variantes]) =>
-      this.armarProducto(key, variantes, atributosPorItem),
+      this.armarProducto(key, variantes, atributosPorItem, includeWholesale),
     );
 
     return productos.sort((a, b) => a.nombre.localeCompare(b.nombre));
@@ -500,6 +504,7 @@ export class StkItemService {
     key: string,
     variantes: StkItem[],
     atributosPorItem: Map<string, ItemAtributo[]>,
+    includeWholesale = false,
   ): CatalogoProducto {
     const atributosDe = (item: StkItem) => atributosPorItem.get(item.id) ?? [];
 
@@ -559,8 +564,12 @@ export class StkItemService {
         }
 
         const precio = this.precioCotizadoDeLista(item, 'MINORISTA');
-        const invoice = this.precioCotizadoDeLista(item, 'MINORISTA CON IVA') ?? precio;
+        const invoice =
+          this.precioCotizadoDeLista(item, 'MINORISTA CON IVA') ?? precio;
         const promo = precio != null ? precio * 0.85 : null;
+        const wholesale = includeWholesale
+          ? this.precioCotizadoDeLista(item, 'MAYORISTA')
+          : null;
         const pesoNeto = atributos.find((x) => x.clase === 'Peso Neto')?.valor;
 
         return {
@@ -571,6 +580,9 @@ export class StkItemService {
           precioVtaCotizadoMin: precio != null ? precio.toFixed(2) : null,
           invoicePrice: invoice != null ? invoice.toFixed(2) : null,
           promotionalPrice: promo != null ? promo.toFixed(2) : null,
+          ...(includeWholesale
+            ? { wholesalePrice: wholesale != null ? wholesale.toFixed(2) : null }
+            : {}),
           stock: this.stockDisponible(item),
           updatedAt: this.updatedAtPublico(item),
           pesoKg: StkItemService.pesoAKg(pesoNeto),
@@ -602,9 +614,21 @@ export class StkItemService {
     if (!nombre) nombre = variantes[0]?.descripcion ?? variantes[0]?.id ?? key;
 
     const precios = variantesOut
-      .map((v) => (v.precioVtaCotizadoMin != null ? parseFloat(v.precioVtaCotizadoMin) : NaN))
+      .map((v) =>
+        v.precioVtaCotizadoMin != null
+          ? parseFloat(v.precioVtaCotizadoMin)
+          : NaN,
+      )
       .filter((n) => !isNaN(n));
     const precioDesde = precios.length ? Math.min(...precios).toFixed(2) : null;
+    const preciosMayoristas = variantesOut
+      .map((v) =>
+        v.wholesalePrice != null ? parseFloat(v.wholesalePrice) : NaN,
+      )
+      .filter((n) => !isNaN(n));
+    const wholesalePriceFrom = preciosMayoristas.length
+      ? Math.min(...preciosMayoristas).toFixed(2)
+      : null;
 
     return {
       key,
@@ -616,6 +640,7 @@ export class StkItemService {
       grupo: variantes[0]?.grupo ?? null,
       subgrupo: variantes[0]?.subgrupo ?? null,
       precioDesde,
+      ...(includeWholesale ? { wholesalePriceFrom } : {}),
       atributos: compartidos,
       dimensiones: dimensiones.map(({ orden, ...d }) => d),
       variantes: variantesOut,

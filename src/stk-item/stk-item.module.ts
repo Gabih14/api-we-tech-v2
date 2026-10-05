@@ -9,6 +9,8 @@ import { StkItemService } from './stk-item.service';
 import { StkItemController } from './stk-item.controller';
 import { StkPrecioModule } from 'src/stk-precio/stk-precio.module';
 import { DeliveryConfigModule } from '../delivery-config/delivery-config.module';
+import { AuthModule } from '../auth/auth.module';
+import { EcommerceUsuariosModule } from '../ecommerce-usuarios/ecommerce-usuarios.module';
 
 @Module({
   imports: [
@@ -21,6 +23,8 @@ import { DeliveryConfigModule } from '../delivery-config/delivery-config.module'
     ]),
     StkPrecioModule,
     DeliveryConfigModule,
+    AuthModule,
+    EcommerceUsuariosModule,
   ],
   providers: [StkItemService],
   controllers: [StkItemController],

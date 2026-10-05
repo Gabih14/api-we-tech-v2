@@ -41,4 +41,53 @@ describe('StkItemService clave de catálogo', () => {
       ),
     ).toBe('fam|Bambu Lab|Acero endurecido|A1|China');
   });
+
+  it('incluye el precio mayorista cotizado en las variantes', () => {
+    const armarProducto = (StkItemService.prototype as any).armarProducto;
+    const item = {
+      id: 'ITEM-1',
+      idPadre: null,
+      descripcion: 'Producto',
+      stkPrecios: [
+        { lista: 'MINORISTA', precioVta: '100', moneda: { id: 'PES' } },
+        { lista: 'MAYORISTA', precioVta: '80', moneda: { id: 'PES' } },
+      ],
+      stkExistencias: [],
+    };
+
+    const producto = armarProducto.call(
+      Object.create(StkItemService.prototype),
+      'item:ITEM-1',
+      [item],
+      new Map([['ITEM-1', []]]),
+      true,
+    );
+
+    expect(producto.variantes[0].wholesalePrice).toBe('80.00');
+    expect(producto.wholesalePriceFrom).toBe('80.00');
+  });
+
+  it('no expone precios mayoristas en el catálogo normal', () => {
+    const armarProducto = (StkItemService.prototype as any).armarProducto;
+    const item = {
+      id: 'ITEM-1',
+      idPadre: null,
+      descripcion: 'Producto',
+      stkPrecios: [
+        { lista: 'MINORISTA', precioVta: '100', moneda: { id: 'PES' } },
+        { lista: 'MAYORISTA', precioVta: '80', moneda: { id: 'PES' } },
+      ],
+      stkExistencias: [],
+    };
+
+    const producto = armarProducto.call(
+      Object.create(StkItemService.prototype),
+      'item:ITEM-1',
+      [item],
+      new Map([['ITEM-1', []]]),
+    );
+
+    expect(producto.variantes[0]).not.toHaveProperty('wholesalePrice');
+    expect(producto).not.toHaveProperty('wholesalePriceFrom');
+  });
 });
