@@ -3,6 +3,10 @@ import { EcommerceUsuariosService } from './ecommerce-usuarios.service';
 import {
   EcommerceUsuario,
   EstadoMayorista,
+  FiguraFiscalComercial,
+  OfertaPublico,
+  PerfilCompraInicial,
+  SedeComercial,
 } from './entities/ecommerce-usuario.entity';
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { ClerkService } from '../auth/clerk.service';
@@ -30,9 +34,7 @@ describe('EcommerceUsuariosService', () => {
           firstName: 'Ana',
           lastName: 'Pérez',
           primaryEmailAddressId: 'email_2',
-          emailAddresses: [
-            { id: 'email_2', emailAddress: 'ana@example.com' },
-          ],
+          emailAddresses: [{ id: 'email_2', emailAddress: 'ana@example.com' }],
         },
       ],
     });
@@ -151,9 +153,18 @@ describe('EcommerceUsuariosService', () => {
     } as EcommerceUsuario;
     const updatedUser = {
       ...user,
-      cuit: '20123456789',
-      razonSocial: 'Empresa SA',
+      nombreComercio: 'Impresiones Cuyo',
+      personaResponsable: 'Ana Perez',
+      ubicacionZona: 'Godoy Cruz, Mendoza',
       telefono: '2615551234',
+      figuraFiscalComercial: FiguraFiscalComercial.EMPRENDEDOR_MONOTRIBUTISTA,
+      perfilCompraInicial: PerfilCompraInicial.GRAN_CONSUMIDOR_FINAL_96_239_KG,
+      sedeComercial: SedeComercial.TALLER_OFICINA,
+      ofertasPublico: [
+        OfertaPublico.SERVICIO_IMPRESION_3D,
+        OfertaPublico.VENTA_ACTUAL_FILAMENTOS,
+      ],
+      marcasFilamento: 'WeTech, Grilon3',
       estadoMayorista: EstadoMayorista.PENDIENTE,
     } as EcommerceUsuario;
     const update = jest.fn().mockResolvedValue({ affected: 1 });
@@ -164,25 +175,41 @@ describe('EcommerceUsuariosService', () => {
 
     await expect(
       service.solicitarMayorista('user_123', {
-        cuit: '20123456789',
-        razonSocial: 'Empresa SA',
+        nombreComercio: 'Impresiones Cuyo',
+        personaResponsable: 'Ana Perez',
+        ubicacionZona: 'Godoy Cruz, Mendoza',
         telefono: '2615551234',
+        figuraFiscalComercial: FiguraFiscalComercial.EMPRENDEDOR_MONOTRIBUTISTA,
+        perfilCompraInicial:
+          PerfilCompraInicial.GRAN_CONSUMIDOR_FINAL_96_239_KG,
+        sedeComercial: SedeComercial.TALLER_OFICINA,
+        ofertasPublico: [
+          OfertaPublico.SERVICIO_IMPRESION_3D,
+          OfertaPublico.VENTA_ACTUAL_FILAMENTOS,
+        ],
+        marcasFilamento: 'WeTech, Grilon3',
       }),
     ).resolves.toMatchObject({
-      cuit: '20123456789',
-      razonSocial: 'Empresa SA',
+      nombreComercio: 'Impresiones Cuyo',
+      personaResponsable: 'Ana Perez',
       telefono: '2615551234',
       estadoMayorista: EstadoMayorista.PENDIENTE,
     });
-    expect(update).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 7 }),
-      {
-        cuit: '20123456789',
-        razonSocial: 'Empresa SA',
-        telefono: '2615551234',
-        estadoMayorista: EstadoMayorista.PENDIENTE,
-      },
-    );
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({ id: 7 }), {
+      nombreComercio: 'Impresiones Cuyo',
+      personaResponsable: 'Ana Perez',
+      ubicacionZona: 'Godoy Cruz, Mendoza',
+      telefono: '2615551234',
+      figuraFiscalComercial: FiguraFiscalComercial.EMPRENDEDOR_MONOTRIBUTISTA,
+      perfilCompraInicial: PerfilCompraInicial.GRAN_CONSUMIDOR_FINAL_96_239_KG,
+      sedeComercial: SedeComercial.TALLER_OFICINA,
+      ofertasPublico: [
+        OfertaPublico.SERVICIO_IMPRESION_3D,
+        OfertaPublico.VENTA_ACTUAL_FILAMENTOS,
+      ],
+      marcasFilamento: 'WeTech, Grilon3',
+      estadoMayorista: EstadoMayorista.PENDIENTE,
+    });
   });
 
   it('rechaza una solicitud si el usuario ya esta pendiente', async () => {
@@ -195,9 +222,15 @@ describe('EcommerceUsuariosService', () => {
 
     await expect(
       service.solicitarMayorista('user_123', {
-        cuit: '20123456789',
-        razonSocial: 'Empresa SA',
+        nombreComercio: 'Impresiones Cuyo',
+        personaResponsable: 'Ana Perez',
+        ubicacionZona: 'Godoy Cruz, Mendoza',
         telefono: '2615551234',
+        figuraFiscalComercial: FiguraFiscalComercial.EMPRENDEDOR_MONOTRIBUTISTA,
+        perfilCompraInicial:
+          PerfilCompraInicial.GRAN_CONSUMIDOR_FINAL_96_239_KG,
+        sedeComercial: SedeComercial.TALLER_OFICINA,
+        ofertasPublico: [OfertaPublico.SERVICIO_IMPRESION_3D],
       }),
     ).rejects.toThrow(ConflictException);
   });

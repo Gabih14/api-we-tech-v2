@@ -30,11 +30,20 @@ Authorization: Bearer <token Clerk>
 Content-Type: application/json
 
 {
-  "cuit": "20123456789",
-  "razonSocial": "Empresa SA",
-  "telefono": "2615551234"
+  "nombreComercio": "Impresiones Cuyo",
+  "personaResponsable": "Ana Perez",
+  "ubicacionZona": "Godoy Cruz, Mendoza",
+  "telefono": "2615551234",
+  "figuraFiscalComercial": "EMPRENDEDOR_MONOTRIBUTISTA",
+  "perfilCompraInicial": "GRAN_CONSUMIDOR_FINAL_96_239_KG",
+  "sedeComercial": "TALLER_OFICINA",
+  "ofertasPublico": ["SERVICIO_IMPRESION_3D", "VENTA_ACTUAL_FILAMENTOS"],
+  "marcasFilamento": "WeTech, Grilon3"
 }
 ```
+
+`ofertasPublico` permite seleccionar una o varias actividades. Si incluye
+`VENTA_ACTUAL_FILAMENTOS`, `marcasFilamento` es obligatorio.
 
 La solicitud guarda los datos localmente y cambia el estado a `PENDIENTE`. No
 crea un cliente ERP.
@@ -72,7 +81,8 @@ adicionales de `ALLOWED_ORIGINS` tambien se usan para CORS y para validar el
 `azp` del token Clerk.
 
 Antes del despliegue, ejecutar el SQL
-`migrations/20260928_create_ecommerce_usuario.sql` sobre la base configurada
+las migraciones de `ecommerce_usuario`, incluida
+`migrations/20261005_expand_solicitud_mayorista.sql`, sobre la base configurada
 por `BACK_DB_NAME`. La aplicacion mantiene `synchronize: false`.
 
 El estado mayorista se aprueba mediante un proceso administrativo que actualice
