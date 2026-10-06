@@ -37,6 +37,7 @@ PEDIDO_EXPIRATION_OPEN_HOUR=9
 PEDIDO_EXPIRATION_CLOSE_HOUR=19
 PEDIDO_EXPIRATION_MONDAY_OPEN_HOUR=12
 PEDIDO_EXPIRATION_TIMEZONE=America/Argentina/Buenos_Aires
+WHOLESALE_MIN_PURCHASE_AMOUNT=100000
 ```
 
 `PEDIDO_TRANSFER_APPROVAL_ENABLED` controla la aprobación automática de
@@ -50,6 +51,10 @@ las 12:00 y martes a viernes de 9:00 a 19:00, en
 `America/Argentina/Buenos_Aires`. Se puede ajustar con
 `PEDIDO_EXPIRATION_OPEN_HOUR`, `PEDIDO_EXPIRATION_CLOSE_HOUR`,
 `PEDIDO_EXPIRATION_MONDAY_OPEN_HOUR` y `PEDIDO_EXPIRATION_TIMEZONE`.
+
+`WHOLESALE_MIN_PURCHASE_AMOUNT` es el subtotal mínimo requerido para acceder a
+precios mayoristas. `GET /stk-item/catalogo/mayorista` solo responde a usuarios
+Clerk con estado mayorista `APROBADO`.
 
 ⚠️ Otros tokens, como el de Nave, están embebidos por ahora.
 **Se recomienda externalizarlos a `.env` por seguridad.**

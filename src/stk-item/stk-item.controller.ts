@@ -8,15 +8,22 @@ import {
   Delete,
   Query,
   ParseFloatPipe,
+  UseGuards,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { StkItemService } from './stk-item.service';
 import { CreateStkItemDto } from './dto/create-stk-item.dto';
 import { UpdateStkItemDto } from './dto/update-stk-item.dto';
 import { AuthType } from '../common/decorators/auth-type.decorator';
+import { ClerkAuthGuard } from '../auth/clerk-auth.guard';
+import { MayoristaGuard } from '../ecommerce-usuarios/mayorista.guard';
 
 @Controller('stk-item')
 export class StkItemController {
-  constructor(private readonly stkItemService: StkItemService) {}
+  constructor(
+    private readonly stkItemService: StkItemService,
+    private readonly config: ConfigService,
+  ) {}
 
   @Post()
   create(@Body() createStkItemDto: CreateStkItemDto) {
@@ -54,6 +61,23 @@ export class StkItemController {
   @AuthType('default', 'dashboard')
   getCatalogo() {
     return this.stkItemService.getCatalogo();
+  }
+
+  @Get('catalogo/mayorista')
+  @AuthType('public')
+  @UseGuards(ClerkAuthGuard, MayoristaGuard)
+  async getCatalogoMayorista() {
+    const minimumPurchase = Number(
+      this.config.getOrThrow<string>('WHOLESALE_MIN_PURCHASE_AMOUNT'),
+    );
+    if (!Number.isFinite(minimumPurchase) || minimumPurchase <= 0) {
+      throw new Error('WHOLESALE_MIN_PURCHASE_AMOUNT debe ser mayor que cero');
+    }
+
+    return {
+      minimumPurchase,
+      products: await this.stkItemService.getCatalogo(true),
+    };
   }
 
   @Get('costo/:distancia')
