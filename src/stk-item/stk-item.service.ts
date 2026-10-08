@@ -9,6 +9,7 @@ import { UpdateStkItemDto } from './dto/update-stk-item.dto';
 import { StkFamilia } from 'src/stk_familia/entities/stk_familia.entity';
 import { StkPrecioService } from 'src/stk-precio/stk-precio.service';
 import { DeliveryConfigService } from '../delivery-config/delivery-config.service';
+import { FILAMENT_CATEGORIES } from '../pricing/discounts';
 
 /** Proyección pública de un atributo (nada de la fila entera). */
 export interface ItemAtributo {
@@ -567,7 +568,10 @@ export class StkItemService {
         const invoice =
           this.precioCotizadoDeLista(item, 'MINORISTA CON IVA') ?? precio;
         const promo = precio != null ? precio * 0.85 : null;
-        const wholesale = includeWholesale
+        const includeVariantWholesale =
+          includeWholesale &&
+          (FILAMENT_CATEGORIES as readonly string[]).includes(item.grupo ?? '');
+        const wholesale = includeVariantWholesale
           ? this.precioCotizadoDeLista(item, 'MAYORISTA')
           : null;
         const pesoNeto = atributos.find((x) => x.clase === 'Peso Neto')?.valor;
@@ -580,7 +584,7 @@ export class StkItemService {
           precioVtaCotizadoMin: precio != null ? precio.toFixed(2) : null,
           invoicePrice: invoice != null ? invoice.toFixed(2) : null,
           promotionalPrice: promo != null ? promo.toFixed(2) : null,
-          ...(includeWholesale
+          ...(includeVariantWholesale
             ? { wholesalePrice: wholesale != null ? wholesale.toFixed(2) : null }
             : {}),
           stock: this.stockDisponible(item),
@@ -640,7 +644,7 @@ export class StkItemService {
       grupo: variantes[0]?.grupo ?? null,
       subgrupo: variantes[0]?.subgrupo ?? null,
       precioDesde,
-      ...(includeWholesale ? { wholesalePriceFrom } : {}),
+      ...(preciosMayoristas.length ? { wholesalePriceFrom } : {}),
       atributos: compartidos,
       dimensiones: dimensiones.map(({ orden, ...d }) => d),
       variantes: variantesOut,
