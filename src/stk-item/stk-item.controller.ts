@@ -67,15 +67,15 @@ export class StkItemController {
   @AuthType('public')
   @UseGuards(ClerkAuthGuard, MayoristaGuard)
   async getCatalogoMayorista() {
-    const minimumPurchase = Number(
-      this.config.getOrThrow<string>('WHOLESALE_MIN_PURCHASE_AMOUNT'),
+    const minimumPurchaseKg = Number(
+      this.config.getOrThrow<string>('WHOLESALE_MIN_PURCHASE_KG'),
     );
-    if (!Number.isFinite(minimumPurchase) || minimumPurchase <= 0) {
-      throw new Error('WHOLESALE_MIN_PURCHASE_AMOUNT debe ser mayor que cero');
+    if (!Number.isFinite(minimumPurchaseKg) || minimumPurchaseKg <= 0) {
+      throw new Error('WHOLESALE_MIN_PURCHASE_KG debe ser mayor que cero');
     }
 
     return {
-      minimumPurchase,
+      minimumPurchaseKg,
       products: await this.stkItemService.getCatalogo(true),
     };
   }
