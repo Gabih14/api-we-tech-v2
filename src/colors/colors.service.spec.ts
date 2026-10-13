@@ -66,7 +66,9 @@ describe('ColorsService', () => {
     };
     const colorsBridgeRepository = {
       create: jest.fn().mockImplementation((value) => value),
-      save: jest.fn().mockResolvedValue({ id: 1, stkAtributoId: 'MULTI' }),
+      save: jest
+        .fn()
+        .mockImplementation(async (value) => ({ id: 1, ...value })),
     };
     const service = new ColorsService(
       atributosRepository as never,
@@ -81,11 +83,18 @@ describe('ColorsService', () => {
         id: 'multi',
         name: 'Multicolor',
         hexes: ['#ff0000', '#00ff00', '#0000ff'],
+        franjaHorizontal: true,
       }),
     ).resolves.toMatchObject({
       id: 'MULTI',
       hex: '#FF0000',
       hexes: ['#FF0000', '#00FF00', '#0000FF'],
+      franjaHorizontal: true,
+    });
+    expect(colorsBridgeRepository.create).toHaveBeenCalledWith({
+      stkAtributoId: 'MULTI',
+      colorGroupId: null,
+      franjaHorizontal: true,
     });
     expect(paletteSave).toHaveBeenCalledWith(expect.any(Function), [
       { atributoId: 'MULTI', hex: '#FF0000', orden: 0 },
@@ -290,6 +299,38 @@ describe('ColorsService', () => {
     });
     expect(colorsBridgeRepository.save).toHaveBeenCalledWith(
       expect.objectContaining({ colorGroupId: 7 }),
+    );
+  });
+
+  it('modifica y devuelve la orientacion horizontal de un color', async () => {
+    const color = { id: 'RAINBOW', nombre: 'Rainbow', color: '#FF0000' };
+    const bridge = {
+      id: 1,
+      stkAtributoId: 'RAINBOW',
+      colorGroupId: null,
+      franjaHorizontal: false,
+    };
+    const colorsBridgeRepository = {
+      findOne: jest.fn().mockResolvedValue(bridge),
+      save: jest.fn().mockImplementation(async (value) => value),
+      findOneOrFail: jest.fn().mockImplementation(async () => bridge),
+    };
+    const service = new ColorsService(
+      {
+        findOne: jest.fn().mockResolvedValue(color),
+        save: jest.fn().mockResolvedValue(color),
+      } as never,
+      createColorHexesRepository() as never,
+      colorsBridgeRepository as never,
+      {} as never,
+      {} as never,
+    );
+
+    await expect(
+      service.update('RAINBOW', { franjaHorizontal: true }),
+    ).resolves.toMatchObject({ franjaHorizontal: true });
+    expect(colorsBridgeRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({ franjaHorizontal: true }),
     );
   });
 });
