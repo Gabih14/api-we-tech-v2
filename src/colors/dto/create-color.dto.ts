@@ -7,6 +7,7 @@ import {
   MaxLength,
   Min,
   ArrayMinSize,
+  IsBoolean,
 } from 'class-validator';
 
 export class CreateColorDto {
@@ -46,4 +47,8 @@ export class CreateColorDto {
   @IsInt()
   @Min(1)
   colorGroupId?: number | null;
+
+  @IsOptional()
+  @IsBoolean()
+  franjaHorizontal?: boolean;
 }

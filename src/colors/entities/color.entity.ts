@@ -37,6 +37,9 @@ export class Color {
   @Column({ name: 'active', type: 'boolean', default: true })
   active: boolean;
 
+  @Column({ name: 'franja_horizontal', type: 'boolean', default: false })
+  franjaHorizontal: boolean;
+
   @ManyToOne(() => ColorGroup, (colorGroup) => colorGroup.colors, {
     nullable: true,
     onDelete: 'SET NULL',

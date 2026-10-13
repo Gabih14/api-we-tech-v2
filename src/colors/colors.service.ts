@@ -32,6 +32,7 @@ export interface ColorResponse {
   order: number | null;
   colorGroupId: number | null;
   colorGroup: ColorGroupSummaryResponse | null;
+  franjaHorizontal: boolean;
 }
 
 export interface ColorAssignmentResponse {
@@ -86,6 +87,7 @@ export class ColorsService {
         duplicate.color = hex;
         duplicate.orden = dto.order ?? null;
         bridge.colorGroupId = dto.colorGroupId ?? null;
+        bridge.franjaHorizontal = dto.franjaHorizontal ?? false;
         bridge.active = true;
         const [savedColor, savedBridge] = await Promise.all([
           this.atributosRepository.save(duplicate),
@@ -121,6 +123,7 @@ export class ColorsService {
         this.colorsBridgeRepository.create({
           stkAtributoId: id,
           colorGroupId: dto.colorGroupId ?? null,
+          franjaHorizontal: dto.franjaHorizontal ?? false,
         }),
       );
       return this.toResponse(color, bridge, hexes);
@@ -234,10 +237,20 @@ export class ColorsService {
       color.color = hexes[0];
     }
     if (dto.order !== undefined) color.orden = dto.order ?? null;
-    if (dto.colorGroupId !== undefined) {
-      await this.ensureColorGroupExists(dto.colorGroupId);
+    if (
+      dto.colorGroupId !== undefined ||
+      dto.franjaHorizontal !== undefined
+    ) {
+      if (dto.colorGroupId !== undefined) {
+        await this.ensureColorGroupExists(dto.colorGroupId);
+      }
       bridge ??= this.colorsBridgeRepository.create({ stkAtributoId: id });
-      bridge.colorGroupId = dto.colorGroupId ?? null;
+      if (dto.colorGroupId !== undefined) {
+        bridge.colorGroupId = dto.colorGroupId ?? null;
+      }
+      if (dto.franjaHorizontal !== undefined) {
+        bridge.franjaHorizontal = dto.franjaHorizontal;
+      }
       const savedBridge = await this.colorsBridgeRepository.save(bridge);
       bridge = await this.colorsBridgeRepository.findOneOrFail({
         where: { id: savedBridge.id },
@@ -579,6 +592,7 @@ export class ColorsService {
       ...color,
       hexes: hexes?.length ? hexes : color.hex ? [color.hex] : [],
       colorGroupId: bridge?.colorGroupId ?? null,
+      franjaHorizontal: bridge?.franjaHorizontal ?? false,
       colorGroup: group
         ? {
             id: group.id,
