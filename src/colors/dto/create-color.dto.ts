@@ -1,10 +1,12 @@
 import {
   IsInt,
+  IsArray,
   IsOptional,
   IsString,
   Matches,
   MaxLength,
   Min,
+  ArrayMinSize,
 } from 'class-validator';
 
 export class CreateColorDto {
@@ -19,11 +21,22 @@ export class CreateColorDto {
   @MaxLength(30)
   name: string;
 
+  @IsOptional()
   @IsString()
   @Matches(/^#[0-9A-Fa-f]{6}$/, {
     message: 'hex debe tener formato #RRGGBB',
   })
-  hex: string;
+  hex?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMinSize(1)
+  @IsString({ each: true })
+  @Matches(/^#[0-9A-Fa-f]{6}$/, {
+    each: true,
+    message: 'cada hex debe tener formato #RRGGBB',
+  })
+  hexes?: string[];
 
   @IsOptional()
   @IsInt()

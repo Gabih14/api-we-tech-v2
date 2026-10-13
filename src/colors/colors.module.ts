@@ -10,6 +10,7 @@ import { StkAtributo } from '../stk-item/entities/stk-atributo.entity';
 import { StkAtributoNodo } from '../stk-item/entities/stk-atributo-nodo.entity';
 import { StkAtributoArbol } from '../stk-item/entities/stk-atributo-arbol.entity';
 import { StkItem } from '../stk-item/entities/stk-item.entity';
+import { StkAtributoColorHex } from '../stk-item/entities/stk-atributo-color-hex.entity';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { StkItem } from '../stk-item/entities/stk-item.entity';
       StkAtributoNodo,
       StkAtributoArbol,
       StkItem,
+      StkAtributoColorHex,
     ]),
   ],
   controllers: [ColorsController, ColorGroupsController],

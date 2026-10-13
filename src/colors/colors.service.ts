@@ -4,8 +4,9 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, In, Repository } from 'typeorm';
 import { StkAtributo } from '../stk-item/entities/stk-atributo.entity';
+import { StkAtributoColorHex } from '../stk-item/entities/stk-atributo-color-hex.entity';
 import { StkAtributoArbol } from '../stk-item/entities/stk-atributo-arbol.entity';
 import { StkAtributoNodo } from '../stk-item/entities/stk-atributo-nodo.entity';
 import { StkItem } from '../stk-item/entities/stk-item.entity';
@@ -27,6 +28,7 @@ export interface ColorResponse {
   id: string;
   name: string;
   hex: string;
+  hexes: string[];
   order: number | null;
   colorGroupId: number | null;
   colorGroup: ColorGroupSummaryResponse | null;
@@ -55,6 +57,8 @@ export class ColorsService {
   constructor(
     @InjectRepository(StkAtributo)
     private readonly atributosRepository: Repository<StkAtributo>,
+    @InjectRepository(StkAtributoColorHex)
+    private readonly colorHexesRepository: Repository<StkAtributoColorHex>,
     @InjectRepository(Color, 'back')
     private readonly colorsBridgeRepository: Repository<Color>,
     @InjectRepository(ColorGroup, 'back')
@@ -65,7 +69,8 @@ export class ColorsService {
   async create(dto: CreateColorDto): Promise<ColorResponse> {
     const id = dto.id.trim().toUpperCase();
     const name = dto.name.trim();
-    const hex = dto.hex.trim().toUpperCase();
+    const hexes = this.normalizeHexes(dto.hex, dto.hexes, true);
+    const hex = hexes[0];
     if (!name) throw new BadRequestException('name no puede estar vacio');
     await this.ensureColorGroupExists(dto.colorGroupId);
 
@@ -86,12 +91,14 @@ export class ColorsService {
           this.atributosRepository.save(duplicate),
           this.colorsBridgeRepository.save(bridge),
         ]);
+        await this.replaceHexes(id, hexes);
         return this.toResponse(
           savedColor,
           await this.colorsBridgeRepository.findOneOrFail({
             where: { id: savedBridge.id },
             relations: { colorGroup: true },
           }),
+          hexes,
         );
       }
       throw new BadRequestException(`El codigo de color ${id} ya existe`);
@@ -109,13 +116,14 @@ export class ColorsService {
       }),
     );
     try {
+      await this.replaceHexes(id, hexes);
       const bridge = await this.colorsBridgeRepository.save(
         this.colorsBridgeRepository.create({
           stkAtributoId: id,
           colorGroupId: dto.colorGroupId ?? null,
         }),
       );
-      return this.toResponse(color, bridge);
+      return this.toResponse(color, bridge, hexes);
     } catch (error) {
       await this.atributosRepository.delete({ id });
       throw error;
@@ -135,9 +143,16 @@ export class ColorsService {
         .filter((bridge) => bridge.stkAtributoId != null)
         .map((bridge) => [bridge.stkAtributoId!, bridge]),
     );
+    const hexesById = await this.getHexesByColorIds(colors.map(({ id }) => id));
     return colors
       .filter((color) => bridgeById.get(color.id)?.active !== false)
-      .map((color) => this.toResponse(color, bridgeById.get(color.id)));
+      .map((color) =>
+        this.toResponse(
+          color,
+          bridgeById.get(color.id),
+          hexesById.get(color.id),
+        ),
+      );
   }
 
   async deactivate(idParam: string): Promise<ColorResponse> {
@@ -159,6 +174,7 @@ export class ColorsService {
     return this.toResponse(
       color,
       await this.colorsBridgeRepository.save(bridge),
+      (await this.getHexesByColorIds([id])).get(id),
     );
   }
 
@@ -204,7 +220,19 @@ export class ColorsService {
       if (!name) throw new BadRequestException('name no puede estar vacio');
       color.nombre = name;
     }
-    if (dto.hex !== undefined) color.color = dto.hex.trim().toUpperCase();
+    let hexes: string[] | undefined;
+    if (dto.hexes !== undefined) {
+      hexes = this.normalizeHexes(dto.hex, dto.hexes, true);
+      color.color = hexes[0];
+    } else if (dto.hex !== undefined) {
+      const current = (await this.getHexesByColorIds([id])).get(id) ?? [];
+      hexes = this.normalizeHexes(
+        undefined,
+        [dto.hex, ...current.slice(1)],
+        true,
+      );
+      color.color = hexes[0];
+    }
     if (dto.order !== undefined) color.orden = dto.order ?? null;
     if (dto.colorGroupId !== undefined) {
       await this.ensureColorGroupExists(dto.colorGroupId);
@@ -221,7 +249,13 @@ export class ColorsService {
         relations: { colorGroup: true },
       });
     }
-    return this.toResponse(await this.atributosRepository.save(color), bridge);
+    const savedColor = await this.atributosRepository.save(color);
+    if (hexes) await this.replaceHexes(id, hexes);
+    return this.toResponse(
+      savedColor,
+      bridge,
+      hexes ?? (await this.getHexesByColorIds([id])).get(id),
+    );
   }
 
   async getItemColors(itemId: string): Promise<ColorAssignmentResponse> {
@@ -251,10 +285,15 @@ export class ColorsService {
         .filter((bridge) => bridge.stkAtributoId != null)
         .map((bridge) => [bridge.stkAtributoId!, bridge]),
     );
+    const hexesById = await this.getHexesByColorIds(rows.map(({ id }) => id));
     return {
       itemId,
       colors: rows.map((row) =>
-        this.toResponseFromRaw(row, bridgeById.get(row.id)),
+        this.toResponseFromRaw(
+          row,
+          bridgeById.get(row.id),
+          hexesById.get(row.id),
+        ),
       ),
     };
   }
@@ -423,7 +462,11 @@ export class ColorsService {
       where: { id: saved.id },
       relations: { colorGroup: true },
     });
-    return this.toResponse(native, withGroup);
+    return this.toResponse(
+      native,
+      withGroup,
+      (await this.getHexesByColorIds([colorId])).get(colorId),
+    );
   }
 
   private async ensureItemExists(itemId: string): Promise<void> {
@@ -455,7 +498,65 @@ export class ColorsService {
       .toLocaleLowerCase('es');
   }
 
-  private toResponse(color: StkAtributo, bridge?: Color | null): ColorResponse {
+  private async replaceHexes(colorId: string, hexes: string[]): Promise<void> {
+    await this.dataSource.transaction(async (manager) => {
+      await manager.delete(StkAtributoColorHex, { atributoId: colorId });
+      await manager.save(
+        StkAtributoColorHex,
+        hexes.map((hex, orden) => ({ atributoId: colorId, hex, orden })),
+      );
+    });
+  }
+
+  private async getHexesByColorIds(
+    colorIds: string[],
+  ): Promise<Map<string, string[]>> {
+    if (!colorIds.length) return new Map();
+    const rows = await this.colorHexesRepository.find({
+      where: { atributoId: In(colorIds) },
+      order: { atributoId: 'ASC', orden: 'ASC' },
+    });
+    const result = new Map<string, string[]>();
+    for (const row of rows) {
+      const values = result.get(row.atributoId) ?? [];
+      values.push(row.hex);
+      result.set(row.atributoId, values);
+    }
+    return result;
+  }
+
+  private normalizeHexes(
+    hex: string | undefined,
+    hexes: string[] | undefined,
+    required: boolean,
+  ): string[] {
+    if (hexes === undefined) {
+      if (hex !== undefined) return [hex.trim().toUpperCase()];
+      if (required) throw new BadRequestException('hex o hexes es requerido');
+      return [];
+    }
+    const normalized = hexes.map((value) => value.trim().toUpperCase());
+    if (required && !normalized.length) {
+      throw new BadRequestException('hexes debe contener al menos un color');
+    }
+    if (new Set(normalized).size !== normalized.length) {
+      throw new BadRequestException(
+        'hexes no puede contener valores repetidos',
+      );
+    }
+    if (hex !== undefined && hex.trim().toUpperCase() !== normalized[0]) {
+      throw new BadRequestException(
+        'hex debe coincidir con el primer valor de hexes',
+      );
+    }
+    return normalized;
+  }
+
+  private toResponse(
+    color: StkAtributo,
+    bridge?: Color | null,
+    hexes?: string[],
+  ): ColorResponse {
     return this.toResponseFromRaw(
       {
         id: color.id,
@@ -464,16 +565,19 @@ export class ColorsService {
         order: color.orden,
       },
       bridge,
+      hexes,
     );
   }
 
   private toResponseFromRaw(
     color: Pick<ColorResponse, 'id' | 'name' | 'hex' | 'order'>,
     bridge?: Color | null,
+    hexes?: string[],
   ): ColorResponse {
     const group = bridge?.colorGroup;
     return {
       ...color,
+      hexes: hexes?.length ? hexes : color.hex ? [color.hex] : [],
       colorGroupId: bridge?.colorGroupId ?? null,
       colorGroup: group
         ? {

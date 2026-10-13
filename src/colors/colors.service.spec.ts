@@ -2,6 +2,19 @@ import { ColorsService } from './colors.service';
 import { StkItem } from '../stk-item/entities/stk-item.entity';
 import { FILAMENT_CATEGORIES } from '../pricing/discounts';
 
+const createColorHexesRepository = () => ({
+  find: jest.fn().mockResolvedValue([]),
+});
+
+const createDataSource = () => ({
+  transaction: jest.fn().mockImplementation(async (work) =>
+    work({
+      delete: jest.fn().mockResolvedValue(undefined),
+      save: jest.fn().mockResolvedValue(undefined),
+    }),
+  ),
+});
+
 describe('ColorsService', () => {
   it('permite crear colores con nombres repetidos si el id es distinto', async () => {
     const savedColor = {
@@ -21,9 +34,10 @@ describe('ColorsService', () => {
     };
     const service = new ColorsService(
       atributosRepository as never,
+      createColorHexesRepository() as never,
       colorsBridgeRepository as never,
       { exist: jest.fn() } as never,
-      {} as never,
+      createDataSource() as never,
     );
 
     await expect(
@@ -32,6 +46,52 @@ describe('ColorsService', () => {
     expect(atributosRepository.findOne).toHaveBeenCalledWith({
       where: { id: 'AMAR2' },
     });
+  });
+
+  it('guarda y devuelve una paleta respetando el orden recibido', async () => {
+    const paletteSave = jest.fn().mockResolvedValue(undefined);
+    const dataSource = {
+      transaction: jest.fn().mockImplementation(async (work) =>
+        work({
+          delete: jest.fn().mockResolvedValue(undefined),
+          save: paletteSave,
+        }),
+      ),
+    };
+    const atributosRepository = {
+      findOne: jest.fn().mockResolvedValue(null),
+      create: jest.fn().mockImplementation((value) => value),
+      save: jest.fn().mockImplementation(async (value) => value),
+      delete: jest.fn(),
+    };
+    const colorsBridgeRepository = {
+      create: jest.fn().mockImplementation((value) => value),
+      save: jest.fn().mockResolvedValue({ id: 1, stkAtributoId: 'MULTI' }),
+    };
+    const service = new ColorsService(
+      atributosRepository as never,
+      createColorHexesRepository() as never,
+      colorsBridgeRepository as never,
+      { exist: jest.fn() } as never,
+      dataSource as never,
+    );
+
+    await expect(
+      service.create({
+        id: 'multi',
+        name: 'Multicolor',
+        hexes: ['#ff0000', '#00ff00', '#0000ff'],
+      }),
+    ).resolves.toMatchObject({
+      id: 'MULTI',
+      hex: '#FF0000',
+      hexes: ['#FF0000', '#00FF00', '#0000FF'],
+    });
+    expect(paletteSave).toHaveBeenCalledWith(expect.any(Function), [
+      { atributoId: 'MULTI', hex: '#FF0000', orden: 0 },
+      { atributoId: 'MULTI', hex: '#00FF00', orden: 1 },
+      { atributoId: 'MULTI', hex: '#0000FF', orden: 2 },
+    ]);
   });
 
   it('reactiva un color eliminado logicamente al crearlo con el mismo id', async () => {
@@ -66,9 +126,10 @@ describe('ColorsService', () => {
     };
     const service = new ColorsService(
       atributosRepository as never,
+      createColorHexesRepository() as never,
       colorsBridgeRepository as never,
       { exist: jest.fn().mockResolvedValue(true) } as never,
-      {} as never,
+      createDataSource() as never,
     );
 
     await expect(
@@ -115,6 +176,7 @@ describe('ColorsService', () => {
     };
     const service = new ColorsService(
       {} as never,
+      createColorHexesRepository() as never,
       {} as never,
       {} as never,
       dataSource as never,
@@ -150,6 +212,7 @@ describe('ColorsService', () => {
     };
     const service = new ColorsService(
       { findOne: jest.fn().mockResolvedValue({ id: 'NEGRO' }) } as never,
+      createColorHexesRepository() as never,
       {} as never,
       {} as never,
       dataSource as never,
@@ -180,6 +243,7 @@ describe('ColorsService', () => {
     };
     const service = new ColorsService(
       atributosRepository as never,
+      createColorHexesRepository() as never,
       colorsBridgeRepository as never,
       {} as never,
       {} as never,
@@ -212,6 +276,7 @@ describe('ColorsService', () => {
         findOne: jest.fn().mockResolvedValue(color),
         save: jest.fn().mockResolvedValue(color),
       } as never,
+      createColorHexesRepository() as never,
       colorsBridgeRepository as never,
       { exist: jest.fn().mockResolvedValue(true) } as never,
       {} as never,
