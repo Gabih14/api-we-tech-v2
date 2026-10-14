@@ -2445,6 +2445,42 @@ describe('PedidoService recalculo de importes', () => {
     ]);
   });
 
+  it('cancela sin borrar otro comprobante cuando el numero fue reutilizado', async () => {
+    const pedido = {
+      id: 908,
+      external_id: 'pedido-numero-reutilizado',
+      cliente_cuit: '30708834412',
+      total: 19999,
+      estado: 'PENDIENTE',
+      metodo_pago: 'online',
+      comprobante_tipo: 'FX',
+      comprobante_numero: 'X 00001 00023765',
+      productos: [
+        { nombre: 'ITEM-1', cantidad: 1, deposito_reserva: 'DEPOSITO' },
+      ],
+    };
+    createRepo.findOne.mockResolvedValue(pedido);
+    vtaComprobanteService.eliminarComprobantePorPedido.mockResolvedValueOnce({
+      eliminado: false,
+    });
+
+    await expect(
+      service.cancelarPedidoPendiente(pedido.external_id),
+    ).resolves.toMatchObject({
+      estado: 'CANCELADO',
+      comprobante_tipo: null,
+      comprobante_numero: null,
+    });
+
+    expect(
+      vtaComprobanteService.eliminarComprobantePorPedido,
+    ).toHaveBeenCalledWith('FX', 'X 00001 00023765', pedido);
+    expect(stockService.liberarStockLote).toHaveBeenCalledTimes(1);
+    expect(createRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({ estado: 'CANCELADO' }),
+    );
+  });
+
   it('cancela una transferencia reponiendo existencia y quitando la reserva', async () => {
     const pedido = {
       id: 909,

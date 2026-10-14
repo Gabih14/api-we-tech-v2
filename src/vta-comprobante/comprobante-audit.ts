@@ -4,7 +4,8 @@ import { PedidoWebAccionLog } from './entities/pedido-web-accion-log.entity';
 export type AccionComprobante =
   | 'ALTA_COMPROBANTE'
   | 'MODIFICACION_COMPROBANTE'
-  | 'BORRADO_COMPROBANTE';
+  | 'BORRADO_COMPROBANTE'
+  | 'BORRADO_OMITIDO_INCONSISTENCIA';
 
 type LogRepository = Pick<Repository<PedidoWebAccionLog>, 'create' | 'save'>;
 

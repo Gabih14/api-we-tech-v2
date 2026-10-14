@@ -702,6 +702,9 @@ describe('VtaComprobanteService eliminarComprobantePorPedido', () => {
       findOne: jest.fn().mockResolvedValue({
         tipo: 'FX',
         comprobante: 'X 00001 00000001',
+        cliente: '20123456789',
+        total: 1500,
+        observaciones_int: 'PEDIDO_WEB:pedido-original',
       }),
       delete: jest.fn(),
     };
@@ -765,8 +768,17 @@ describe('VtaComprobanteService eliminarComprobantePorPedido', () => {
     await service.eliminarComprobantePorPedido(
       'FX',
       'X 00001 00000001',
+      {
+        external_id: 'pedido-original',
+        cliente_cuit: '20123456789',
+        total: 1500,
+      },
     );
 
+    expect(comprobanteRepo.findOne).toHaveBeenCalledWith({
+      where: { tipo: 'FX', comprobante: 'X 00001 00000001' },
+      lock: { mode: 'pessimistic_write' },
+    });
     const sql = query.mock.calls[0][0] as string;
     expect(sql).toContain('FROM tsr_movimiento_asiento');
     expect(sql).not.toContain('fnd_movimiento_asiento');
@@ -775,6 +787,70 @@ describe('VtaComprobanteService eliminarComprobantePorPedido', () => {
       expect.objectContaining({
         accion: 'BORRADO_COMPROBANTE',
         referencia: 'FX X 00001 00000001',
+      }),
+    );
+  });
+
+  it('no borra un comprobante manual que reutilizo el numero del pedido', async () => {
+    const comprobanteRepo = {
+      findOne: jest.fn().mockResolvedValue({
+        tipo: 'FX',
+        comprobante: 'X 00001 00023765',
+        cliente: '27273252873',
+        total: 0,
+        observaciones_int: 'REPARACION CUBIERTA POR GARANTIA',
+      }),
+      delete: jest.fn(),
+    };
+    const comprobanteItemRepo = { delete: jest.fn() };
+    const cobroFacturaRepo = { find: jest.fn(), delete: jest.fn() };
+    const asientoLinkRepo = { find: jest.fn(), delete: jest.fn() };
+    const accionLogRepo = {
+      create: jest.fn((data) => data),
+      save: jest.fn(async (data) => data),
+    };
+    const repositories = new Map<unknown, unknown>([
+      [VtaComprobante, comprobanteRepo],
+      [VtaComprobanteItem, comprobanteItemRepo],
+      [VtaCobroFactura, cobroFacturaRepo],
+      [VtaComprobanteAsiento, asientoLinkRepo],
+      [PedidoWebAccionLog, accionLogRepo],
+    ]);
+    const manager = {
+      getRepository: jest.fn((target) => repositories.get(target)),
+    };
+    const dataSource = {
+      transaction: jest.fn(async (callback) => callback(manager)),
+    };
+    const service = new VtaComprobanteService(
+      dataSource as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+    );
+
+    await expect(
+      service.eliminarComprobantePorPedido('FX', 'X 00001 00023765', {
+        external_id: 'd7d878e8c0e34f788636bbd5227ce14d',
+        cliente_cuit: '30708834412',
+        total: 19999,
+      }),
+    ).resolves.toEqual({
+      eliminado: false,
+      motivo: 'NO_PERTENECE_AL_PEDIDO',
+    });
+
+    expect(comprobanteItemRepo.delete).not.toHaveBeenCalled();
+    expect(comprobanteRepo.delete).not.toHaveBeenCalled();
+    expect(cobroFacturaRepo.find).not.toHaveBeenCalled();
+    expect(asientoLinkRepo.find).not.toHaveBeenCalled();
+    expect(accionLogRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        accion: 'BORRADO_OMITIDO_INCONSISTENCIA',
+        referencia: 'FX X 00001 00023765',
+        detalle: expect.stringContaining('REPARACION CUBIERTA POR GARANTIA'),
       }),
     );
   });

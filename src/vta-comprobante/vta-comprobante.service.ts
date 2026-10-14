@@ -43,6 +43,16 @@ type TipoComprobantePedido = {
   facturaTipo: 'A' | 'B' | null;
 };
 
+type PedidoPropietarioComprobante = Pick<
+  Pedido,
+  'external_id' | 'cliente_cuit' | 'total'
+>;
+
+type ResultadoEliminacionComprobante = {
+  eliminado: boolean;
+  motivo?: 'NO_ENCONTRADO' | 'NO_PERTENECE_AL_PEDIDO';
+};
+
 @Injectable()
 export class VtaComprobanteService {
   constructor(
@@ -62,15 +72,47 @@ export class VtaComprobanteService {
   async eliminarComprobantePorPedido(
     tipo: string,
     comprobante: string,
-  ): Promise<{ eliminado: boolean }> {
+    pedido: PedidoPropietarioComprobante,
+  ): Promise<ResultadoEliminacionComprobante> {
     return this.dataSource.transaction(async (manager) => {
       const comprobanteRepo = manager.getRepository(VtaComprobante);
       const comprobanteEntity = await comprobanteRepo.findOne({
         where: { tipo, comprobante },
+        lock: { mode: 'pessimistic_write' },
       });
 
       if (!comprobanteEntity) {
-        return { eliminado: false };
+        return { eliminado: false, motivo: 'NO_ENCONTRADO' };
+      }
+
+      const validacion = this.validarPertenenciaAlPedido(
+        comprobanteEntity,
+        pedido,
+      );
+
+      if (!validacion.coincide) {
+        await registrarAccionComprobante(
+          manager.getRepository(PedidoWebAccionLog),
+          'BORRADO_OMITIDO_INCONSISTENCIA',
+          tipo,
+          comprobante,
+          {
+            pedido: pedido.external_id,
+            motivo: validacion.motivos,
+            esperado: {
+              cliente: pedido.cliente_cuit,
+              total: Number(pedido.total),
+              referenciaPedido: validacion.referenciaEsperada,
+            },
+            encontrado: {
+              cliente: comprobanteEntity.cliente,
+              total: Number(comprobanteEntity.total ?? 0),
+              referenciaPedido: comprobanteEntity.observaciones_int ?? null,
+            },
+          },
+        );
+
+        return { eliminado: false, motivo: 'NO_PERTENECE_AL_PEDIDO' };
       }
 
       const cobroFacturaRepo = manager.getRepository(VtaCobroFactura);
@@ -185,6 +227,50 @@ export class VtaComprobanteService {
 
       return { eliminado: true };
     });
+  }
+
+  private validarPertenenciaAlPedido(
+    comprobante: VtaComprobante,
+    pedido: PedidoPropietarioComprobante,
+  ): {
+    coincide: boolean;
+    motivos: string[];
+    referenciaEsperada: string;
+  } {
+    const referenciaEsperada = buildPedidoComprobanteReference(
+      pedido.external_id,
+    );
+    const referencia = comprobante.observaciones_int?.trim() ?? '';
+    const referenciaCoincide =
+      referencia === referenciaEsperada ||
+      referencia.startsWith(`${referenciaEsperada} `) ||
+      referencia.startsWith(`${referenciaEsperada}|`);
+    const clienteComprobante = (
+      comprobante.cliente ||
+      comprobante.numero_documento ||
+      ''
+    )
+      .trim()
+      .toLowerCase();
+    const clientePedido = pedido.cliente_cuit.trim().toLowerCase();
+    const clienteCoincide = clienteComprobante === clientePedido;
+    const totalComprobante = Number(comprobante.total);
+    const totalPedido = Number(pedido.total);
+    const totalCoincide =
+      Number.isFinite(totalComprobante) &&
+      Number.isFinite(totalPedido) &&
+      Math.abs(totalComprobante - totalPedido) < 0.01;
+    const motivos: string[] = [];
+
+    if (!referenciaCoincide) motivos.push('REFERENCIA_DISTINTA');
+    if (!clienteCoincide) motivos.push('CLIENTE_DISTINTO');
+    if (!totalCoincide) motivos.push('TOTAL_DISTINTO');
+
+    return {
+      coincide: motivos.length === 0,
+      motivos,
+      referenciaEsperada,
+    };
   }
 
   // 🧾 Crear comprobante a partir de un pedido aprobado
