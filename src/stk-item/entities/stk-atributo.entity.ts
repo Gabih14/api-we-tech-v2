@@ -18,6 +18,16 @@ export class StkAtributo {
   @Column('varchar', { name: 'clase', nullable: true, length: 20 })
   clase: string | null;
 
+  @Column('varchar', { name: 'grupo_atributo', nullable: true, length: 50 })
+  grupoAtributo: string | null;
+
+  @Column('varchar', {
+    name: 'subgrupo_atributo',
+    nullable: true,
+    length: 50,
+  })
+  subgrupoAtributo: string | null;
+
   @Column('varchar', { name: 'grupo', nullable: true, length: 50 })
   grupo: string | null;
 

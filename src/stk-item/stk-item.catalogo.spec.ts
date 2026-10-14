@@ -117,4 +117,91 @@ describe('StkItemService clave de catálogo', () => {
     expect(producto.variantes[0]).not.toHaveProperty('wholesalePrice');
     expect(producto).not.toHaveProperty('wholesalePriceFrom');
   });
+
+  it('propaga la clasificación del atributo al producto, dimensiones y variantes', () => {
+    const armarProducto = (StkItemService.prototype as any).armarProducto;
+    const items = [
+      {
+        id: 'PLA-ROJO',
+        idPadre: 'PLA-GENERICO',
+        descripcion: 'PLA Rojo',
+        stkPrecios: [],
+        stkExistencias: [],
+      },
+      {
+        id: 'PLA-AZUL',
+        idPadre: 'PLA-GENERICO',
+        descripcion: 'PLA Azul',
+        stkPrecios: [],
+        stkExistencias: [],
+      },
+    ];
+    const material = {
+      clase: 'Material',
+      valor: 'PLA',
+      grupoAtributo: 'Filamentos',
+      subgrupoAtributo: 'Materiales',
+      color: null,
+      heredado: true,
+      orden: 1,
+    };
+    const atributosPorItem = new Map([
+      [
+        'PLA-ROJO',
+        [
+          material,
+          {
+            clase: 'Colores',
+            valor: 'Rojo',
+            grupoAtributo: 'Filamentos',
+            subgrupoAtributo: 'Colores',
+            color: '#ff0000',
+            heredado: false,
+            orden: 2,
+          },
+        ],
+      ],
+      [
+        'PLA-AZUL',
+        [
+          material,
+          {
+            clase: 'Colores',
+            valor: 'Azul',
+            grupoAtributo: 'Filamentos',
+            subgrupoAtributo: 'Colores',
+            color: '#0000ff',
+            heredado: false,
+            orden: 2,
+          },
+        ],
+      ],
+    ]);
+
+    const producto = armarProducto.call(
+      Object.create(StkItemService.prototype),
+      'fam||PLA||',
+      items,
+      atributosPorItem,
+    );
+
+    expect(producto.atributos[0]).toEqual(
+      expect.objectContaining({
+        grupoAtributo: 'Filamentos',
+        subgrupoAtributo: 'Materiales',
+      }),
+    );
+    expect(producto.dimensiones[0].valores[0]).toEqual(
+      expect.objectContaining({
+        grupoAtributo: 'Filamentos',
+        subgrupoAtributo: 'Colores',
+      }),
+    );
+    expect(producto.variantes[0].atributos[0]).toEqual(
+      expect.objectContaining({
+        grupoAtributo: 'Filamentos',
+        subgrupoAtributo: 'Materiales',
+      }),
+    );
+  });
 });

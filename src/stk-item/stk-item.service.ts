@@ -15,6 +15,8 @@ import { FILAMENT_CATEGORIES } from '../pricing/discounts';
 export interface ItemAtributo {
   clase: string;
   valor: string;
+  grupoAtributo: string | null;
+  subgrupoAtributo: string | null;
   color: string | null;
   /** true si el valor se hereda del ítem padre (GENERICO), no del ítem propio. */
   heredado: boolean;
@@ -27,6 +29,8 @@ interface AtributoRaw {
   arbol: string;
   clase: string | null;
   valor: string | null;
+  grupoAtributo: string | null;
+  subgrupoAtributo: string | null;
   color: string | null;
   orden: number | null;
 }
@@ -41,15 +45,19 @@ export interface ItemAtributos {
 /** Filtros de catálogo basados en Atributos nativos (clase => valor exacto). */
 export interface AtributoFiltros {
   material?: string;
+  submaterial?: string;
   nivel?: string;
   aptoAlimentos?: string;
   marca?: string;
+  submarca?: string;
   color?: string;
 }
 
 /** Un valor posible dentro de una clase de atributo (para poblar selects). */
 export interface AtributoValor {
   valor: string;
+  grupoAtributo: string | null;
+  subgrupoAtributo: string | null;
   color: string | null;
 }
 
@@ -267,45 +275,86 @@ export class StkItemService {
       .innerJoin(StkAtributo, 'a', 'a.id = n.atributo')
       .select('a.clase', 'clase')
       .addSelect('a.nombre', 'valor')
+      .addSelect('a.grupoAtributo', 'grupoAtributo')
+      .addSelect('a.subgrupoAtributo', 'subgrupoAtributo')
       .addSelect('a.color', 'color')
       .distinct(true)
       .orderBy('a.clase', 'ASC')
       .addOrderBy('a.orden', 'ASC')
-      .getRawMany<{ clase: string | null; valor: string | null; color: string | null }>();
+      .getRawMany<{
+        clase: string | null;
+        valor: string | null;
+        grupoAtributo: string | null;
+        subgrupoAtributo: string | null;
+        color: string | null;
+      }>();
 
     const porClase = new Map<string, AtributoValor[]>();
     for (const r of rows) {
       const clase = r.clase ?? '';
       if (!porClase.has(clase)) porClase.set(clase, []);
-      porClase.get(clase)!.push({ valor: r.valor ?? '', color: r.color });
+      porClase.get(clase)!.push({
+        valor: r.valor ?? '',
+        grupoAtributo: r.grupoAtributo,
+        subgrupoAtributo: r.subgrupoAtributo,
+        color: r.color,
+      });
     }
 
     return Array.from(porClase, ([clase, valores]) => ({ clase, valores }));
   }
 
-  /** Clase de atributo (en el diccionario) para cada clave de filtro. */
-  private static readonly CLASE_POR_FILTRO: Record<keyof AtributoFiltros, string> = {
-    material: 'Material',
+  /** Filtros que conservan la coincidencia exacta histórica por nombre. */
+  private static readonly CLASE_POR_FILTRO_EXACTO = {
     nivel: 'Nivel de Dificultad',
     aptoAlimentos: 'Apto Alimentos',
-    marca: 'Marca',
     color: 'Colores',
-  };
+  } as const;
 
   /**
-   * Devuelve los ids de ítems que cumplen TODOS los filtros de atributos activos,
-   * o `null` si no hay ninguno (para no restringir la búsqueda). Cada filtro es un
-   * EXISTS que mira el atributo del propio ítem O el de su padre GENERICO, con la
-   * clase filtrada dentro del subquery (evita multiplicar filas).
+   * Devuelve los ids de ítems que cumplen TODOS los filtros de atributos activos.
+   * Material y Marca aceptan tanto su clasificación jerárquica como el nombre
+   * histórico exacto. Para respetar el atributo efectivo, primero busca en el ítem
+   * y solo consulta el padre cuando el hijo no tiene ningún valor de esa clase.
    */
   private async filtrarIdsPorAtributos(
     filtros: AtributoFiltros,
   ): Promise<string[] | null> {
-    const activos = (
-      Object.keys(StkItemService.CLASE_POR_FILTRO) as (keyof AtributoFiltros)[]
-    )
-      .map((key) => ({ clase: StkItemService.CLASE_POR_FILTRO[key], valor: filtros[key] }))
-      .filter((f): f is { clase: string; valor: string } => !!f.valor);
+    type FiltroActivo = {
+      clase: string;
+      nombreExacto?: string;
+      nombreOGrupo?: string;
+      subgrupo?: string;
+      subgrupoONombre?: string;
+    };
+
+    const activos: FiltroActivo[] = [];
+
+    if (filtros.material || filtros.submaterial) {
+      activos.push({
+        clase: 'Material',
+        nombreOGrupo: filtros.material,
+        subgrupo: filtros.submaterial,
+      });
+    }
+
+    for (const [key, clase] of Object.entries(
+      StkItemService.CLASE_POR_FILTRO_EXACTO,
+    ) as [keyof typeof StkItemService.CLASE_POR_FILTRO_EXACTO, string][]) {
+      const valor = filtros[key];
+      if (valor) activos.push({ clase, nombreExacto: valor });
+    }
+
+    if (filtros.marca) {
+      activos.push({ clase: 'Marca', nombreOGrupo: filtros.marca });
+    }
+
+    if (filtros.submarca) {
+      activos.push({
+        clase: 'Sub-línea',
+        subgrupoONombre: filtros.submarca,
+      });
+    }
 
     if (activos.length === 0) {
       return null;
@@ -313,18 +362,71 @@ export class StkItemService {
 
     const qb = this.stkItemRepository.createQueryBuilder('i').select('i.id', 'id');
 
-    activos.forEach((f, idx) => {
+    activos.forEach((filtro, idx) => {
+      const parametros: Record<string, string> = {
+        [`clase${idx}`]: filtro.clase,
+      };
+      const condicionesValor = (alias: string): string => {
+        const condiciones: string[] = [];
+
+        if (filtro.nombreExacto) {
+          condiciones.push(`${alias}.nombre = :nombre${idx}`);
+          parametros[`nombre${idx}`] = filtro.nombreExacto;
+        }
+        if (filtro.nombreOGrupo) {
+          condiciones.push(
+            `(${alias}.grupo_atributo = :grupo${idx} OR ${alias}.nombre = :nombre${idx})`,
+          );
+          parametros[`grupo${idx}`] = filtro.nombreOGrupo;
+          parametros[`nombre${idx}`] = filtro.nombreOGrupo;
+        }
+        if (filtro.subgrupo) {
+          condiciones.push(`${alias}.subgrupo_atributo = :subgrupo${idx}`);
+          parametros[`subgrupo${idx}`] = filtro.subgrupo;
+        }
+        if (filtro.subgrupoONombre) {
+          condiciones.push(
+            `(${alias}.subgrupo_atributo = :subgrupo${idx} OR ${alias}.nombre = :nombreSubgrupo${idx})`,
+          );
+          parametros[`subgrupo${idx}`] = filtro.subgrupoONombre;
+          parametros[`nombreSubgrupo${idx}`] = filtro.subgrupoONombre;
+        }
+
+        return condiciones.map((condicion) => `AND ${condicion}`).join('\n');
+      };
+
       qb.andWhere(
-        `EXISTS (
-          SELECT 1
-          FROM stk_atributo_nodo n${idx}
-          INNER JOIN stk_atributo a${idx}
-            ON a${idx}.id = n${idx}.atributo
-           AND a${idx}.clase = :clase${idx}
-           AND a${idx}.nombre = :valor${idx}
-          WHERE n${idx}.arbol = i.id OR n${idx}.arbol = i.id_padre
+        `(
+          EXISTS (
+            SELECT 1
+            FROM stk_atributo_nodo nPropio${idx}
+            INNER JOIN stk_atributo aPropio${idx}
+              ON aPropio${idx}.id = nPropio${idx}.atributo
+            WHERE nPropio${idx}.arbol = i.id
+              AND aPropio${idx}.clase = :clase${idx}
+              ${condicionesValor(`aPropio${idx}`)}
+          )
+          OR (
+            NOT EXISTS (
+              SELECT 1
+              FROM stk_atributo_nodo nOverride${idx}
+              INNER JOIN stk_atributo aOverride${idx}
+                ON aOverride${idx}.id = nOverride${idx}.atributo
+              WHERE nOverride${idx}.arbol = i.id
+                AND aOverride${idx}.clase = :clase${idx}
+            )
+            AND EXISTS (
+              SELECT 1
+              FROM stk_atributo_nodo nPadre${idx}
+              INNER JOIN stk_atributo aPadre${idx}
+                ON aPadre${idx}.id = nPadre${idx}.atributo
+              WHERE nPadre${idx}.arbol = i.id_padre
+                AND aPadre${idx}.clase = :clase${idx}
+                ${condicionesValor(`aPadre${idx}`)}
+            )
+          )
         )`,
-        { [`clase${idx}`]: f.clase, [`valor${idx}`]: f.valor },
+        parametros,
       );
     });
 
@@ -347,6 +449,8 @@ export class StkItemService {
       .select('n.arbol', 'arbol')
       .addSelect('a.clase', 'clase')
       .addSelect('a.nombre', 'valor')
+      .addSelect('a.grupoAtributo', 'grupoAtributo')
+      .addSelect('a.subgrupoAtributo', 'subgrupoAtributo')
       .addSelect('a.color', 'color')
       .addSelect('a.orden', 'orden')
       .where('n.arbol = :itemId', { itemId });
@@ -378,6 +482,8 @@ export class StkItemService {
       porClase.set(clase, {
         clase,
         valor: r.valor ?? '',
+        grupoAtributo: r.grupoAtributo,
+        subgrupoAtributo: r.subgrupoAtributo,
         color: r.color,
         heredado,
         orden: r.orden,
@@ -440,6 +546,8 @@ export class StkItemService {
         .select('n.arbol', 'arbol')
         .addSelect('a.clase', 'clase')
         .addSelect('a.nombre', 'valor')
+        .addSelect('a.grupoAtributo', 'grupoAtributo')
+        .addSelect('a.subgrupoAtributo', 'subgrupoAtributo')
         .addSelect('a.color', 'color')
         .addSelect('a.orden', 'orden')
         .where('n.arbol IN (:...ids)', { ids })
@@ -513,7 +621,15 @@ export class StkItemService {
     const info = new Map<
       string,
       {
-        valores: Map<string, { color: string | null; orden: number | null }>;
+        valores: Map<
+          string,
+          {
+            grupoAtributo: string | null;
+            subgrupoAtributo: string | null;
+            color: string | null;
+            orden: number | null;
+          }
+        >;
         count: number;
         orden: number;
         heredado: boolean;
@@ -528,7 +644,14 @@ export class StkItemService {
         }
         e.count++;
         e.orden = Math.min(e.orden, a.orden ?? 0);
-        if (!e.valores.has(a.valor)) e.valores.set(a.valor, { color: a.color, orden: a.orden });
+        if (!e.valores.has(a.valor)) {
+          e.valores.set(a.valor, {
+            grupoAtributo: a.grupoAtributo,
+            subgrupoAtributo: a.subgrupoAtributo,
+            color: a.color,
+            orden: a.orden,
+          });
+        }
       }
     }
 
@@ -541,11 +664,24 @@ export class StkItemService {
       const constante = e.valores.size === 1;
       if (universal && constante) {
         const [valor, meta] = Array.from(e.valores)[0];
-        compartidos.push({ clase, valor, color: meta.color, heredado: e.heredado, orden: e.orden });
+        compartidos.push({
+          clase,
+          valor,
+          grupoAtributo: meta.grupoAtributo,
+          subgrupoAtributo: meta.subgrupoAtributo,
+          color: meta.color,
+          heredado: e.heredado,
+          orden: e.orden,
+        });
       } else if (!StkItemService.CLASES_NO_SELECCIONABLES.includes(clase)) {
         const valores = Array.from(e.valores.entries())
           .sort((a, b) => (a[1].orden ?? 0) - (b[1].orden ?? 0))
-          .map(([valor, meta]) => ({ valor, color: meta.color }));
+          .map(([valor, meta]) => ({
+            valor,
+            grupoAtributo: meta.grupoAtributo,
+            subgrupoAtributo: meta.subgrupoAtributo,
+            color: meta.color,
+          }));
         dimensiones.push({ clase, valores, orden: e.orden });
       }
       // Clases no seleccionables que varían quedan solo en variante.atributos.

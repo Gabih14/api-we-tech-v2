@@ -33,16 +33,20 @@ export class StkItemController {
   @Get()
   findAll(
     @Query('material') material?: string,
+    @Query('submaterial') submaterial?: string,
     @Query('nivel') nivel?: string,
     @Query('aptoAlimentos') aptoAlimentos?: string,
     @Query('marca') marca?: string,
+    @Query('submarca') submarca?: string,
     @Query('color') color?: string,
   ) {
     return this.stkItemService.findAll({
       material,
+      submaterial,
       nivel,
       aptoAlimentos,
       marca,
+      submarca,
       color,
     });
   }
