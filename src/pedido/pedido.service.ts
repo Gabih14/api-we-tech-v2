@@ -1590,6 +1590,7 @@ export class PedidoService {
     await this.vtaComprobanteService.eliminarComprobantePorPedido(
       tipo,
       comprobante,
+      pedido,
     );
 
     pedido.comprobante_tipo = null;
