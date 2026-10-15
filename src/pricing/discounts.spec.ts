@@ -11,6 +11,7 @@ import {
   getNextDiscountLevelForProduct,
   isDiscountAppliedForProduct,
   isEligibleForQuantityDiscount,
+  isEligibleForQuantityDiscountByAttributes,
   normalizeProductBrandForQuantityDiscount,
   parseProductWeightFromDescription,
   shouldApplyDiscount,
@@ -73,6 +74,15 @@ describe('pricing discounts', () => {
     expect(calculateSavingsForProduct(nonEligibleFilament, 100, 2, 1)).toBe(
       30,
     );
+  });
+
+  it('incluye GST3D PLA+ de 1kg en el descuento por cantidad', () => {
+    expect(
+      isEligibleForQuantityDiscountByAttributes(
+        { category: 'FILAMENTO 3D', marca: 'GST3D', material: 'PLA+' },
+        1,
+      ),
+    ).toBe(true);
   });
 
   it.each(['3N-PLA', '3N-PLA-1KG-NEGR', '3N-PLA-1KG-BLAN'])(
