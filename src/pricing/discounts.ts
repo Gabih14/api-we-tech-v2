@@ -128,6 +128,7 @@ export const ELIGIBLE_FILAMENT_ATTRIBUTES: ReadonlyArray<{
   { marca: 'Grilon3', material: 'PLA' }, // G3-PLA (+ G3-PLA1/PLA2/MEGA)
   { marca: 'Grilon3', material: 'PLA Boutique' }, // G3-BOUT
   { marca: 'GST3D', material: 'PLA' }, // GS-PLA (real: GSC-PLA / GSL-PLA)
+  { marca: 'GST3D', material: 'PLA+' }, // GSB-PLA
   { marca: 'Hellbot', material: 'PLA' }, // HB-PLA
   { marca: '3nMax', material: 'PLA+ Matte' }, // 3X-PLA
   { marca: 'Fremover', material: 'High Speed PLA' }, // FM-PLA
