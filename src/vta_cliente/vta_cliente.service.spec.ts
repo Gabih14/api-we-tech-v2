@@ -123,6 +123,75 @@ describe('VtaClienteService', () => {
     });
   });
 
+  describe('actualizacion de clientes existentes', () => {
+    it('preserva condicion de IVA y tipo de documento cuando lo pide el checkout', async () => {
+      const existing = {
+        id: '20432802281',
+        razonSocial: 'Cliente existente',
+        email: 'anterior@test.com',
+        condicionIva: 'MT',
+        tipoDocumento: 'CUIT',
+      };
+      repo.findOne.mockResolvedValue(existing);
+
+      await service.findOrCreateOrUpdate(
+        {
+          id: existing.id,
+          razonSocial: existing.razonSocial,
+          email: 'nuevo@test.com',
+          condicionIva: 'CF',
+          tipoDocumento: 'CUIL',
+        } as CreateVtaClienteDto,
+        { preservarDatosFiscalesExistentes: true },
+      );
+
+      expect(repo.update).toHaveBeenCalledWith(
+        existing.id,
+        expect.objectContaining({ email: 'nuevo@test.com' }),
+      );
+      const update = (repo.update as jest.Mock).mock.calls[0][1];
+      expect(update).not.toHaveProperty('condicionIva');
+      expect(update).not.toHaveProperty('tipoDocumento');
+    });
+
+    it('aplica los datos fiscales al crear un cliente desde el checkout', async () => {
+      repo.findOne.mockResolvedValue(null);
+
+      await service.findOrCreateOrUpdate(
+        {
+          id: '20999999991',
+          condicionIva: 'RI',
+          tipoDocumento: 'CUIT',
+        } as CreateVtaClienteDto,
+        { preservarDatosFiscalesExistentes: true },
+      );
+
+      expect(repo.save).toHaveBeenCalledWith(
+        expect.objectContaining({ condicionIva: 'RI', tipoDocumento: 'CUIT' }),
+      );
+    });
+
+    it('permite actualizar datos fiscales fuera del flujo protegido', async () => {
+      const existing = {
+        id: '20432802281',
+        condicionIva: 'MT',
+        tipoDocumento: 'CUIT',
+      };
+      repo.findOne.mockResolvedValue(existing);
+
+      await service.findOrCreateOrUpdate({
+        id: existing.id,
+        condicionIva: 'RI',
+        tipoDocumento: 'CUIT',
+      } as CreateVtaClienteDto);
+
+      expect(repo.update).toHaveBeenCalledWith(
+        existing.id,
+        expect.objectContaining({ condicionIva: 'RI' }),
+      );
+    });
+  });
+
   describe('link de direccion', () => {
     it('guarda un unico link por cliente y sobreescribe por clienteId', async () => {
       const saved = await service.saveDireccionLink('20432802281', {

@@ -35,7 +35,7 @@ describe('VtaComprobanteService crearDesdePedido', () => {
     save: jest.fn(async (data) => data),
   };
   const clienteService = {
-    findOrCreateOrUpdate: jest.fn(async (data) => ({
+    findOrCreateOrUpdate: jest.fn(async (data, _options?) => ({
       razonSocial: data.razonSocial,
     })),
   };
@@ -351,6 +351,7 @@ describe('VtaComprobanteService crearDesdePedido', () => {
       expect.objectContaining({
         condicionIva: 'RI',
       }),
+      { preservarDatosFiscalesExistentes: true },
     );
     expect(comprobanteRepository.create).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -408,6 +409,7 @@ describe('VtaComprobanteService crearDesdePedido', () => {
       expect.objectContaining({
         condicionIva: 'CF',
       }),
+      { preservarDatosFiscalesExistentes: true },
     );
     expect(comprobanteRepository.create).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -496,6 +498,7 @@ describe('VtaComprobanteService crearDesdePedido', () => {
         provincia: 'Mendoza',
         cpa: 'M5519',
       }),
+      { preservarDatosFiscalesExistentes: true },
     );
   });
 
@@ -525,6 +528,7 @@ describe('VtaComprobanteService crearDesdePedido', () => {
         provincia: 'Mendoza',
         cpa: '5539',
       }),
+      { preservarDatosFiscalesExistentes: true },
     );
   });
 
@@ -553,6 +557,7 @@ describe('VtaComprobanteService crearDesdePedido', () => {
         provincia: 'Mendoza',
         cpa: 'M5539',
       }),
+      { preservarDatosFiscalesExistentes: true },
     );
   });
 
@@ -579,6 +584,7 @@ describe('VtaComprobanteService crearDesdePedido', () => {
         provincia: 'Mendoza',
         cpa: 'M5500AMC',
       }),
+      { preservarDatosFiscalesExistentes: true },
     );
   });
 
@@ -605,6 +611,7 @@ describe('VtaComprobanteService crearDesdePedido', () => {
         provincia: 'Mendoza',
         cpa: 'M5502HAN',
       }),
+      { preservarDatosFiscalesExistentes: true },
     );
   });
 
@@ -626,6 +633,7 @@ describe('VtaComprobanteService crearDesdePedido', () => {
 
     expect(clienteService.findOrCreateOrUpdate).toHaveBeenCalledWith(
       expect.objectContaining({ tipoDocumento: 'CUIL', condicionIva: 'CF' }),
+      { preservarDatosFiscalesExistentes: true },
     );
   });
 
