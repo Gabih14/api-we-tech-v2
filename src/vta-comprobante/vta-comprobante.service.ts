@@ -312,8 +312,10 @@ export class VtaComprobanteService {
       condicionIva: pedido.factura_tipo === 'A' ? 'RI' : 'CF',
       visible: true,
     };
-    const cliente =
-      await this.clienteService.findOrCreateOrUpdate(clientePayload);
+    const cliente = await this.clienteService.findOrCreateOrUpdate(
+      clientePayload,
+      { preservarDatosFiscalesExistentes: true },
+    );
     const razonSocial = cliente.razonSocial || pedido.cliente_nombre;
 
     const tipoComprobante = this.obtenerTipoComprobantePedido(pedido);

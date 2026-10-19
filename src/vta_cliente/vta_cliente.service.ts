@@ -24,7 +24,10 @@ export class VtaClienteService {
    * Si existe y cambió algún dato, lo actualiza.
    */
   /* findOrCreateOrUpdate */
-  async findOrCreateOrUpdate(dto: CreateVtaClienteDto): Promise<VtaCliente> {
+  async findOrCreateOrUpdate(
+    dto: CreateVtaClienteDto,
+    options: { preservarDatosFiscalesExistentes?: boolean } = {},
+  ): Promise<VtaCliente> {
     const clienteDto = this.normalizarClienteDto(dto);
 
     if (!clienteDto.id) {
@@ -35,6 +38,13 @@ export class VtaClienteService {
 
     if (existing) {
       const updateDto = this.omitirValoresVacios(clienteDto);
+
+      // Los datos elegidos para emitir un comprobante corresponden a esa
+      // operacion y no deben reclasificar fiscalmente a un cliente del ERP.
+      if (options.preservarDatosFiscalesExistentes) {
+        delete updateDto.condicionIva;
+        delete updateDto.tipoDocumento;
+      }
 
       // Chequea si hay diferencias
       const hasChanges = Object.entries(updateDto).some(
