@@ -314,7 +314,10 @@ export class VtaComprobanteService {
     };
     const cliente = await this.clienteService.findOrCreateOrUpdate(
       clientePayload,
-      { preservarDatosFiscalesExistentes: true },
+      {
+        preservarDatosFiscalesExistentes: true,
+        preservarNombresExistentes: true,
+      },
     );
     const razonSocial = cliente.razonSocial || pedido.cliente_nombre;
 

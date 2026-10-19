@@ -154,6 +154,34 @@ describe('VtaClienteService', () => {
       expect(update).not.toHaveProperty('tipoDocumento');
     });
 
+    it('preserva razon social y nombre comercial cuando lo pide el checkout', async () => {
+      const existing = {
+        id: '30999999995',
+        razonSocial: 'Empresa SA',
+        nombreComercial: 'WE TECH',
+        email: 'anterior@empresa.com',
+      };
+      repo.findOne.mockResolvedValue(existing);
+
+      await service.findOrCreateOrUpdate(
+        {
+          id: existing.id,
+          razonSocial: 'Empresa Sa',
+          nombreComercial: 'We Tech',
+          email: 'nuevo@empresa.com',
+        } as CreateVtaClienteDto,
+        { preservarNombresExistentes: true },
+      );
+
+      expect(repo.update).toHaveBeenCalledWith(
+        existing.id,
+        expect.objectContaining({ email: 'nuevo@empresa.com' }),
+      );
+      const update = (repo.update as jest.Mock).mock.calls[0][1];
+      expect(update).not.toHaveProperty('razonSocial');
+      expect(update).not.toHaveProperty('nombreComercial');
+    });
+
     it('aplica los datos fiscales al crear un cliente desde el checkout', async () => {
       repo.findOne.mockResolvedValue(null);
 
@@ -168,6 +196,22 @@ describe('VtaClienteService', () => {
 
       expect(repo.save).toHaveBeenCalledWith(
         expect.objectContaining({ condicionIva: 'RI', tipoDocumento: 'CUIT' }),
+      );
+    });
+
+    it('guarda la razon social al crear un cliente desde el checkout', async () => {
+      repo.findOne.mockResolvedValue(null);
+
+      await service.findOrCreateOrUpdate(
+        {
+          id: '30999999995',
+          razonSocial: 'Empresa SA',
+        } as CreateVtaClienteDto,
+        { preservarNombresExistentes: true },
+      );
+
+      expect(repo.save).toHaveBeenCalledWith(
+        expect.objectContaining({ razonSocial: 'Empresa Sa' }),
       );
     });
 
