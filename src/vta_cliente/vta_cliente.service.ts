@@ -26,7 +26,10 @@ export class VtaClienteService {
   /* findOrCreateOrUpdate */
   async findOrCreateOrUpdate(
     dto: CreateVtaClienteDto,
-    options: { preservarDatosFiscalesExistentes?: boolean } = {},
+    options: {
+      preservarDatosFiscalesExistentes?: boolean;
+      preservarNombresExistentes?: boolean;
+    } = {},
   ): Promise<VtaCliente> {
     const clienteDto = this.normalizarClienteDto(dto);
 
@@ -44,6 +47,11 @@ export class VtaClienteService {
       if (options.preservarDatosFiscalesExistentes) {
         delete updateDto.condicionIva;
         delete updateDto.tipoDocumento;
+      }
+
+      if (options.preservarNombresExistentes) {
+        delete updateDto.razonSocial;
+        delete updateDto.nombreComercial;
       }
 
       // Chequea si hay diferencias

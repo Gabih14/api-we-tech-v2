@@ -351,7 +351,10 @@ describe('VtaComprobanteService crearDesdePedido', () => {
       expect.objectContaining({
         condicionIva: 'RI',
       }),
-      { preservarDatosFiscalesExistentes: true },
+      {
+        preservarDatosFiscalesExistentes: true,
+        preservarNombresExistentes: true,
+      },
     );
     expect(comprobanteRepository.create).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -409,7 +412,10 @@ describe('VtaComprobanteService crearDesdePedido', () => {
       expect.objectContaining({
         condicionIva: 'CF',
       }),
-      { preservarDatosFiscalesExistentes: true },
+      {
+        preservarDatosFiscalesExistentes: true,
+        preservarNombresExistentes: true,
+      },
     );
     expect(comprobanteRepository.create).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -498,7 +504,10 @@ describe('VtaComprobanteService crearDesdePedido', () => {
         provincia: 'Mendoza',
         cpa: 'M5519',
       }),
-      { preservarDatosFiscalesExistentes: true },
+      {
+        preservarDatosFiscalesExistentes: true,
+        preservarNombresExistentes: true,
+      },
     );
   });
 
@@ -528,7 +537,10 @@ describe('VtaComprobanteService crearDesdePedido', () => {
         provincia: 'Mendoza',
         cpa: '5539',
       }),
-      { preservarDatosFiscalesExistentes: true },
+      {
+        preservarDatosFiscalesExistentes: true,
+        preservarNombresExistentes: true,
+      },
     );
   });
 
@@ -557,7 +569,10 @@ describe('VtaComprobanteService crearDesdePedido', () => {
         provincia: 'Mendoza',
         cpa: 'M5539',
       }),
-      { preservarDatosFiscalesExistentes: true },
+      {
+        preservarDatosFiscalesExistentes: true,
+        preservarNombresExistentes: true,
+      },
     );
   });
 
@@ -584,7 +599,10 @@ describe('VtaComprobanteService crearDesdePedido', () => {
         provincia: 'Mendoza',
         cpa: 'M5500AMC',
       }),
-      { preservarDatosFiscalesExistentes: true },
+      {
+        preservarDatosFiscalesExistentes: true,
+        preservarNombresExistentes: true,
+      },
     );
   });
 
@@ -611,7 +629,10 @@ describe('VtaComprobanteService crearDesdePedido', () => {
         provincia: 'Mendoza',
         cpa: 'M5502HAN',
       }),
-      { preservarDatosFiscalesExistentes: true },
+      {
+        preservarDatosFiscalesExistentes: true,
+        preservarNombresExistentes: true,
+      },
     );
   });
 
@@ -633,7 +654,10 @@ describe('VtaComprobanteService crearDesdePedido', () => {
 
     expect(clienteService.findOrCreateOrUpdate).toHaveBeenCalledWith(
       expect.objectContaining({ tipoDocumento: 'CUIL', condicionIva: 'CF' }),
-      { preservarDatosFiscalesExistentes: true },
+      {
+        preservarDatosFiscalesExistentes: true,
+        preservarNombresExistentes: true,
+      },
     );
   });
 
