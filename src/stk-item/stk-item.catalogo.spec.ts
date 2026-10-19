@@ -5,9 +5,7 @@ describe('StkItemService clave de catálogo', () => {
     (StkItemService.prototype as any).claveProducto(item, atributos);
 
   it('mantiene una clave individual para ítems sin padre', () => {
-    expect(
-      claveProducto({ id: 'ITEM-1', idPadre: null }),
-    ).toBe('item:ITEM-1');
+    expect(claveProducto({ id: 'ITEM-1', idPadre: null })).toBe('item:ITEM-1');
   });
 
   it('mantiene separados los complementos aunque compartan padre', () => {
@@ -21,9 +19,9 @@ describe('StkItemService clave de catálogo', () => {
   });
 
   it('usa el padre cuando faltan todos los atributos de identidad', () => {
-    expect(
-      claveProducto({ id: 'ITEM-1', idPadre: 'PADRE-ADHESIVOS' }),
-    ).toBe('padre:PADRE-ADHESIVOS');
+    expect(claveProducto({ id: 'ITEM-1', idPadre: 'PADRE-ADHESIVOS' })).toBe(
+      'padre:PADRE-ADHESIVOS',
+    );
   });
 
   it('conserva la agrupación por identidad cuando hay atributos cargados', () => {
@@ -35,11 +33,110 @@ describe('StkItemService clave de catálogo', () => {
     ];
 
     expect(
-      claveProducto(
-        { id: 'ITEM-1', idPadre: 'PADRE-BOQUILLAS' },
-        atributos,
-      ),
+      claveProducto({ id: 'ITEM-1', idPadre: 'PADRE-BOQUILLAS' }, atributos),
     ).toBe('fam|Bambu Lab|Acero endurecido|A1|China');
+  });
+
+  it('conserva valor histórico y clasificación al fusionar atributos', () => {
+    const fusionar = (StkItemService as any).fusionarAtributos;
+    const atributos = fusionar(
+      [
+        {
+          arbol: 'PADRE',
+          clase: 'Material',
+          valor: 'PLA Boutique',
+          grupoAtributo: 'PLA',
+          subgrupoAtributo: null,
+          color: null,
+          orden: 2,
+        },
+        {
+          arbol: 'ITEM-1',
+          clase: 'Sub-línea',
+          valor: 'Boutique',
+          grupoAtributo: 'GRILON3',
+          subgrupoAtributo: 'BOUTIQUE',
+          color: null,
+          orden: 1,
+        },
+      ],
+      'ITEM-1',
+    );
+
+    expect(atributos).toEqual([
+      expect.objectContaining({
+        clase: 'Sub-línea',
+        valor: 'Boutique',
+        grupoAtributo: 'GRILON3',
+        subgrupoAtributo: 'BOUTIQUE',
+        heredado: false,
+      }),
+      expect.objectContaining({
+        clase: 'Material',
+        valor: 'PLA Boutique',
+        grupoAtributo: 'PLA',
+        subgrupoAtributo: null,
+        heredado: true,
+      }),
+    ]);
+  });
+
+  it('filtra material por nombre histórico o grupo y submaterial por subgrupo', async () => {
+    const query = {
+      select: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      getRawMany: jest.fn().mockResolvedValue([]),
+    };
+    const service = Object.create(StkItemService.prototype) as any;
+    service.stkItemRepository = { createQueryBuilder: jest.fn(() => query) };
+
+    await service.filtrarIdsPorAtributos({
+      material: 'PLA',
+      submaterial: 'SILK',
+    });
+
+    expect(query.andWhere.mock.calls[0][0]).toContain(
+      'a0.nombre = :valor0 OR a0.grupo_atributo = :valor0',
+    );
+    expect(query.andWhere.mock.calls[1][0]).toContain(
+      'a1.nombre = :valor1 OR a1.subgrupo_atributo = :valor1',
+    );
+  });
+
+  it('agrupa la faceta Material y expone Submaterial sin duplicados', async () => {
+    const query = {
+      innerJoin: jest.fn().mockReturnThis(),
+      select: jest.fn().mockReturnThis(),
+      addSelect: jest.fn().mockReturnThis(),
+      distinct: jest.fn().mockReturnThis(),
+      orderBy: jest.fn().mockReturnThis(),
+      addOrderBy: jest.fn().mockReturnThis(),
+      getRawMany: jest.fn().mockResolvedValue([
+        {
+          clase: 'Material',
+          valor: 'PLA Silk',
+          grupoAtributo: 'PLA',
+          subgrupoAtributo: 'SILK',
+          color: null,
+        },
+        {
+          clase: 'Material',
+          valor: 'PLA Boutique',
+          grupoAtributo: 'PLA',
+          subgrupoAtributo: null,
+          color: null,
+        },
+      ]),
+    };
+    const service = Object.create(StkItemService.prototype) as any;
+    service.stkAtributoNodoRepository = {
+      createQueryBuilder: jest.fn(() => query),
+    };
+
+    await expect(service.getFacetasAtributos()).resolves.toEqual([
+      { clase: 'Material', valores: [{ valor: 'PLA', color: null }] },
+      { clase: 'Submaterial', valores: [{ valor: 'SILK', color: null }] },
+    ]);
   });
 
   it('incluye el precio mayorista cotizado en las variantes', () => {

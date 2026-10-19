@@ -15,6 +15,8 @@ import { FILAMENT_CATEGORIES } from '../pricing/discounts';
 export interface ItemAtributo {
   clase: string;
   valor: string;
+  grupoAtributo: string | null;
+  subgrupoAtributo: string | null;
   color: string | null;
   /** true si el valor se hereda del ítem padre (GENERICO), no del ítem propio. */
   heredado: boolean;
@@ -27,6 +29,8 @@ interface AtributoRaw {
   arbol: string;
   clase: string | null;
   valor: string | null;
+  grupoAtributo: string | null;
+  subgrupoAtributo: string | null;
   color: string | null;
   orden: number | null;
 }
@@ -41,6 +45,7 @@ export interface ItemAtributos {
 /** Filtros de catálogo basados en Atributos nativos (clase => valor exacto). */
 export interface AtributoFiltros {
   material?: string;
+  submaterial?: string;
   nivel?: string;
   aptoAlimentos?: string;
   marca?: string;
@@ -144,18 +149,27 @@ export class StkItemService {
 
     const items = await this.stkItemRepository.find({
       where: idsFiltrados ? { id: In(idsFiltrados) } : {},
-      relations: ['stkPrecios', 'stkPrecios.moneda', 'stkExistencias', 'familia2'], // incluir moneda para decidir cotización
+      relations: [
+        'stkPrecios',
+        'stkPrecios.moneda',
+        'stkExistencias',
+        'familia2',
+      ], // incluir moneda para decidir cotización
     });
 
     // Combinás cada item con su precioVtaCotizadoMin (aplica cotización solo si la moneda es DOL)
     return items.map((item) => {
-      const precioMinorista = item.stkPrecios?.find((p) => p.lista === 'MINORISTA');
+      const precioMinorista = item.stkPrecios?.find(
+        (p) => p.lista === 'MINORISTA',
+      );
 
       let precioVtaCotizadoMin: string | null = null;
       if (precioMinorista) {
         const precioVta = parseFloat(precioMinorista.precioVta || '0');
         const isDol = precioMinorista?.moneda?.id === 'DOL';
-        const cot = isDol ? parseFloat(precioMinorista?.moneda?.cotizacion || '1') : 1;
+        const cot = isDol
+          ? parseFloat(precioMinorista?.moneda?.cotizacion || '1')
+          : 1;
         if (!isNaN(precioVta) && !isNaN(cot)) {
           precioVtaCotizadoMin = (precioVta * cot).toFixed(2);
         }
@@ -172,18 +186,27 @@ export class StkItemService {
   async getItemsEnviosAClientes(): Promise<any[]> {
     const items = await this.stkItemRepository.find({
       where: { grupo: 'ENVIOS A CLIENTES', visible: true },
-      relations: ['stkPrecios', 'stkPrecios.moneda', 'stkExistencias', 'familia2'],
+      relations: [
+        'stkPrecios',
+        'stkPrecios.moneda',
+        'stkExistencias',
+        'familia2',
+      ],
       order: { id: 'ASC' },
     });
 
     return items.map((item) => {
-      const precioMinorista = item.stkPrecios?.find((p) => p.lista === 'MINORISTA');
+      const precioMinorista = item.stkPrecios?.find(
+        (p) => p.lista === 'MINORISTA',
+      );
 
       let precioVtaCotizadoMin: string | null = null;
       if (precioMinorista) {
         const precioVta = parseFloat(precioMinorista.precioVta || '0');
         const isDol = precioMinorista?.moneda?.id === 'DOL';
-        const cot = isDol ? parseFloat(precioMinorista?.moneda?.cotizacion || '1') : 1;
+        const cot = isDol
+          ? parseFloat(precioMinorista?.moneda?.cotizacion || '1')
+          : 1;
         if (!isNaN(precioVta) && !isNaN(cot)) {
           precioVtaCotizadoMin = (precioVta * cot).toFixed(2);
         }
@@ -200,7 +223,12 @@ export class StkItemService {
   async findOne(id: string, includeAtributos = false): Promise<any> {
     const item = await this.stkItemRepository.findOne({
       where: { id },
-      relations: ['stkPrecios', 'stkPrecios.moneda', 'stkExistencias', 'familia2'],
+      relations: [
+        'stkPrecios',
+        'stkPrecios.moneda',
+        'stkExistencias',
+        'familia2',
+      ],
     });
 
     if (!item) {
@@ -208,13 +236,17 @@ export class StkItemService {
     }
 
     // Buscar el precio de la lista MINORISTA
-    const precioMinorista = item.stkPrecios?.find((p) => p.lista === 'MINORISTA');
+    const precioMinorista = item.stkPrecios?.find(
+      (p) => p.lista === 'MINORISTA',
+    );
 
     let precioVtaCotizadoMin: string | null = null;
     if (precioMinorista) {
       const precioVta = parseFloat(precioMinorista.precioVta || '0');
       const isDol = precioMinorista?.moneda?.id === 'DOL';
-      const cot = isDol ? parseFloat(precioMinorista?.moneda?.cotizacion || '1') : 1;
+      const cot = isDol
+        ? parseFloat(precioMinorista?.moneda?.cotizacion || '1')
+        : 1;
       if (!isNaN(precioVta) && !isNaN(cot)) {
         precioVtaCotizadoMin = (precioVta * cot).toFixed(2);
       }
@@ -267,25 +299,43 @@ export class StkItemService {
       .innerJoin(StkAtributo, 'a', 'a.id = n.atributo')
       .select('a.clase', 'clase')
       .addSelect('a.nombre', 'valor')
+      .addSelect('a.grupo_atributo', 'grupoAtributo')
+      .addSelect('a.subgrupo_atributo', 'subgrupoAtributo')
       .addSelect('a.color', 'color')
       .distinct(true)
       .orderBy('a.clase', 'ASC')
       .addOrderBy('a.orden', 'ASC')
-      .getRawMany<{ clase: string | null; valor: string | null; color: string | null }>();
+      .getRawMany<AtributoRaw>();
 
     const porClase = new Map<string, AtributoValor[]>();
+    const agregar = (clase: string, valor: string, color: string | null) => {
+      if (!porClase.has(clase)) porClase.set(clase, []);
+      if (!porClase.get(clase)!.some((v) => v.valor === valor)) {
+        porClase.get(clase)!.push({ valor, color });
+      }
+    };
     for (const r of rows) {
       const clase = r.clase ?? '';
-      if (!porClase.has(clase)) porClase.set(clase, []);
-      porClase.get(clase)!.push({ valor: r.valor ?? '', color: r.color });
+      const valor =
+        clase === 'Material' && r.grupoAtributo
+          ? r.grupoAtributo
+          : (r.valor ?? '');
+      agregar(clase, valor, r.color);
+      if (clase === 'Material' && r.subgrupoAtributo) {
+        agregar('Submaterial', r.subgrupoAtributo, null);
+      }
     }
 
     return Array.from(porClase, ([clase, valores]) => ({ clase, valores }));
   }
 
   /** Clase de atributo (en el diccionario) para cada clave de filtro. */
-  private static readonly CLASE_POR_FILTRO: Record<keyof AtributoFiltros, string> = {
+  private static readonly CLASE_POR_FILTRO: Record<
+    keyof AtributoFiltros,
+    string
+  > = {
     material: 'Material',
+    submaterial: 'Material',
     nivel: 'Nivel de Dificultad',
     aptoAlimentos: 'Apto Alimentos',
     marca: 'Marca',
@@ -304,16 +354,33 @@ export class StkItemService {
     const activos = (
       Object.keys(StkItemService.CLASE_POR_FILTRO) as (keyof AtributoFiltros)[]
     )
-      .map((key) => ({ clase: StkItemService.CLASE_POR_FILTRO[key], valor: filtros[key] }))
-      .filter((f): f is { clase: string; valor: string } => !!f.valor);
+      .map((key) => ({
+        key,
+        clase: StkItemService.CLASE_POR_FILTRO[key],
+        valor: filtros[key],
+      }))
+      .filter(
+        (
+          f,
+        ): f is { key: keyof AtributoFiltros; clase: string; valor: string } =>
+          !!f.valor,
+      );
 
     if (activos.length === 0) {
       return null;
     }
 
-    const qb = this.stkItemRepository.createQueryBuilder('i').select('i.id', 'id');
+    const qb = this.stkItemRepository
+      .createQueryBuilder('i')
+      .select('i.id', 'id');
 
     activos.forEach((f, idx) => {
+      const columnaClasificacion =
+        f.clase === 'Material'
+          ? f.key === 'submaterial'
+            ? `a${idx}.subgrupo_atributo`
+            : `a${idx}.grupo_atributo`
+          : null;
       qb.andWhere(
         `EXISTS (
           SELECT 1
@@ -321,7 +388,7 @@ export class StkItemService {
           INNER JOIN stk_atributo a${idx}
             ON a${idx}.id = n${idx}.atributo
            AND a${idx}.clase = :clase${idx}
-           AND a${idx}.nombre = :valor${idx}
+           AND (a${idx}.nombre = :valor${idx}${columnaClasificacion ? ` OR ${columnaClasificacion} = :valor${idx}` : ''})
           WHERE n${idx}.arbol = i.id OR n${idx}.arbol = i.id_padre
         )`,
         { [`clase${idx}`]: f.clase, [`valor${idx}`]: f.valor },
@@ -347,6 +414,8 @@ export class StkItemService {
       .select('n.arbol', 'arbol')
       .addSelect('a.clase', 'clase')
       .addSelect('a.nombre', 'valor')
+      .addSelect('a.grupo_atributo', 'grupoAtributo')
+      .addSelect('a.subgrupo_atributo', 'subgrupoAtributo')
       .addSelect('a.color', 'color')
       .addSelect('a.orden', 'orden')
       .where('n.arbol = :itemId', { itemId });
@@ -378,6 +447,8 @@ export class StkItemService {
       porClase.set(clase, {
         clase,
         valor: r.valor ?? '',
+        grupoAtributo: r.grupoAtributo,
+        subgrupoAtributo: r.subgrupoAtributo,
         color: r.color,
         heredado,
         orden: r.orden,
@@ -399,7 +470,12 @@ export class StkItemService {
     // Todos los ítems vendibles (excluimos los padres GENERICO, que no se venden).
     const items = (
       await this.stkItemRepository.find({
-        relations: ['stkPrecios', 'stkPrecios.moneda', 'stkExistencias', 'familia2'],
+        relations: [
+          'stkPrecios',
+          'stkPrecios.moneda',
+          'stkExistencias',
+          'familia2',
+        ],
       })
     ).filter((i) => !i.isPadre);
 
@@ -440,6 +516,8 @@ export class StkItemService {
         .select('n.arbol', 'arbol')
         .addSelect('a.clase', 'clase')
         .addSelect('a.nombre', 'valor')
+        .addSelect('a.grupo_atributo', 'grupoAtributo')
+        .addSelect('a.subgrupo_atributo', 'subgrupoAtributo')
         .addSelect('a.color', 'color')
         .addSelect('a.orden', 'orden')
         .where('n.arbol IN (:...ids)', { ids })
@@ -455,7 +533,7 @@ export class StkItemService {
     for (const item of items) {
       const rows = [
         ...(porArbol.get(item.id) ?? []),
-        ...(item.idPadre ? porArbol.get(item.idPadre) ?? [] : []),
+        ...(item.idPadre ? (porArbol.get(item.idPadre) ?? []) : []),
       ];
       resultado.set(item.id, StkItemService.fusionarAtributos(rows, item.id));
     }
@@ -463,7 +541,12 @@ export class StkItemService {
   }
 
   /** Clases que definen la identidad de un producto (lo que NO se elige). */
-  private static readonly CLASES_IDENTIDAD = ['Marca', 'Material', 'Línea', 'Origen'];
+  private static readonly CLASES_IDENTIDAD = [
+    'Marca',
+    'Material',
+    'Línea',
+    'Origen',
+  ];
 
   /**
    * Clases que nunca son un selector aunque varíen entre variantes: son datos
@@ -477,10 +560,7 @@ export class StkItemService {
    * no tienen padre quedan solos (cada uno es su propio producto).
    */
   private claveProducto(item: StkItem, atributos: ItemAtributo[]): string {
-    if (
-      item.grupo?.trim().toUpperCase() ===
-      'COMPLEMENTOS PARA IMPRESION 3D'
-    ) {
+    if (item.grupo?.trim().toUpperCase() === 'COMPLEMENTOS PARA IMPRESION 3D') {
       return `item:${item.id}`;
     }
 
@@ -523,12 +603,18 @@ export class StkItemService {
       for (const a of atributosDe(item)) {
         let e = info.get(a.clase);
         if (!e) {
-          e = { valores: new Map(), count: 0, orden: a.orden ?? 0, heredado: a.heredado };
+          e = {
+            valores: new Map(),
+            count: 0,
+            orden: a.orden ?? 0,
+            heredado: a.heredado,
+          };
           info.set(a.clase, e);
         }
         e.count++;
         e.orden = Math.min(e.orden, a.orden ?? 0);
-        if (!e.valores.has(a.valor)) e.valores.set(a.valor, { color: a.color, orden: a.orden });
+        if (!e.valores.has(a.valor))
+          e.valores.set(a.valor, { color: a.color, orden: a.orden });
       }
     }
 
@@ -541,7 +627,18 @@ export class StkItemService {
       const constante = e.valores.size === 1;
       if (universal && constante) {
         const [valor, meta] = Array.from(e.valores)[0];
-        compartidos.push({ clase, valor, color: meta.color, heredado: e.heredado, orden: e.orden });
+        const atributo = atributosDe(variantes[0]).find(
+          (a) => a.clase === clase && a.valor === valor,
+        );
+        compartidos.push({
+          clase,
+          valor,
+          grupoAtributo: atributo?.grupoAtributo ?? null,
+          subgrupoAtributo: atributo?.subgrupoAtributo ?? null,
+          color: meta.color,
+          heredado: e.heredado,
+          orden: e.orden,
+        });
       } else if (!StkItemService.CLASES_NO_SELECCIONABLES.includes(clase)) {
         const valores = Array.from(e.valores.entries())
           .sort((a, b) => (a[1].orden ?? 0) - (b[1].orden ?? 0))
@@ -585,7 +682,9 @@ export class StkItemService {
           invoicePrice: invoice != null ? invoice.toFixed(2) : null,
           promotionalPrice: promo != null ? promo.toFixed(2) : null,
           ...(includeVariantWholesale
-            ? { wholesalePrice: wholesale != null ? wholesale.toFixed(2) : null }
+            ? {
+                wholesalePrice: wholesale != null ? wholesale.toFixed(2) : null,
+              }
             : {}),
           stock: this.stockDisponible(item),
           updatedAt: this.updatedAtPublico(item),
@@ -596,7 +695,9 @@ export class StkItemService {
           atributos,
         };
       })
-      .sort((a, b) => (a.descripcion ?? a.id).localeCompare(b.descripcion ?? b.id));
+      .sort((a, b) =>
+        (a.descripcion ?? a.id).localeCompare(b.descripcion ?? b.id),
+      );
 
     const valorCompartido = (clase: string) =>
       compartidos.find((a) => a.clase === clase)?.valor ?? null;
@@ -663,7 +764,8 @@ export class StkItemService {
     if (!p) return null;
     const base = parseFloat((p.precioVta ?? p.precio ?? '') as string);
     if (!Number.isFinite(base) || base <= 0) return null;
-    const cot = p.moneda?.id === 'DOL' ? parseFloat(p.moneda?.cotizacion ?? '1') : 1;
+    const cot =
+      p.moneda?.id === 'DOL' ? parseFloat(p.moneda?.cotizacion ?? '1') : 1;
     if (!Number.isFinite(cot)) return null;
     return base * cot;
   }
@@ -694,35 +796,42 @@ export class StkItemService {
   /** Convierte un texto de "Peso Neto" (ej. "1KG", "500GR", "2,5KG") a kg numéricos. */
   private static pesoAKg(pesoNeto?: string): number | null {
     if (!pesoNeto) return null;
-    const m = pesoNeto.toUpperCase().replace(',', '.').match(/(\d+\.?\d*)\s*(KG|G)/);
+    const m = pesoNeto
+      .toUpperCase()
+      .replace(',', '.')
+      .match(/(\d+\.?\d*)\s*(KG|G)/);
     if (!m) return null;
     const valor = parseFloat(m[1]);
     if (!Number.isFinite(valor)) return null;
     return m[2] === 'G' ? valor / 1000 : valor;
   }
 
-  async update(id: string, updateStkItemDto: UpdateStkItemDto): Promise<StkItem> {
+  async update(
+    id: string,
+    updateStkItemDto: UpdateStkItemDto,
+  ): Promise<StkItem> {
     const stkItem = await this.findOne(id); // Verifica si el item existe
-  
+
     if (updateStkItemDto.familiaId) {
       const familia = await this.stkFamiliaRepository.findOne({
         where: { id: updateStkItemDto.familiaId },
       });
-  
+
       if (!familia) {
-        throw new NotFoundException(`Familia con id ${updateStkItemDto.familiaId} no encontrada`);
+        throw new NotFoundException(
+          `Familia con id ${updateStkItemDto.familiaId} no encontrada`,
+        );
       }
-  
+
       // Asignamos la entidad familia al item
       (stkItem as any).familia = familia;
     }
-  
+
     // Actualizamos el resto de los campos
     Object.assign(stkItem, updateStkItemDto);
-  
+
     return this.stkItemRepository.save(stkItem);
   }
-  
 
   async remove(id: string): Promise<void> {
     const item = await this.findOne(id);
@@ -741,12 +850,11 @@ export class StkItemService {
     );
   }
   private extractFotoUrl(foto: Buffer | null): string | null {
-  if (!foto) return null;
+    if (!foto) return null;
 
-  const text = foto.toString('utf8');
-  const match = text.match(/https?:\/\/[^\0]+/);
+    const text = foto.toString('utf8');
+    const match = text.match(/https?:\/\/[^\0]+/);
 
-  return match ? match[0] : null;
-}
-
+    return match ? match[0] : null;
+  }
 }
