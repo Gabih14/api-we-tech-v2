@@ -46,6 +46,8 @@ export interface ItemAtributos {
 export interface AtributoFiltros {
   material?: string;
   submaterial?: string;
+  sublinea?: string;
+  grupoWeb?: string;
   nivel?: string;
   aptoAlimentos?: string;
   marca?: string;
@@ -106,7 +108,12 @@ export interface CatalogoProducto {
   key: string;
   nombre: string;
   marca: string | null;
+  grupoWeb: string | null;
   material: string | null;
+  /** Clasificación e-commerce del material; cae al nombre histórico. */
+  materialGrupo: string | null;
+  submaterial: string | null;
+  sublinea: string | null;
   linea: string | null;
   origen: string | null;
   /** Grupo/subgrupo del ERP (ej. "FILAMENTO 3D") para la UI y descuentos del front. */
@@ -296,12 +303,29 @@ export class StkItemService {
   async getFacetasAtributos(): Promise<AtributoFaceta[]> {
     const rows = await this.stkAtributoNodoRepository
       .createQueryBuilder('n')
+      .innerJoin(
+        StkItem,
+        'i',
+        '(n.arbol = i.id OR n.arbol = i.id_padre)',
+      )
       .innerJoin(StkAtributo, 'a', 'a.id = n.atributo')
       .select('a.clase', 'clase')
       .addSelect('a.nombre', 'valor')
       .addSelect('a.grupo_atributo', 'grupoAtributo')
       .addSelect('a.subgrupo_atributo', 'subgrupoAtributo')
       .addSelect('a.color', 'color')
+      .where('(i.is_padre IS NULL OR i.is_padre = 0)')
+      .andWhere(`(
+        n.arbol = i.id
+        OR NOT EXISTS (
+          SELECT 1
+          FROM stk_atributo_nodo propio
+          INNER JOIN stk_atributo atributo_propio
+            ON atributo_propio.id = propio.atributo
+          WHERE propio.arbol = i.id
+            AND LOWER(TRIM(atributo_propio.clase)) = LOWER(TRIM(a.clase))
+        )
+      )`)
       .distinct(true)
       .orderBy('a.clase', 'ASC')
       .addOrderBy('a.orden', 'ASC')
@@ -336,6 +360,8 @@ export class StkItemService {
   > = {
     material: 'Material',
     submaterial: 'Material',
+    sublinea: 'Sub-línea',
+    grupoWeb: 'Grupo Web',
     nivel: 'Nivel de Dificultad',
     aptoAlimentos: 'Apto Alimentos',
     marca: 'Marca',
@@ -363,7 +389,7 @@ export class StkItemService {
         (
           f,
         ): f is { key: keyof AtributoFiltros; clase: string; valor: string } =>
-          !!f.valor,
+          !!f.valor?.trim(),
       );
 
     if (activos.length === 0) {
@@ -381,17 +407,34 @@ export class StkItemService {
             ? `a${idx}.subgrupo_atributo`
             : `a${idx}.grupo_atributo`
           : null;
+      const coincidenciaValor = columnaClasificacion
+        ? `(LOWER(TRIM(a${idx}.nombre)) = :valor${idx} OR LOWER(TRIM(${columnaClasificacion})) = :valor${idx})`
+        : `LOWER(TRIM(a${idx}.nombre)) = :valor${idx}`;
       qb.andWhere(
         `EXISTS (
           SELECT 1
           FROM stk_atributo_nodo n${idx}
           INNER JOIN stk_atributo a${idx}
             ON a${idx}.id = n${idx}.atributo
-           AND a${idx}.clase = :clase${idx}
-           AND (a${idx}.nombre = :valor${idx}${columnaClasificacion ? ` OR ${columnaClasificacion} = :valor${idx}` : ''})
-          WHERE n${idx}.arbol = i.id OR n${idx}.arbol = i.id_padre
+           AND LOWER(TRIM(a${idx}.clase)) = LOWER(:clase${idx})
+           AND ${coincidenciaValor}
+          WHERE n${idx}.arbol = i.id
+             OR (
+               n${idx}.arbol = i.id_padre
+               AND NOT EXISTS (
+                 SELECT 1
+                 FROM stk_atributo_nodo propio${idx}
+                 INNER JOIN stk_atributo atributo_propio${idx}
+                   ON atributo_propio${idx}.id = propio${idx}.atributo
+                  AND LOWER(TRIM(atributo_propio${idx}.clase)) = LOWER(:clase${idx})
+                 WHERE propio${idx}.arbol = i.id
+               )
+             )
         )`,
-        { [`clase${idx}`]: f.clase, [`valor${idx}`]: f.valor },
+        {
+          [`clase${idx}`]: f.clase,
+          [`valor${idx}`]: f.valor.trim().toLowerCase(),
+        },
       );
     });
 
@@ -466,10 +509,22 @@ export class StkItemService {
    * elegir peso, color, etc. Los ítems sin padre (sin agrupar) quedan como productos
    * de una sola variante, de modo que el catálogo cubre todos los ítems.
    */
-  async getCatalogo(includeWholesale = false): Promise<CatalogoProducto[]> {
+  async getCatalogo(
+    filtros: AtributoFiltros | boolean = {},
+    includeWholesale = false,
+  ): Promise<CatalogoProducto[]> {
+    // Conserva compatibilidad con llamadas internas anteriores: getCatalogo(true).
+    if (typeof filtros === 'boolean') {
+      includeWholesale = filtros;
+      filtros = {};
+    }
+    const idsFiltrados = await this.filtrarIdsPorAtributos(filtros);
+    if (idsFiltrados && idsFiltrados.length === 0) return [];
+
     // Todos los ítems vendibles (excluimos los padres GENERICO, que no se venden).
     const items = (
       await this.stkItemRepository.find({
+        where: idsFiltrados ? { id: In(idsFiltrados) } : {},
         relations: [
           'stkPrecios',
           'stkPrecios.moneda',
@@ -699,22 +754,35 @@ export class StkItemService {
         (a.descripcion ?? a.id).localeCompare(b.descripcion ?? b.id),
       );
 
+    const atributoCompartido = (clase: string) =>
+      compartidos.find((a) => a.clase === clase);
     const valorCompartido = (clase: string) =>
-      compartidos.find((a) => a.clase === clase)?.valor ?? null;
+      atributoCompartido(clase)?.valor ?? null;
     const marca = valorCompartido('Marca');
+    const grupoWeb = valorCompartido('Grupo Web');
     const material = valorCompartido('Material');
+    const atributoMaterial = atributoCompartido('Material');
+    const materialGrupo =
+      atributoMaterial?.grupoAtributo ?? atributoMaterial?.valor ?? null;
+    const submaterial = atributoMaterial?.subgrupoAtributo ?? null;
+    const sublinea = valorCompartido('Sub-línea');
     const linea = valorCompartido('Línea');
     const origen = valorCompartido('Origen');
 
     const esProductoIndividual =
       variantes.length === 1 && !variantes[0]?.idPadre;
+    const esFilamento = (FILAMENT_CATEGORIES as readonly string[]).includes(
+      variantes[0]?.grupo?.trim().toUpperCase() ?? '',
+    );
 
     // Los ítems sin padre no tienen una familia de variantes que permita armar un
     // nombre representativo solo con Marca, Material y Línea. En esos casos, la
     // descripción del ERP identifica mejor qué producto es.
-    let nombre = esProductoIndividual
-      ? (variantes[0]?.descripcion ?? variantes[0]?.id ?? key)
-      : [marca, material, linea].filter(Boolean).join(' ');
+    let nombre = esFilamento
+      ? [marca, sublinea, materialGrupo].filter(Boolean).join(' ')
+      : esProductoIndividual
+        ? (variantes[0]?.descripcion ?? variantes[0]?.id ?? key)
+        : [marca, material, linea].filter(Boolean).join(' ');
 
     if (!nombre) nombre = variantes[0]?.descripcion ?? variantes[0]?.id ?? key;
 
@@ -739,7 +807,11 @@ export class StkItemService {
       key,
       nombre,
       marca,
+      grupoWeb,
       material,
+      materialGrupo,
+      submaterial,
+      sublinea,
       linea,
       origen,
       grupo: variantes[0]?.grupo ?? null,
