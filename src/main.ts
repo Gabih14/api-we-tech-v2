@@ -18,6 +18,7 @@ async function bootstrap() {
     'http://localhost:3000',
     'http://localhost:4173',
     'http://localhost:5173',
+    'http://192.168.10.12:5173'
   ];
   const configuredAllowedOrigins = [
     process.env.FRONTEND_URL,
