@@ -32,6 +32,7 @@ import { DeliveryConfigModule } from './delivery-config/delivery-config.module';
 import { SeoModule } from './seo/seo.module';
 import { AuthModule } from './auth/auth.module';
 import { StkAtributoModule } from './stk-atributo/stk-atributo.module';
+import { AdminTaxonomiaModule } from './admin-taxonomia/admin-taxonomia.module';
 import {
   DEFAULT_RATE_LIMIT_GLOBAL,
   DEFAULT_RATE_LIMIT_TTL_MS,
@@ -140,6 +141,7 @@ function getConfiguredRateLimit(
     SeoModule,
     AuthModule,
     StkAtributoModule,
+    AdminTaxonomiaModule,
   ],
   providers: [
     {

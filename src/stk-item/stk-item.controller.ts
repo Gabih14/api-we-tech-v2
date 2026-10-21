@@ -33,6 +33,9 @@ export class StkItemController {
   @Get()
   findAll(
     @Query('material') material?: string,
+    @Query('submaterial') submaterial?: string,
+    @Query('sublinea') sublinea?: string,
+    @Query('grupoWeb') grupoWeb?: string,
     @Query('nivel') nivel?: string,
     @Query('aptoAlimentos') aptoAlimentos?: string,
     @Query('marca') marca?: string,
@@ -40,6 +43,9 @@ export class StkItemController {
   ) {
     return this.stkItemService.findAll({
       material,
+      submaterial,
+      sublinea,
+      grupoWeb,
       nivel,
       aptoAlimentos,
       marca,
@@ -59,14 +65,41 @@ export class StkItemController {
    */
   @Get('catalogo')
   @AuthType('default', 'dashboard')
-  getCatalogo() {
-    return this.stkItemService.getCatalogo();
+  getCatalogo(
+    @Query('material') material?: string,
+    @Query('submaterial') submaterial?: string,
+    @Query('sublinea') sublinea?: string,
+    @Query('grupoWeb') grupoWeb?: string,
+    @Query('nivel') nivel?: string,
+    @Query('aptoAlimentos') aptoAlimentos?: string,
+    @Query('marca') marca?: string,
+    @Query('color') color?: string,
+  ) {
+    return this.stkItemService.getCatalogo({
+      material,
+      submaterial,
+      sublinea,
+      grupoWeb,
+      nivel,
+      aptoAlimentos,
+      marca,
+      color,
+    });
   }
 
   @Get('catalogo/mayorista')
   @AuthType('public')
   @UseGuards(ClerkAuthGuard, MayoristaGuard)
-  async getCatalogoMayorista() {
+  async getCatalogoMayorista(
+    @Query('material') material?: string,
+    @Query('submaterial') submaterial?: string,
+    @Query('sublinea') sublinea?: string,
+    @Query('grupoWeb') grupoWeb?: string,
+    @Query('nivel') nivel?: string,
+    @Query('aptoAlimentos') aptoAlimentos?: string,
+    @Query('marca') marca?: string,
+    @Query('color') color?: string,
+  ) {
     const minimumPurchaseKg = Number(
       this.config.getOrThrow<string>('WHOLESALE_MIN_PURCHASE_KG'),
     );
@@ -76,7 +109,19 @@ export class StkItemController {
 
     return {
       minimumPurchaseKg,
-      products: await this.stkItemService.getCatalogo(true),
+      products: await this.stkItemService.getCatalogo(
+        {
+          material,
+          submaterial,
+          sublinea,
+          grupoWeb,
+          nivel,
+          aptoAlimentos,
+          marca,
+          color,
+        },
+        true,
+      ),
     };
   }
 
