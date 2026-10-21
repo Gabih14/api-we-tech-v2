@@ -226,7 +226,10 @@ describe('StkItemService clave de catálogo', () => {
     );
   });
 
-  it('arma el nombre de los filamentos con marca, sublínea y material agrupado', () => {
+  it.each([
+    [null, 'Grilon3 Boutique PLA'],
+    ['SILK', 'Grilon3 Boutique PLA SILK'],
+  ])('arma el nombre del filamento con submaterial %s', (submaterial, nombre) => {
     const armarProducto = (StkItemService.prototype as any).armarProducto;
     const item = {
       id: 'G3-BOUT-ROJO',
@@ -240,11 +243,12 @@ describe('StkItemService clave de catálogo', () => {
       clase: string,
       valor: string,
       grupoAtributo: string | null = null,
+      subgrupoAtributo: string | null = null,
     ) => ({
       clase,
       valor,
       grupoAtributo,
-      subgrupoAtributo: null,
+      subgrupoAtributo,
       color: null,
       heredado: true,
       orden: 1,
@@ -260,13 +264,13 @@ describe('StkItemService clave de catálogo', () => {
           [
             atributo('Marca', 'Grilon3'),
             atributo('Sub-línea', 'Boutique'),
-            atributo('Material', 'PLA Boutique', 'PLA'),
+            atributo('Material', 'PLA Boutique', 'PLA', submaterial),
           ],
         ],
       ]),
     );
 
-    expect(producto.nombre).toBe('Grilon3 Boutique PLA');
+    expect(producto.nombre).toBe(nombre);
     expect(producto.material).toBe('PLA Boutique');
     expect(producto.materialGrupo).toBe('PLA');
   });

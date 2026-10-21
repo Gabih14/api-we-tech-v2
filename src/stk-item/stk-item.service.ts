@@ -779,7 +779,7 @@ export class StkItemService {
     // nombre representativo solo con Marca, Material y Línea. En esos casos, la
     // descripción del ERP identifica mejor qué producto es.
     let nombre = esFilamento
-      ? [marca, sublinea, materialGrupo].filter(Boolean).join(' ')
+      ? [marca, sublinea, materialGrupo, submaterial].filter(Boolean).join(' ')
       : esProductoIndividual
         ? (variantes[0]?.descripcion ?? variantes[0]?.id ?? key)
         : [marca, material, linea].filter(Boolean).join(' ');
