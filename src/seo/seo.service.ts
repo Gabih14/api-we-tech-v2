@@ -4,7 +4,7 @@ import {
   CatalogoVariante,
   StkItemService,
 } from '../stk-item/stk-item.service';
-import { shouldApplyDiscount } from '../pricing/discounts';
+import { isComplement, shouldApplyDiscount } from '../pricing/discounts';
 import { SeoProductDto } from './seo-product.dto';
 
 @Injectable()
@@ -45,8 +45,10 @@ export class SeoService {
       Number(v.precioVtaCotizadoMin),
     );
     const promociones = variantesPublicables
-      .filter((variante) =>
-        shouldApplyDiscount({ id: variante.id, category: producto.grupo }),
+      .filter(
+        (variante) =>
+          shouldApplyDiscount({ id: variante.id, category: producto.grupo }) ||
+          isComplement({ id: variante.id, grupo: producto.grupo }),
       )
       .map((v) => Number(v.promotionalPrice))
       .filter((precio) => Number.isFinite(precio) && precio > 0);

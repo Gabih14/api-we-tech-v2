@@ -82,7 +82,7 @@ export interface CatalogoVariante {
   precioVtaCotizadoMin: string | null;
   /** Precio de la lista "MINORISTA CON IVA" cotizado; cae al precio normal si no existe. */
   invoicePrice: string | null;
-  /** Precio con el 15% de descuento base de filamentos aplicado. */
+  /** Precio con el 15% base por transferencia; aplica a filamentos y complementos. */
   promotionalPrice: string | null;
   /** Precio de la lista MAYORISTA cotizado. */
   wholesalePrice?: string | null;

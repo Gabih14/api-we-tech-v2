@@ -64,6 +64,24 @@ describe('SeoService', () => {
     ]);
   });
 
+  it('publica el precio base de transferencia de complementos', async () => {
+    getCatalogo.mockResolvedValue([
+      productoCatalogo({
+        grupo: 'COMPLEMENTOS PARA IMPRESION 3D',
+        variantes: [
+          varianteCatalogo({
+            id: 'INS-MATE-BLAN',
+            precioVtaCotizadoMin: '10000',
+            promotionalPrice: '8500',
+          }),
+        ],
+      }),
+    ]);
+    await expect(service.getProducts()).resolves.toMatchObject([
+      { precio: 10000, precioPromocional: 8500 },
+    ]);
+  });
+
   it('busca un producto por slug', async () => {
     getCatalogo.mockResolvedValue([
       productoCatalogo({

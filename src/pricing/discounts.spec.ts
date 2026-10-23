@@ -15,7 +15,54 @@ import {
   normalizeProductBrandForQuantityDiscount,
   parseProductWeightFromDescription,
   shouldApplyDiscount,
+  COMPLEMENT_CATEGORY,
+  getComplementDiscountPercentage,
+  getComplementPresentation,
+  getMateComboComponent,
 } from './discounts';
+
+describe('complementos', () => {
+  it.each([
+    ['VASO ALUM 500ML', 21.29],
+    ['VASO ALUM 600ML', 22.72],
+    ['VASO ALUM 1L', 19.6],
+    ['INS-MATE-BLAN', 27.2],
+    ['INS-MATE-NEGR', 27.2],
+    ['INS-TAZA-NEGR', 25.64],
+    ['INS-VASO-MILK', 32.01],
+  ])('conserva porcentajes decimales de %s', (id, porcentaje) => {
+    const item = { id, grupo: COMPLEMENT_CATEGORY };
+    expect(getComplementDiscountPercentage(item, 9)).toBe(15);
+    expect(getComplementDiscountPercentage(item, 10)).toBe(porcentaje);
+    expect(getComplementDiscountPercentage(item, 11)).toBe(porcentaje);
+    expect(
+      getComplementDiscountPercentage({ ...item, grupo: 'OTROS' }, 10),
+    ).toBe(0);
+  });
+
+  it('agrupa por presentacion y conserva 15% fuera de la tabla', () => {
+    const item = (id: string, idPadre?: string) => ({
+      id,
+      idPadre,
+      grupo: COMPLEMENT_CATEGORY,
+    });
+    expect(getComplementPresentation(item('INS-MATE-BLAN'))).toBe(
+      getComplementPresentation(item('INS-MATE-NEGR')),
+    );
+    expect(
+      getComplementPresentation(item('INS-TAZA-BLAN', 'INS-TAZA-GENE')),
+    ).toBe('INS-TAZA-GENE');
+    expect(
+      getComplementPresentation(item('VASO ALUM 500ML', 'VASO-ALUM-GENE')),
+    ).toBe('VASO ALUM 500ML');
+    expect(getComplementDiscountPercentage(item('ADH-CIANO-M100'), 100)).toBe(
+      15,
+    );
+    expect(getMateComboComponent(item('INS-VASO-MILK'))).toBeNull();
+    expect(getMateComboComponent(item('INS-MATE-BLAN'))).toBe('mate');
+    expect(getMateComboComponent(item('INS-BOMB-NEGR'))).toBe('bombilla');
+  });
+});
 
 describe('pricing discounts', () => {
   const eligibleFilament = {
@@ -60,20 +107,19 @@ describe('pricing discounts', () => {
   );
 
   it('aplica siempre descuento base a filamento no elegible por peso o marca', () => {
-    expect(calculateDiscountedPriceForProduct(eligibleFilament, 100, 50, 0.5))
-      .toBe(85);
     expect(
-      getDiscountPercentageForProduct(eligibleFilament, 50, 0.5),
-    ).toBe('15%');
+      calculateDiscountedPriceForProduct(eligibleFilament, 100, 50, 0.5),
+    ).toBe(85);
+    expect(getDiscountPercentageForProduct(eligibleFilament, 50, 0.5)).toBe(
+      '15%',
+    );
     expect(
       calculateDiscountedPriceForProduct(nonEligibleFilament, 100, 50, 1),
     ).toBe(85);
-    expect(
-      getDiscountPercentageForProduct(nonEligibleFilament, 50, 1),
-    ).toBe('15%');
-    expect(calculateSavingsForProduct(nonEligibleFilament, 100, 2, 1)).toBe(
-      30,
+    expect(getDiscountPercentageForProduct(nonEligibleFilament, 50, 1)).toBe(
+      '15%',
     );
+    expect(calculateSavingsForProduct(nonEligibleFilament, 100, 2, 1)).toBe(30);
   });
 
   it('incluye GST3D PLA+ de 1kg en el descuento por cantidad', () => {

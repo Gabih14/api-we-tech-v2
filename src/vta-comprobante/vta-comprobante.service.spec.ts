@@ -148,6 +148,53 @@ describe('VtaComprobanteService crearDesdePedido', () => {
     ).not.toHaveBeenCalled();
   });
 
+  it('conserva lineas del mismo SKU con descuentos de combo y sobrantes', async () => {
+    await service.crearDesdePedido(
+      pedidoBase(
+        [
+          {
+            nombre: 'INS-MATE-BLAN',
+            cantidad: 10,
+            precio_unitario: 6500,
+            subtotal: 65000,
+            ajuste_porcentaje: 35,
+          },
+          {
+            nombre: 'INS-MATE-BLAN',
+            cantidad: 2,
+            precio_unitario: 7280,
+            subtotal: 14560,
+            ajuste_porcentaje: 27.2,
+          },
+          {
+            nombre: 'INS-BOMB-NEGR',
+            cantidad: 10,
+            precio_unitario: 6500,
+            subtotal: 65000,
+            ajuste_porcentaje: 35,
+          },
+        ],
+        144560,
+      ),
+    );
+    const lineas = comprobanteItemService.create.mock.calls.map(
+      ([linea]) => linea,
+    );
+    expect(
+      lineas.map((linea) => [
+        linea.itemId,
+        linea.cantidad,
+        linea.ajuste,
+        linea.importe,
+      ]),
+    ).toEqual([
+      ['INS-MATE-BLAN', 10, -35, 65000],
+      ['INS-MATE-BLAN', 2, -27.2, 14560],
+      ['INS-BOMB-NEGR', 10, -35, 65000],
+    ]);
+    expect(lineas.every((linea) => linea.precio === 10000)).toBe(true);
+  });
+
   it('registra ajuste de descuento usando ajuste_porcentaje del pedido', async () => {
     await service.crearDesdePedido(
       pedidoBase(

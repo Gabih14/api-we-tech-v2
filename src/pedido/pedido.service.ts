@@ -40,6 +40,10 @@ import {
   isEligibleForQuantityDiscountByAttributes,
   parseProductWeightFromDescription,
   FilamentIdentity,
+  getComplementPresentation,
+  getComplementDiscountPercentage,
+  getMateComboComponent,
+  isComplement,
 } from 'src/pricing/discounts';
 import {
   DeliveryConfigService,
@@ -169,6 +173,7 @@ export class PedidoService {
     );
     const productosPrecargados: PedidoProductoPrecargado[] = [];
     let cantidadTotalDescuentoDiferencial = 0;
+    const cantidadesComplementos = new Map<string, number>();
     const productosCalculados: PedidoProductoCalculado[] = [];
     const productosValidados: PedidoItem[] = [];
     const diferenciasProductos: PedidoProductoMismatch[] = [];
@@ -187,6 +192,13 @@ export class PedidoService {
       }
 
       const cantidad = this.obtenerCantidadProducto(producto);
+      const presentacion = getComplementPresentation(item);
+      if (presentacion) {
+        cantidadesComplementos.set(
+          presentacion,
+          (cantidadesComplementos.get(presentacion) ?? 0) + cantidad,
+        );
+      }
       const esProductoEnvio = this.esProductoEnvioPedido(
         producto.nombre,
         productoEnvioCotizadoId,
@@ -224,6 +236,43 @@ export class PedidoService {
       });
     }
 
+    // Un SKU repetido representa la misma presentacion, tambien al redondear y armar pares.
+    const componentesPorSku = new Map<string, PedidoProductoPrecargado>();
+    for (let indice = 0; indice < productosPrecargados.length; indice++) {
+      const entrada = productosPrecargados[indice];
+      if (metodoPago !== 'transfer' || !getMateComboComponent(entrada.item))
+        continue;
+      const anterior = componentesPorSku.get(entrada.item.id);
+      if (!anterior) {
+        componentesPorSku.set(entrada.item.id, entrada);
+        continue;
+      }
+      const lineas = dto.productos.filter((p) => p.nombre === entrada.item.id);
+      const cantidad = lineas.reduce((suma, p) => suma + p.cantidad, 0);
+      const conPrecio = lineas.filter((p) => p.precio_unitario !== undefined);
+      const conSubtotal = lineas.filter((p) => p.subtotal !== undefined);
+      anterior.producto = {
+        nombre: entrada.item.id,
+        cantidad,
+        precio_unitario: conPrecio.length
+          ? (requiereFactura ? this.redondear2 : this.redondearPrecio)(
+              conPrecio.reduce(
+                (suma, p) => suma + p.precio_unitario! * p.cantidad,
+                0,
+              ) / conPrecio.reduce((suma, p) => suma + p.cantidad, 0),
+            )
+          : undefined,
+        subtotal: conSubtotal.length
+          ? this.redondear2(
+              (conSubtotal.reduce((suma, p) => suma + p.subtotal!, 0) *
+                cantidad) /
+                conSubtotal.reduce((suma, p) => suma + p.cantidad, 0),
+            )
+          : undefined,
+      };
+      productosPrecargados.splice(indice--, 1);
+    }
+
     if (
       cuponResolucion.categoriaAplicable &&
       !productosPrecargados.some(
@@ -241,34 +290,49 @@ export class PedidoService {
       dto.tipo_envio === 'shipping' &&
       pesoTotalKg >= FREE_SHIPPING_MIN_WEIGHT_KG;
 
-    for (const {
-      producto,
-      item,
-      peso,
-      esProductoEnvio,
-      categoriaProducto,
-      aplicaDescuentoDiferencialPorCantidad,
-      identidad,
-    } of productosPrecargados) {
-      const cantidadParaDescuento = aplicaDescuentoDiferencialPorCantidad
-        ? cantidadTotalDescuentoDiferencial
-        : undefined;
-      const porcentajeCupon = this.obtenerPorcentajeCuponAplicable(
-        cuponResolucion,
-        esProductoEnvio,
-        categoriaProducto,
-      );
-      const productoCalculado = this.calcularProductoPedido(
-        producto,
-        item,
-        porcentajeCupon,
+    const gruposCalculados: PedidoProductoCalculado[][] = [];
+    const calcular = (
+      entrada: PedidoProductoPrecargado,
+      cantidad: number,
+      combo?: number,
+    ) => {
+      const presentacion = getComplementPresentation(entrada.item);
+      return this.calcularProductoPedido(
+        cantidad === entrada.producto.cantidad && combo === undefined
+          ? entrada.producto
+          : { nombre: entrada.producto.nombre, cantidad },
+        entrada.item,
+        this.obtenerPorcentajeCuponAplicable(
+          cuponResolucion,
+          entrada.esProductoEnvio,
+          entrada.categoriaProducto,
+        ),
         metodoPago,
-        peso,
-        cantidadParaDescuento,
-        esProductoEnvio,
+        entrada.peso,
+        presentacion
+          ? cantidadesComplementos.get(presentacion)
+          : entrada.aplicaDescuentoDiferencialPorCantidad
+            ? cantidadTotalDescuentoDiferencial
+            : undefined,
+        entrada.esProductoEnvio,
         requiereFactura,
-        identidad,
+        entrada.identidad,
         aplicaEnvioGratisPorPeso,
+        combo,
+      );
+    };
+    for (const entrada of productosPrecargados) {
+      gruposCalculados.push([calcular(entrada, entrada.producto.cantidad)]);
+    }
+    if (metodoPago === 'transfer') {
+      this.aplicarCombosMate(productosPrecargados, gruposCalculados, calcular);
+    }
+
+    for (const [indice, { producto, item }] of productosPrecargados.entries()) {
+      const partes = gruposCalculados[indice];
+      const productoCalculado = this.agregarPartesProducto(
+        partes,
+        requiereFactura,
       );
       const diferenciaProducto = this.obtenerDiferenciaProducto(
         producto,
@@ -280,9 +344,11 @@ export class PedidoService {
         diferenciasProductos.push(diferenciaProducto);
       }
 
-      productosCalculados.push(productoCalculado);
+      productosCalculados.push(...partes);
       productosValidados.push(
-        this.pedidoItemDesdeCalculo(productoCalculado, item.descripcion),
+        ...partes.map((parte) =>
+          this.pedidoItemDesdeCalculo(parte, item.descripcion),
+        ),
       );
     }
 
@@ -1830,6 +1896,182 @@ export class PedidoService {
     return totalEnvio > 0 ? this.redondearPrecio(totalEnvio) : null;
   }
 
+  private agregarPartesProducto(
+    partes: PedidoProductoCalculado[],
+    incluyeIva: boolean,
+  ): PedidoProductoCalculado {
+    if (partes.length === 1) return partes[0];
+    const cantidad = partes.reduce((suma, parte) => suma + parte.cantidad, 0);
+    const subtotal = partes.reduce((suma, parte) => suma + parte.subtotal, 0);
+    const brutoFinal = partes.reduce(
+      (suma, parte) =>
+        suma +
+        this.redondear2(parte.subtotal * (1 + FACTURA_IVA_PORCENTAJE / 100)),
+      0,
+    );
+    return {
+      ...partes[0],
+      cantidad,
+      subtotal,
+      precio_unitario: this.redondearPrecio(subtotal / cantidad),
+      ...(incluyeIva
+        ? {
+            subtotal_bruto: this.redondear2(
+              partes.reduce(
+                (suma, parte) => suma + (parte.subtotal_bruto ?? 0),
+                0,
+              ),
+            ),
+            precio_unitario_bruto: this.redondear2(brutoFinal / cantidad),
+          }
+        : {}),
+      descuento_cupon_aplicado: partes.reduce(
+        (suma, parte) => suma + parte.descuento_cupon_aplicado,
+        0,
+      ),
+    };
+  }
+
+  private aplicarCombosMate(
+    entradas: PedidoProductoPrecargado[],
+    grupos: PedidoProductoCalculado[][],
+    calcular: (
+      entrada: PedidoProductoPrecargado,
+      cantidad: number,
+      combo?: number,
+    ) => PedidoProductoCalculado,
+  ): void {
+    const componentes = (tipo: 'mate' | 'bombilla') =>
+      entradas
+        .map((entrada, indice) => ({ entrada, indice }))
+        .filter(
+          ({ entrada }) =>
+            !entrada.esProductoEnvio &&
+            getMateComboComponent(entrada.item) === tipo,
+        );
+    const mates = componentes('mate');
+    const bombillas = componentes('bombilla');
+    const cantidad = (filas: typeof mates) =>
+      filas.reduce(
+        (suma, { entrada }) => suma + Math.floor(entrada.producto.cantidad),
+        0,
+      );
+    const pares = Math.min(cantidad(mates), cantidad(bombillas));
+    if (!pares) return;
+
+    const total = (filas: PedidoProductoCalculado[][]) =>
+      filas.reduce(
+        (suma, partes) =>
+          suma + partes.reduce((importe, parte) => importe + parte.subtotal, 0),
+        0,
+      );
+    let mejorTotal = total(grupos);
+    let mejores = grupos;
+    for (const porcentaje of [25, 35]) {
+      if (porcentaje === 35 && pares < 10) continue;
+      const ordenar = (filas: typeof mates) =>
+        [...filas].sort((a, b) => {
+          const ahorro = ({ indice }: typeof a) => {
+            const linea = grupos[indice][0];
+            return (
+              linea.precio_base_unitario *
+              (porcentaje - (linea.ajuste_porcentaje ?? 0))
+            );
+          };
+          return (
+            ahorro(b) - ahorro(a) ||
+            a.entrada.item.id.localeCompare(b.entrada.item.id) ||
+            a.entrada.producto.cantidad - b.entrada.producto.cantidad
+          );
+        });
+      const ahorroMinimo = (filas: typeof mates) =>
+        Math.min(
+          ...filas.map(({ indice }) => {
+            const linea = grupos[indice][0];
+            return (
+              (linea.precio_base_unitario *
+                (porcentaje - (linea.ajuste_porcentaje ?? 0))) /
+              100
+            );
+          }),
+        );
+      const ahorroPorPar = ahorroMinimo(mates) + ahorroMinimo(bombillas);
+      if (porcentaje === 35 && ahorroPorPar <= 0) continue;
+      // Solo buscamos cerca del maximo: fuera de este margen el ahorro perdido
+      // supera cualquier diferencia de redondeo de las lineas divididas.
+      const margenRedondeo = Math.ceil(
+        (4 * (mates.length + bombillas.length)) / ahorroPorPar,
+      );
+      const desde = Math.max(10, pares - margenRedondeo);
+      const cantidades =
+        porcentaje === 25
+          ? Array.from({ length: Math.min(9, pares) }, (_, i) => i + 1)
+          : Array.from({ length: pares - desde + 1 }, (_, i) => pares - i);
+      for (const numeroPares of cantidades) {
+        const ordenados = ordenar(mates);
+        const primero = grupos[ordenados[0].indice][0];
+        const segundo = ordenados[1] ? grupos[ordenados[1].indice][0] : null;
+        const maximoPrimero = Math.min(numeroPares, cantidad([ordenados[0]]));
+        const minimoPrimero = Math.max(
+          0,
+          numeroPares - cantidad(ordenados.slice(1)),
+        );
+        const ahorroUnitario = (linea: PedidoProductoCalculado) =>
+          (linea.precio_base_unitario *
+            (porcentaje - (linea.ajuste_porcentaje ?? 0))) /
+          100;
+        const diferenciaAhorro = segundo
+          ? ahorroUnitario(primero) - ahorroUnitario(segundo)
+          : 0;
+        // Con igual ahorro los redondeos se repiten cada 10000 unidades
+        // (precios en pesos enteros y porcentajes con hasta dos decimales).
+        const margenColor =
+          diferenciaAhorro > 0
+            ? Math.ceil(
+                (4 * (mates.length + bombillas.length)) / diferenciaAhorro,
+              )
+            : 10000;
+        const desdeColor = Math.max(minimoPrimero, maximoPrimero - margenColor);
+        for (
+          let usadosPrimero = maximoPrimero;
+          usadosPrimero >= desdeColor;
+          usadosPrimero--
+        ) {
+          const candidato = grupos.map((partes) => partes);
+          const asignaciones = [
+            { filas: [ordenados[0]], cantidad: usadosPrimero },
+            {
+              filas: ordenados.slice(1),
+              cantidad: numeroPares - usadosPrimero,
+            },
+            { filas: bombillas, cantidad: numeroPares },
+          ];
+          for (const { filas, cantidad } of asignaciones) {
+            let pendientes = cantidad;
+            for (const { entrada, indice } of filas) {
+              const usados = Math.min(
+                pendientes,
+                Math.floor(entrada.producto.cantidad),
+              );
+              if (!usados) continue;
+              const sobrantes = entrada.producto.cantidad - usados;
+              candidato[indice] = [calcular(entrada, usados, porcentaje)];
+              if (sobrantes > 0)
+                candidato[indice].push(calcular(entrada, sobrantes));
+              pendientes -= usados;
+            }
+          }
+          const importe = total(candidato);
+          if (importe < mejorTotal) {
+            mejorTotal = importe;
+            mejores = candidato;
+          }
+        }
+      }
+    }
+    grupos.splice(0, grupos.length, ...mejores);
+  }
+
   private calcularProductoPedido(
     producto: CreatePedidoDto['productos'][number],
     item: StkItem,
@@ -1841,6 +2083,7 @@ export class PedidoService {
     incluyeIvaFactura = false,
     identidad: FilamentIdentity = { category: item.grupo },
     aplicaEnvioGratisPorPeso = false,
+    porcentajeCombo?: number,
   ): PedidoProductoCalculado {
     const cantidad = this.obtenerCantidadProducto(producto);
     const precioBaseUnitario = this.obtenerPrecioListaCotizado(
@@ -1855,18 +2098,21 @@ export class PedidoService {
       !esProductoEnvio && metodoPago === 'transfer';
     const porcentajeCuponAplicable = esProductoEnvio ? 0 : porcentajeCupon;
     const descuentoProductoPorcentaje = aplicaDescuentoProducto
-      ? this.parsearPorcentajeDescuento(
-          getDiscountPercentageForFilament(
-            identidad,
-            cantidadDescuentoProducto,
-            pesoProducto,
-          ),
-        )
+      ? isComplement(item)
+        ? getComplementDiscountPercentage(item, cantidadDescuentoProducto)
+        : this.parsearPorcentajeDescuento(
+            getDiscountPercentageForFilament(
+              identidad,
+              cantidadDescuentoProducto,
+              pesoProducto,
+            ),
+          )
       : 0;
     const descuentoPorcentaje =
       esProductoEnvio && aplicaEnvioGratisPorPeso
         ? 100
-        : Math.max(descuentoProductoPorcentaje, porcentajeCuponAplicable);
+        : (porcentajeCombo ??
+          Math.max(descuentoProductoPorcentaje, porcentajeCuponAplicable));
     if (incluyeIvaFactura) {
       const subtotalBrutoCalculado = this.redondear2(
         precioBaseUnitario * cantidad * (1 + FACTURA_IVA_PORCENTAJE / 100),
@@ -1895,6 +2141,7 @@ export class PedidoService {
           ? this.redondear2(subtotalBruto / cantidad)
           : this.redondear2(subtotalFinalBruto / cantidad);
       const descuentoCuponAplicado =
+        porcentajeCombo === undefined &&
         porcentajeCuponAplicable > descuentoProductoPorcentaje
           ? this.redondearPrecio(precioBaseUnitario * cantidad - subtotal)
           : 0;
@@ -1922,6 +2169,7 @@ export class PedidoService {
         ? precioBaseUnitario
         : this.redondearPrecio(subtotal / cantidad);
     const descuentoCuponAplicado =
+      porcentajeCombo === undefined &&
       porcentajeCuponAplicable > descuentoProductoPorcentaje
         ? this.redondearPrecio(precioBaseUnitario * cantidad - subtotal)
         : 0;
