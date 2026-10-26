@@ -4,6 +4,28 @@ describe('StkItemService clave de catálogo', () => {
   const claveProducto = (item: object, atributos: object[] = []) =>
     (StkItemService.prototype as any).claveProducto(item, atributos);
 
+  it('expone el 15% base de transferencia para complementos', () => {
+    const service = Object.create(StkItemService.prototype);
+    const producto = service.armarProducto(
+      'item:INS-MATE-BLAN',
+      [
+        {
+          id: 'INS-MATE-BLAN',
+          idPadre: 'INS-MATE-GENE',
+          grupo: 'COMPLEMENTOS PARA IMPRESION 3D',
+          descripcion: 'Inserto Mate | Blanco',
+          stkExistencias: [],
+          visible: true,
+          stkPrecios: [
+            { lista: 'MINORISTA', precioVta: '10000', moneda: { id: 'PES' } },
+          ],
+        },
+      ],
+      new Map([['INS-MATE-BLAN', []]]),
+    );
+    expect(producto.variantes[0].promotionalPrice).toBe('8500.00');
+  });
+
   it('mantiene una clave individual para ítems sin padre', () => {
     expect(claveProducto({ id: 'ITEM-1', idPadre: null })).toBe('item:ITEM-1');
   });
@@ -254,21 +276,21 @@ describe('StkItemService clave de catálogo', () => {
       orden: 1,
     });
 
-    const producto = armarProducto.call(
-      Object.create(StkItemService.prototype),
-      'filamento',
-      [item],
-      new Map([
-        [
-          item.id,
+      const producto = armarProducto.call(
+        Object.create(StkItemService.prototype),
+        'filamento',
+        [item],
+        new Map([
           [
-            atributo('Marca', 'Grilon3'),
-            atributo('Sub-línea', 'Boutique'),
-            atributo('Material', 'PLA Boutique', 'PLA', submaterial),
+            item.id,
+            [
+              atributo('Marca', 'Grilon3'),
+              atributo('Sub-línea', 'Boutique'),
+              atributo('Material', 'PLA Boutique', 'PLA', submaterial),
+            ],
           ],
-        ],
-      ]),
-    );
+        ]),
+      );
 
     expect(producto.nombre).toBe(nombre);
     expect(producto.material).toBe('PLA Boutique');
