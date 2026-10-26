@@ -216,6 +216,293 @@ describe('PedidoService recalculo de importes', () => {
       .mockResolvedValue('https://nave.test/checkout');
   });
 
+  describe('complementos y combos', () => {
+    const grupo = 'COMPLEMENTOS PARA IMPRESION 3D';
+    beforeEach(() => {
+      vtaComprobanteService.crearDesdePedido.mockResolvedValue({
+        tipo: 'FX',
+        comprobante: 'X 1',
+      });
+    });
+    const preparar = (precios: Record<string, string> = {}) => {
+      stkItemRepo.findOne.mockImplementation(async ({ where }) =>
+        itemConPrecio(
+          where.id,
+          precios[where.id] ?? '10000',
+          'PES',
+          '1',
+          grupo,
+          `Descripcion ${where.id}`,
+          [
+            {
+              lista: 'MINORISTA CON IVA',
+              precioVta: precios[where.id] ?? '10000',
+            },
+          ],
+        ),
+      );
+    };
+    const comprar = (
+      productos: CreatePedidoDto['productos'],
+      opciones: Partial<CreatePedidoDto> = {},
+    ) =>
+      service.crear(
+        dtoBase({
+          total: undefined,
+          metodo_pago: 'transfer',
+          productos,
+          ...opciones,
+        }),
+      );
+
+    it('suma colores y lineas repetidas pero separa capacidades de vaso', async () => {
+      preparar();
+      const { pedido } = await comprar([
+        { nombre: 'INS-MATE-BLAN', cantidad: 3 },
+        { nombre: 'INS-MATE-NEGR', cantidad: 4 },
+        { nombre: 'INS-MATE-BLAN', cantidad: 3 },
+        { nombre: 'VASO ALUM 500ML', cantidad: 5 },
+        { nombre: 'VASO ALUM 600ML', cantidad: 5 },
+        { nombre: 'INS-TAZA-NEGR', cantidad: 10 },
+        { nombre: 'ADH-CIANO-M100', cantidad: 11 },
+      ]);
+      expect(pedido.productos.map((p) => p.ajuste_porcentaje)).toEqual([
+        27.2, 27.2, 15, 15, 25.64, 15,
+      ]);
+      expect(pedido.productos[4].subtotal).toBe(74360);
+    });
+
+    it.each([1, 9, 10])(
+      'aplica el tramo correcto para %s pares',
+      async (cantidad) => {
+        preparar();
+        const { pedido } = await comprar([
+          { nombre: 'INS-MATE-BLAN', cantidad },
+          { nombre: 'INS-BOMB-NEGR', cantidad },
+        ]);
+        const porcentaje = cantidad >= 10 ? 35 : 25;
+        expect(pedido.productos.map((p) => p.ajuste_porcentaje)).toEqual([
+          porcentaje,
+          porcentaje,
+        ]);
+        expect(pedido.total).toBe(cantidad * 20000 * (1 - porcentaje / 100));
+        expect(stockService.reservarStockLote).toHaveBeenCalledWith([
+          { item: 'INS-MATE-BLAN', cantidad },
+          { item: 'INS-BOMB-NEGR', cantidad },
+        ]);
+      },
+    );
+
+    it('divide sobrantes, valida importes agregados y conserva cantidades', async () => {
+      preparar();
+      const { pedido } = await comprar(
+        [
+          {
+            nombre: 'INS-MATE-BLAN',
+            cantidad: 12,
+            subtotal: 79560,
+            precio_unitario: 6630,
+          },
+          { nombre: 'INS-BOMB-NEGR', cantidad: 10, subtotal: 65000 },
+        ],
+        { total: 144560 },
+      );
+      expect(
+        pedido.productos.map((p) => [
+          p.nombre,
+          p.cantidad,
+          p.ajuste_porcentaje,
+        ]),
+      ).toEqual([
+        ['INS-MATE-BLAN', 10, 35],
+        ['INS-MATE-BLAN', 2, 27.2],
+        ['INS-BOMB-NEGR', 10, 35],
+      ]);
+      expect(stockService.reservarStockLote).toHaveBeenCalledWith([
+        { item: 'INS-MATE-BLAN', cantidad: 10 },
+        { item: 'INS-MATE-BLAN', cantidad: 2 },
+        { item: 'INS-BOMB-NEGR', cantidad: 10 },
+      ]);
+      expect(
+        pedido.productos.every((p) => p.deposito_reserva === 'DEPOSITO'),
+      ).toBe(true);
+    });
+
+    it('elige los mates que mas ahorran y no depende del orden', async () => {
+      preparar({ 'INS-MATE-BLAN': '10000', 'INS-MATE-NEGR': '50000' });
+      const productos = [
+        { nombre: 'INS-MATE-NEGR', cantidad: 5 },
+        { nombre: 'INS-MATE-BLAN', cantidad: 5 },
+        { nombre: 'INS-BOMB-NEGR', cantidad: 3 },
+      ];
+      const primero = (await comprar(productos)).pedido;
+      const segundo = (await comprar([...productos].reverse())).pedido;
+      expect(primero.total).toBe(segundo.total);
+      expect(
+        primero.productos
+          .filter((p) => p.ajuste_porcentaje === 25)
+          .map((p) => p.nombre)
+          .sort(),
+      ).toEqual(['INS-BOMB-NEGR', 'INS-MATE-BLAN']);
+    });
+
+    it('conserva el descuento individual cuando el combo cuesta mas', async () => {
+      preparar({ 'INS-MATE-BLAN': '10000', 'INS-BOMB-NEGR': '100' });
+      const { pedido } = await comprar([
+        { nombre: 'INS-MATE-BLAN', cantidad: 10 },
+        { nombre: 'INS-BOMB-NEGR', cantidad: 1 },
+      ]);
+      expect(pedido.total).toBe(72885);
+      expect(pedido.productos.map((p) => p.ajuste_porcentaje)).toEqual([
+        27.2, 15,
+      ]);
+    });
+
+    it('evalua menos pares cuando el redondeo produce un total menor', async () => {
+      preparar({ 'INS-MATE-BLAN': '1', 'INS-BOMB-NEGR': '1' });
+      const { pedido } = await comprar([
+        { nombre: 'INS-MATE-BLAN', cantidad: 12 },
+        { nombre: 'INS-BOMB-NEGR', cantidad: 15 },
+      ]);
+      expect(pedido.total).toBe(18);
+      expect(
+        pedido.productos
+          .filter((p) => p.ajuste_porcentaje === 35)
+          .map((p) => p.cantidad),
+      ).toEqual([11, 11]);
+    });
+
+    it('elige la distribucion de colores con menor total despues de redondear', async () => {
+      preparar({
+        'INS-MATE-BLAN': '6',
+        'INS-MATE-NEGR': '7',
+        'INS-BOMB-NEGR': '1',
+      });
+      const productos = [
+        { nombre: 'INS-MATE-BLAN', cantidad: 3 },
+        { nombre: 'INS-MATE-NEGR', cantidad: 6 },
+        { nombre: 'INS-MATE-BLAN', cantidad: 3 },
+        { nombre: 'INS-BOMB-NEGR', cantidad: 10 },
+      ];
+      const primero = (await comprar(productos)).pedido;
+      const segundo = (await comprar([...productos].reverse())).pedido;
+      let minimo =
+        Math.round(6 * 6 * 0.728) +
+        Math.round(7 * 6 * 0.728) +
+        Math.round(10 * 0.85);
+      for (let blancos = 0; blancos <= 6; blancos++) {
+        for (let negros = 0; negros <= 6; negros++) {
+          const pares = blancos + negros;
+          if (!pares || pares > 10) continue;
+          const factor = pares >= 10 ? 0.65 : 0.75;
+          minimo = Math.min(
+            minimo,
+            Math.round(6 * blancos * factor) +
+              Math.round(6 * (6 - blancos) * 0.728) +
+              Math.round(7 * negros * factor) +
+              Math.round(7 * (6 - negros) * 0.728) +
+              Math.round(pares * factor) +
+              Math.round((10 - pares) * 0.85),
+          );
+        }
+      }
+      expect(primero.total).toBe(minimo);
+      expect(segundo.total).toBe(minimo);
+    });
+
+    it('compara el cupon contra el combo sin acumularlos', async () => {
+      preparar();
+      cuponService.resolverPorcentajePorModalidad.mockResolvedValue({
+        porcentajeAplicado: 30,
+      });
+      const productos = [
+        { nombre: 'INS-MATE-BLAN', cantidad: 1 },
+        { nombre: 'INS-BOMB-NEGR', cantidad: 1 },
+      ];
+      const individual = (await comprar(productos, { codigo_cupon: 'CUPON' }))
+        .pedido;
+      expect(individual.productos.map((p) => p.ajuste_porcentaje)).toEqual([
+        30, 30,
+      ]);
+      const combo = (
+        await comprar(
+          productos.map((p) => ({ ...p, cantidad: 10 })),
+          { codigo_cupon: 'CUPON' },
+        )
+      ).pedido;
+      expect(combo.productos.map((p) => p.ajuste_porcentaje)).toEqual([35, 35]);
+      expect(combo.descuento_cupon).toBeUndefined();
+      cuponService.resolverPorcentajePorModalidad.mockResolvedValue({ porcentajeAplicado: 40 });
+      const cuponMayor = (await comprar(productos.map((p) => ({ ...p, cantidad: 10 })), { codigo_cupon: 'CUPON' })).pedido;
+      expect(cuponMayor.productos.map((p) => p.ajuste_porcentaje)).toEqual([40, 40]);
+    });
+
+    it('calcula factura y valida el precio agregado del SKU dividido', async () => {
+      preparar();
+      const { pedido } = await comprar(
+        [
+          {
+            nombre: 'INS-MATE-BLAN',
+            cantidad: 2,
+            precio_unitario: 9680,
+            subtotal: 24200,
+          },
+          { nombre: 'INS-BOMB-NEGR', cantidad: 1 },
+        ],
+        { factura_tipo: 'B', total: 28435 },
+      );
+      expect(pedido.total).toBe(28435);
+      expect(pedido.productos.map((p) => p.subtotal)).toEqual([
+        7500, 8500, 7500,
+      ]);
+    });
+
+    it('no aplica descuentos automaticos en online y rechaza totales incorrectos', async () => {
+      preparar();
+      const productos = [
+        { nombre: 'INS-MATE-BLAN', cantidad: 10 },
+        { nombre: 'INS-BOMB-NEGR', cantidad: 10 },
+      ];
+      const { pedido } = await comprar(productos, { metodo_pago: 'online' });
+      expect(pedido.total).toBe(200000);
+      expect(pedido.productos.every((p) => p.ajuste_porcentaje === null)).toBe(
+        true,
+      );
+      await expect(comprar(productos, { total: 1 })).rejects.toMatchObject({
+        response: { code: 'ERR_ORDER_TOTAL_MISMATCH' },
+      });
+    });
+
+    it.each(['aprobar', 'cancelar'])(
+      'conserva el stock de lineas divididas al %s',
+      async (accion) => {
+        preparar();
+        const { pedido } = await comprar([
+          { nombre: 'INS-MATE-BLAN', cantidad: 12 },
+          { nombre: 'INS-BOMB-NEGR', cantidad: 10 },
+        ]);
+        createRepo.findOne.mockResolvedValue(pedido);
+        const solicitudes = [
+          { item: 'INS-MATE-BLAN', cantidad: 10, deposito: 'DEPOSITO' },
+          { item: 'INS-MATE-BLAN', cantidad: 2, deposito: 'DEPOSITO' },
+          { item: 'INS-BOMB-NEGR', cantidad: 10, deposito: 'DEPOSITO' },
+        ];
+        if (accion === 'aprobar') {
+          await service.aprobarTransferencia(pedido.external_id);
+          expect(stockService.confirmarStockLote).toHaveBeenCalledWith(
+            solicitudes,
+          );
+          expect(stockService.liberarStockLote).not.toHaveBeenCalled();
+        } else {
+          await service.cancelarPedidoPendiente(pedido.external_id);
+          expect(stockService.liberarStockLote).toHaveBeenCalledWith(
+            solicitudes,
+          );
+        }
+      },
+    );
+  });
+
   it('recalcula precio en pesos y redondea normal al peso', async () => {
     stkItemRepo.findOne.mockResolvedValue(itemConPrecio('ITEM-1', '10.01'));
 
