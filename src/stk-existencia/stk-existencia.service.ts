@@ -4,12 +4,16 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { LessThan, Repository } from 'typeorm';
+import { randomUUID } from 'node:crypto';
 import { StkExistencia } from './entities/stk-existencia.entity';
 import { CreateStkExistenciaDto } from './dto/create-stk-existencia.dto';
 import { UpdateStkExistenciaDto } from './dto/update-stk-existencia.dto';
 import { PedidoItem } from 'src/pedido/entities/pedido-item.entity';
-import { PedidoEstado } from 'src/pedido/entities/pedido.entity';
+import { Pedido, PedidoEstado } from 'src/pedido/entities/pedido.entity';
+import { StockReserva } from './entities/stock-reserva.entity';
+import { StockReservaItem } from './entities/stock-reserva-item.entity';
+import { StockReservaEvento } from './entities/stock-reserva-evento.entity';
 
 export interface StockSolicitud {
   item: string;
@@ -21,6 +25,12 @@ export interface StockReservado {
   item: string;
   cantidad: number;
   deposito: string;
+  reservaId?: string;
+}
+
+export interface StockReservaContexto {
+  externalId: string;
+  reservaId?: string;
 }
 
 export interface StockConfirmado {
@@ -113,7 +123,7 @@ export class StkExistenciaService {
       .addSelect('pedido.cliente_nombre', 'cliente_nombre')
       .addSelect('SUM(pedidoItem.cantidad)', 'cantidad')
       .where('pedido.estado IN (:...estados)', {
-        estados: ['PENDIENTE', 'ERROR_STOCK'],
+        estados: ['PENDIENTE', 'ERROR_STOCK', 'REQUIERE_ATENCION'],
       })
       .andWhere('pedidoItem.nombre IN (:...items)', { items })
       .andWhere('pedidoItem.deposito_reserva IN (:...depositos)', { depositos })
@@ -308,6 +318,7 @@ export class StkExistenciaService {
    */
   async reservarStockLote(
     solicitudes: StockSolicitud[],
+    contexto?: StockReservaContexto,
   ): Promise<StockReservado[]> {
     const normalizadas = solicitudes
       .map((solicitud, indice) => {
@@ -330,6 +341,33 @@ export class StkExistenciaService {
 
     return this.stkExistenciaRepository.manager.transaction(async (manager) => {
       const repo = manager.getRepository(StkExistencia);
+      const reservaRepo = manager.getRepository(StockReserva);
+      const reservaItemRepo = manager.getRepository(StockReservaItem);
+      let reservaPersistida: StockReserva | null = null;
+
+      if (contexto) {
+        reservaPersistida = await reservaRepo.findOne({
+          where: { externalId: contexto.externalId },
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (reservaPersistida?.estado === 'RESERVADA') {
+          const items = await reservaItemRepo.find({
+            where: { reservaId: reservaPersistida.id },
+            order: { id: 'ASC' },
+          });
+          return items.map((item) => ({
+            item: item.item,
+            cantidad: Number(item.cantidad),
+            deposito: item.deposito,
+            reservaId: reservaPersistida!.id,
+          }));
+        }
+        if (reservaPersistida?.estado === 'CONFIRMADA') {
+          throw new ConflictException(
+            `La reserva ${reservaPersistida.id} ya fue confirmada`,
+          );
+        }
+      }
       const existenciasPorItem = new Map<string, StkExistencia[]>();
       const cantidadPlanificada = new Map<StkExistencia, number>();
       const resultados: StockReservado[] = new Array(normalizadas.length);
@@ -406,6 +444,44 @@ export class StkExistenciaService {
         await repo.save([...modificadas]);
       }
 
+      if (contexto) {
+        const reservaId =
+          reservaPersistida?.id ?? contexto.reservaId ?? randomUUID();
+        const tipoEvento = reservaPersistida ? 'REACTIVADA' : 'RESERVADA';
+        if (reservaPersistida) {
+          reservaPersistida.estado = 'RESERVADA';
+          reservaPersistida.motivo = null;
+        } else {
+          reservaPersistida = reservaRepo.create({
+            id: reservaId,
+            externalId: contexto.externalId,
+            estado: 'RESERVADA',
+            motivo: null,
+          });
+        }
+        await reservaRepo.save(reservaPersistida);
+        await reservaItemRepo.delete({ reservaId });
+        await reservaItemRepo.save(
+          resultados.map((resultado) =>
+            reservaItemRepo.create({
+              reservaId,
+              item: resultado.item,
+              deposito: resultado.deposito,
+              cantidad: resultado.cantidad.toString(),
+            }),
+          ),
+        );
+        const eventoRepo = manager.getRepository(StockReservaEvento);
+        await eventoRepo.save(
+          eventoRepo.create({
+            reservaId,
+            tipo: tipoEvento,
+            motivo: null,
+          }),
+        );
+        resultados.forEach((resultado) => (resultado.reservaId = reservaId));
+      }
+
       return resultados;
     });
   }
@@ -428,11 +504,31 @@ export class StkExistenciaService {
    */
   async confirmarStockLote(
     solicitudes: StockSolicitud[],
+    reservaId?: string,
   ): Promise<StockConfirmado[]> {
     const agrupadas = this.agruparSolicitudes(solicitudes);
 
     return this.stkExistenciaRepository.manager.transaction(async (manager) => {
       const repo = manager.getRepository(StkExistencia);
+      const reservaRepo = manager.getRepository(StockReserva);
+      const reservaItemRepo = manager.getRepository(StockReservaItem);
+      const reserva = reservaId
+        ? await reservaRepo.findOne({
+            where: { id: reservaId },
+            lock: { mode: 'pessimistic_write' },
+          })
+        : null;
+      if (reserva?.estado === 'CONFIRMADA') {
+        const items = await reservaItemRepo.find({ where: { reservaId } });
+        return items.map((item) => ({
+          item: item.item,
+          cantidad: Number(item.cantidad),
+          depositoReserva: item.deposito,
+        }));
+      }
+      if (reserva?.estado === 'LIBERADA') {
+        throw new ConflictException(`La reserva ${reservaId} ya fue liberada`);
+      }
       const confirmaciones: Array<{
         existencia: StkExistencia;
         item: string;
@@ -523,6 +619,20 @@ export class StkExistenciaService {
         await repo.save([...existenciasModificadas]);
       }
 
+      if (reserva) {
+        reserva.estado = 'CONFIRMADA';
+        reserva.motivo = null;
+        await reservaRepo.save(reserva);
+        const eventoRepo = manager.getRepository(StockReservaEvento);
+        await eventoRepo.save(
+          eventoRepo.create({
+            reservaId: reserva.id,
+            tipo: 'CONFIRMADA',
+            motivo: null,
+          }),
+        );
+      }
+
       return [
         ...confirmaciones.map(({ item, cantidad, depositoReserva }) => ({
           item,
@@ -563,6 +673,7 @@ export class StkExistenciaService {
 
   async restaurarStockConfirmadoLote(
     confirmaciones: StockConfirmado[],
+    reservaId?: string,
   ): Promise<void> {
     await this.stkExistenciaRepository.manager.transaction(async (manager) => {
       const repo = manager.getRepository(StkExistencia);
@@ -597,6 +708,27 @@ export class StkExistenciaService {
 
       if (existenciasRestauradas.size) {
         await repo.save([...existenciasRestauradas]);
+      }
+
+      if (reservaId) {
+        const reservaRepo = manager.getRepository(StockReserva);
+        const reserva = await reservaRepo.findOne({
+          where: { id: reservaId },
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (reserva) {
+          reserva.estado = 'RESERVADA';
+          reserva.motivo = 'Confirmacion compensada por error posterior';
+          await reservaRepo.save(reserva);
+          const eventoRepo = manager.getRepository(StockReservaEvento);
+          await eventoRepo.save(
+            eventoRepo.create({
+              reservaId: reserva.id,
+              tipo: 'CONFIRMACION_COMPENSADA',
+              motivo: reserva.motivo,
+            }),
+          );
+        }
       }
     });
   }
@@ -638,11 +770,28 @@ export class StkExistenciaService {
    * el lote completo y bloquea las existencias involucradas; si una reserva
    * no existe o es insuficiente, no modifica ninguna fila.
    */
-  async liberarStockLote(solicitudes: StockSolicitud[]): Promise<void> {
+  async liberarStockLote(
+    solicitudes: StockSolicitud[],
+    reservaId?: string,
+    motivo = 'Reserva liberada',
+  ): Promise<void> {
     const agrupadas = this.agruparSolicitudes(solicitudes);
 
     await this.stkExistenciaRepository.manager.transaction(async (manager) => {
       const repo = manager.getRepository(StkExistencia);
+      const reservaRepo = manager.getRepository(StockReserva);
+      const reserva = reservaId
+        ? await reservaRepo.findOne({
+            where: { id: reservaId },
+            lock: { mode: 'pessimistic_write' },
+          })
+        : null;
+      if (reserva?.estado === 'LIBERADA') return;
+      if (reserva?.estado === 'CONFIRMADA') {
+        throw new ConflictException(
+          `La reserva ${reservaId} ya fue confirmada y no puede liberarse`,
+        );
+      }
       const liberaciones: Array<{
         existencia: StkExistencia;
         cantidad: number;
@@ -705,6 +854,124 @@ export class StkExistenciaService {
       if (modificadas.size) {
         await repo.save([...modificadas]);
       }
+
+      if (reserva) {
+        reserva.estado = 'LIBERADA';
+        reserva.motivo = motivo.slice(0, 255);
+        await reservaRepo.save(reserva);
+        const eventoRepo = manager.getRepository(StockReservaEvento);
+        await eventoRepo.save(
+          eventoRepo.create({
+            reservaId: reserva.id,
+            tipo: 'LIBERADA',
+            motivo: reserva.motivo,
+          }),
+        );
+      }
     });
+  }
+
+  async reconciliarReservasHuerfanas(antiguedadMinutos = 30): Promise<{
+    revisadas: number;
+    liberadas: Array<{ reservaId: string; externalId: string }>;
+    confirmadas: Array<{ reservaId: string; externalId: string }>;
+  }> {
+    const minutos = Math.max(5, Number(antiguedadMinutos) || 30);
+    const limite = new Date(Date.now() - minutos * 60_000);
+    const reservaRepo =
+      this.stkExistenciaRepository.manager.getRepository(StockReserva);
+    const reservaItemRepo =
+      this.stkExistenciaRepository.manager.getRepository(StockReservaItem);
+    const pedidoRepo = this.pedidoItemRepository.manager.getRepository(Pedido);
+    const candidatas = await reservaRepo.find({
+      where: { estado: 'RESERVADA', creado: LessThan(limite) },
+      order: { creado: 'ASC' },
+    });
+    const liberadas: Array<{ reservaId: string; externalId: string }> = [];
+    const confirmadas: Array<{ reservaId: string; externalId: string }> = [];
+
+    for (const reserva of candidatas) {
+      const pedido = await pedidoRepo.findOne({
+        where: { external_id: reserva.externalId },
+      });
+      if (
+        pedido &&
+        ['PENDIENTE', 'ERROR_STOCK', 'REQUIERE_ATENCION'].includes(
+          pedido.estado,
+        )
+      ) {
+        continue;
+      }
+
+      const items = await reservaItemRepo.find({
+        where: { reservaId: reserva.id },
+      });
+      const solicitudes = items.map((item) => ({
+        item: item.item,
+        cantidad: Number(item.cantidad),
+        deposito: item.deposito,
+      }));
+      if (pedido && ['APROBADO', 'APROBADO_MANUAL'].includes(pedido.estado)) {
+        await this.confirmarStockLote(solicitudes, reserva.id);
+        confirmadas.push({
+          reservaId: reserva.id,
+          externalId: reserva.externalId,
+        });
+        continue;
+      }
+      await this.liberarStockLote(
+        solicitudes,
+        reserva.id,
+        pedido
+          ? `Reconciliacion: pedido en estado ${pedido.estado}`
+          : 'Reconciliacion: pedido inexistente',
+      );
+      liberadas.push({ reservaId: reserva.id, externalId: reserva.externalId });
+    }
+
+    return { revisadas: candidatas.length, liberadas, confirmadas };
+  }
+
+  async obtenerTrazabilidadReserva(externalId: string) {
+    const manager = this.stkExistenciaRepository.manager;
+    const reserva = await manager.getRepository(StockReserva).findOne({
+      where: { externalId },
+    });
+    if (!reserva) {
+      throw new NotFoundException(
+        `No existe una reserva para el pedido ${externalId}`,
+      );
+    }
+
+    const [items, eventos, pedido] = await Promise.all([
+      manager.getRepository(StockReservaItem).find({
+        where: { reservaId: reserva.id },
+        order: { id: 'ASC' },
+      }),
+      manager.getRepository(StockReservaEvento).find({
+        where: { reservaId: reserva.id },
+        order: { creado: 'ASC', id: 'ASC' },
+      }),
+      this.pedidoItemRepository.manager.getRepository(Pedido).findOne({
+        where: { external_id: externalId },
+      }),
+    ]);
+
+    return {
+      reserva,
+      items: items.map((item) => ({
+        item: item.item,
+        deposito: item.deposito,
+        cantidad: Number(item.cantidad),
+      })),
+      eventos,
+      pedido: pedido
+        ? {
+            id: pedido.id,
+            external_id: pedido.external_id,
+            estado: pedido.estado,
+          }
+        : null,
+    };
   }
 }

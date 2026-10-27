@@ -391,18 +391,19 @@ export class PedidoService {
       factura_iva_importe: facturaIvaImporte,
     });
 
+    const externalId = uuidv4().replace(/-/g, '');
     const reservas = await this.stockService.reservarStockLote(
       productosValidados.map((producto) => ({
         item: producto.nombre,
         cantidad: producto.cantidad,
       })),
+      { externalId },
     );
     reservas.forEach((reserva, index) => {
       productosValidados[index].deposito_reserva = reserva.deposito;
     });
     const reservasRealizadas: PedidoItem[] = productosValidados;
 
-    const externalId = uuidv4().replace(/-/g, '');
     const direccionCliente = {
       calle: dto.billing_address?.street || dto.calle || '',
       numero: dto.billing_address?.number || '',
@@ -430,6 +431,8 @@ export class PedidoService {
       cliente_nombre: dto.cliente_nombre,
       cliente_mail: dto.email,
       external_id: externalId,
+      stock_reserva_id:
+        reservas.find((reserva) => reserva.reservaId)?.reservaId ?? null,
       total: totalCalculado,
       costo_envio: costoEnvioCalculado,
       distancia_envio:
@@ -470,6 +473,8 @@ export class PedidoService {
             cantidad: reservado.cantidad,
             deposito: reservado.deposito_reserva ?? undefined,
           })),
+          pedido.stock_reserva_id ?? undefined,
+          'Fallo al guardar el pedido',
         );
       } catch (rollbackError) {
         this.logger.error(
@@ -499,6 +504,8 @@ export class PedidoService {
               cantidad: producto.cantidad,
               deposito: producto.deposito_reserva ?? undefined,
             })),
+            pedidoGuardado.stock_reserva_id ?? undefined,
+            'Fallo al generar el comprobante',
           );
         } catch (e) {
           console.error(
@@ -576,6 +583,8 @@ export class PedidoService {
             cantidad: producto.cantidad,
             deposito: producto.deposito_reserva ?? undefined,
           })),
+          pedidoGuardado.stock_reserva_id ?? undefined,
+          'Fallo al generar la intencion de pago',
         );
       } catch (e) {
         console.error(
@@ -998,10 +1007,17 @@ export class PedidoService {
                 item: producto.nombre,
                 cantidad: producto.cantidad,
               })),
+              {
+                externalId: pedido.external_id,
+                reservaId: pedido.stock_reserva_id ?? undefined,
+              },
             );
             nuevasReservas.forEach((reserva, index) => {
               pedido.productos[index].deposito_reserva = reserva.deposito;
             });
+            pedido.stock_reserva_id =
+              nuevasReservas.find((reserva) => reserva.reservaId)?.reservaId ??
+              pedido.stock_reserva_id;
             reservaReactivada = true;
           }
 
@@ -1014,6 +1030,7 @@ export class PedidoService {
               cantidad: producto.cantidad,
               deposito: producto.deposito_reserva ?? undefined,
             })),
+            pedido.stock_reserva_id ?? undefined,
           );
 
           let comprobanteCreado: { tipo: string; comprobante: string };
@@ -1063,6 +1080,7 @@ export class PedidoService {
             try {
               await this.stockService.restaurarStockConfirmadoLote(
                 stockConfirmado,
+                pedido.stock_reserva_id ?? undefined,
               );
             } catch (rollbackError) {
               console.error(
@@ -1079,6 +1097,8 @@ export class PedidoService {
                   cantidad: producto.cantidad,
                   deposito: producto.deposito_reserva ?? undefined,
                 })),
+                pedido.stock_reserva_id ?? undefined,
+                'Fallo al reactivar una reserva cancelada',
               );
             } catch (rollbackError) {
               console.error(
@@ -1141,6 +1161,8 @@ export class PedidoService {
             cantidad: producto.cantidad,
             deposito: producto.deposito_reserva ?? undefined,
           })),
+          pedido.stock_reserva_id ?? undefined,
+          `Pago ${estado.toLowerCase()}`,
         );
         await this.eliminarComprobanteSiExiste(pedido);
         try {
@@ -1329,7 +1351,11 @@ export class PedidoService {
       deposito: producto.deposito_reserva ?? undefined,
     }));
 
-    await this.stockService.liberarStockLote(solicitudesStock);
+    await this.stockService.liberarStockLote(
+      solicitudesStock,
+      pedido.stock_reserva_id ?? undefined,
+      motivo,
+    );
 
     pedido.estado = 'CANCELADO';
     await this.eliminarComprobanteSiExiste(pedido);
@@ -1558,8 +1584,10 @@ export class PedidoService {
         let stockConfirmado: StockConfirmado[] = [];
 
         try {
-          stockConfirmado =
-            await this.stockService.confirmarStockLote(solicitudesStock);
+          stockConfirmado = await this.stockService.confirmarStockLote(
+            solicitudesStock,
+            pedido.stock_reserva_id ?? undefined,
+          );
 
           pedido.estado = 'APROBADO';
           pedido.aprobado = new Date();
@@ -1569,6 +1597,7 @@ export class PedidoService {
           if (stockConfirmado.length) {
             await this.stockService.restaurarStockConfirmadoLote(
               stockConfirmado,
+              pedido.stock_reserva_id ?? undefined,
             );
           }
           throw error;

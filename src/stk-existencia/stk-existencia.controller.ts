@@ -1,4 +1,13 @@
-import { Controller, Get, Post, Body, Param, Delete, Patch } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Param,
+  Delete,
+  Patch,
+  Query,
+} from '@nestjs/common';
 import { StkExistenciaService } from './stk-existencia.service';
 import { CreateStkExistenciaDto } from './dto/create-stk-existencia.dto';
 import { UpdateStkExistenciaDto } from './dto/update-stk-existencia.dto';
@@ -30,8 +39,27 @@ export class StkExistenciaController {
     return this.stkExistenciaService.restaurarComprometidosSinPedido();
   }
 
+  @Post('reservas/reconciliar')
+  @AuthType('write')
+  async reconciliarReservas(
+    @Query('antiguedadMinutos') antiguedadMinutos?: string,
+  ) {
+    return this.stkExistenciaService.reconciliarReservasHuerfanas(
+      Number(antiguedadMinutos) || 30,
+    );
+  }
+
+  @Get('reservas/:externalId')
+  @AuthType('dashboard')
+  async obtenerTrazabilidadReserva(@Param('externalId') externalId: string) {
+    return this.stkExistenciaService.obtenerTrazabilidadReserva(externalId);
+  }
+
   @Get(':item/:deposito')
-  async findOne(@Param('item') item: string, @Param('deposito') deposito: string) {
+  async findOne(
+    @Param('item') item: string,
+    @Param('deposito') deposito: string,
+  ) {
     return this.stkExistenciaService.findOne(item, deposito);
   }
 
@@ -41,11 +69,18 @@ export class StkExistenciaController {
     @Param('deposito') deposito: string,
     @Body() updateStkExistenciaDto: UpdateStkExistenciaDto,
   ) {
-    return this.stkExistenciaService.update(item, deposito, updateStkExistenciaDto);
+    return this.stkExistenciaService.update(
+      item,
+      deposito,
+      updateStkExistenciaDto,
+    );
   }
 
   @Delete(':item/:deposito')
-  async remove(@Param('item') item: string, @Param('deposito') deposito: string) {
+  async remove(
+    @Param('item') item: string,
+    @Param('deposito') deposito: string,
+  ) {
     return this.stkExistenciaService.remove(item, deposito);
   }
 }

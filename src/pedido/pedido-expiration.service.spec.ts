@@ -8,8 +8,7 @@ describe('PedidoExpirationService', () => {
   const originalEnabled = process.env.PEDIDO_TRANSFER_APPROVAL_ENABLED;
   const originalOpenHour = process.env.PEDIDO_EXPIRATION_OPEN_HOUR;
   const originalCloseHour = process.env.PEDIDO_EXPIRATION_CLOSE_HOUR;
-  const originalMondayOpenHour =
-    process.env.PEDIDO_EXPIRATION_MONDAY_OPEN_HOUR;
+  const originalMondayOpenHour = process.env.PEDIDO_EXPIRATION_MONDAY_OPEN_HOUR;
 
   afterEach(() => {
     jest.useRealTimers();
@@ -35,8 +34,7 @@ describe('PedidoExpirationService', () => {
     if (originalMondayOpenHour === undefined) {
       delete process.env.PEDIDO_EXPIRATION_MONDAY_OPEN_HOUR;
     } else {
-      process.env.PEDIDO_EXPIRATION_MONDAY_OPEN_HOUR =
-        originalMondayOpenHour;
+      process.env.PEDIDO_EXPIRATION_MONDAY_OPEN_HOUR = originalMondayOpenHour;
     }
   });
 
@@ -53,14 +51,22 @@ describe('PedidoExpirationService', () => {
       aprobarTransferencia: jest.fn(),
       cancelarPedidoPendiente: jest.fn().mockResolvedValue(undefined),
     };
+    const stockService = {
+      reconciliarReservasHuerfanas: jest.fn().mockResolvedValue({
+        revisadas: 0,
+        liberadas: [],
+        confirmadas: [],
+      }),
+    };
 
     const service = new PedidoExpirationService(
       pedidoRepo as any,
       cobrosService as any,
       pedidoService as any,
+      stockService as any,
     );
 
-    return { service, pedidoRepo, cobrosService, pedidoService };
+    return { service, pedidoRepo, cobrosService, pedidoService, stockService };
   }
 
   it.each(['false', '0', 'no', 'off', ' FALSE '])(
@@ -111,8 +117,9 @@ describe('PedidoExpirationService', () => {
       comprobante_tipo: 'FX',
       comprobante_numero: 'X 00001 00000004',
     };
-    const { service, pedidoRepo, cobrosService, pedidoService } =
-      createService([pedido]);
+    const { service, pedidoRepo, cobrosService, pedidoService } = createService(
+      [pedido],
+    );
     cobrosService.tieneCobroFactura.mockResolvedValueOnce(true);
 
     await service.scheduledTransferApproval();

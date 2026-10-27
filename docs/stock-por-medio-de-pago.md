@@ -69,6 +69,28 @@ La restauracion debe ejecutarse sin creaciones, aprobaciones o cancelaciones de
 pedidos en paralelo, porque el stock del ERP y los pedidos viven en conexiones
 de base de datos diferentes y no comparten una transaccion distribuida.
 
+## Reservas persistentes y reconciliacion
+
+Cada reserva nueva se registra en `stock_reserva` y `stock_reserva_item` dentro
+de la misma transaccion que modifica `stk_existencia`. El pedido guarda el
+identificador en `pedido.stock_reserva_id`. Los estados `RESERVADA`,
+`CONFIRMADA` y `LIBERADA` hacen idempotentes los reintentos y conservan la fecha
+y el motivo del ultimo movimiento. `stock_reserva_evento` conserva el historial
+completo sin sobrescribir eventos anteriores. La trazabilidad de un intento se
+consulta con `GET /stk-existencia/reservas/:externalId`.
+
+La reconciliacion se ejecuta cada 15 minutos y revisa por defecto reservas con
+mas de 30 minutos. Mantiene las asociadas a pedidos `PENDIENTE`, `ERROR_STOCK` o
+`REQUIERE_ATENCION`, confirma las de pedidos aprobados y libera las que no tienen
+pedido o pertenecen a pedidos cancelados. Se puede ejecutar manualmente con
+`POST /stk-existencia/reservas/reconciliar?antiguedadMinutos=30`.
+
+Variables disponibles:
+
+- `STOCK_RESERVA_RECONCILIATION_ENABLED` habilita o pausa el proceso.
+- `STOCK_RESERVA_RECONCILIATION_CRON` configura su frecuencia.
+- `STOCK_RESERVA_RECONCILIATION_AGE_MIN` configura la antiguedad minima.
+
 ## Transicion desde el modelo anterior
 
 El modelo nuevo solo debe desplegarse cuando no queden compromisos creados con

@@ -25,6 +25,9 @@ export class Pedido {
   @Column()
   external_id: string; // ID de Nave
 
+  @Column({ type: 'varchar', length: 36, nullable: true })
+  stock_reserva_id: string | null;
+
   @Column()
   total: number;
 
