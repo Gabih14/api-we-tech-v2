@@ -5,6 +5,7 @@ import { In, IsNull, Not, Repository } from 'typeorm';
 import { Pedido } from './entities/pedido.entity';
 import { CobrosService } from 'src/vta-comprobante/cobros.service';
 import { PedidoService } from './pedido.service';
+import { StkExistenciaService } from 'src/stk-existencia/stk-existencia.service';
 
 type BusinessLocalParts = {
   weekday: string;
@@ -21,14 +22,14 @@ export class PedidoExpirationService {
   private cancellationPauseLogged = false;
   private transferApprovalPauseLogged = false;
   private readonly businessTimezone =
-    process.env.PEDIDO_EXPIRATION_TIMEZONE ||
-    'America/Argentina/Buenos_Aires';
+    process.env.PEDIDO_EXPIRATION_TIMEZONE || 'America/Argentina/Buenos_Aires';
 
   constructor(
     @InjectRepository(Pedido, 'back')
     private readonly pedidoRepo: Repository<Pedido>,
     private readonly cobrosService: CobrosService,
     private readonly pedidoService: PedidoService,
+    private readonly stockService: StkExistenciaService,
   ) {}
 
   async run(ttlMin = Number(process.env.PEDIDO_TTL_MIN || 30)) {
@@ -87,10 +88,12 @@ export class PedidoExpirationService {
             continue;
           }
 
-          if (await this.cobrosService.tieneCobroFactura(
-            pedido.comprobante_tipo,
-            pedido.comprobante_numero,
-          )) {
+          if (
+            await this.cobrosService.tieneCobroFactura(
+              pedido.comprobante_tipo,
+              pedido.comprobante_numero,
+            )
+          ) {
             await this.marcarRequiereAtencion(pedido);
             continue;
           }
@@ -192,6 +195,30 @@ export class PedidoExpirationService {
           `[${pedido.external_id}] Error en aprobacion automatica: ${e?.message || e}`,
         );
       }
+    }
+  }
+
+  @Cron(process.env.STOCK_RESERVA_RECONCILIATION_CRON || '*/15 * * * *')
+  async scheduledStockReconciliation() {
+    const enabled =
+      process.env.STOCK_RESERVA_RECONCILIATION_ENABLED?.trim().toLowerCase();
+    if (['false', '0', 'no', 'off'].includes(enabled ?? '')) return;
+
+    const antiguedadMinutos = Number(
+      process.env.STOCK_RESERVA_RECONCILIATION_AGE_MIN || 30,
+    );
+    try {
+      const resultado =
+        await this.stockService.reconciliarReservasHuerfanas(antiguedadMinutos);
+      if (resultado.liberadas.length || resultado.confirmadas.length) {
+        this.logger.warn(
+          `Reconciliacion de reservas: ${resultado.liberadas.length} liberadas, ${resultado.confirmadas.length} confirmadas`,
+        );
+      }
+    } catch (error) {
+      this.logger.error(
+        `Fallo reconciliando reservas de stock: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
 

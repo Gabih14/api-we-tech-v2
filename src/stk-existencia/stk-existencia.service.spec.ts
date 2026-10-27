@@ -1,4 +1,7 @@
 import { StkExistenciaService } from './stk-existencia.service';
+import { StockReserva } from './entities/stock-reserva.entity';
+import { StockReservaItem } from './entities/stock-reserva-item.entity';
+import { StockReservaEvento } from './entities/stock-reserva-evento.entity';
 
 describe('StkExistenciaService', () => {
   const repo = {
@@ -74,6 +77,84 @@ describe('StkExistenciaService', () => {
       lock: { mode: 'pessimistic_write' },
     });
     expect(repo.save).toHaveBeenCalledWith([existencia]);
+  });
+
+  it('persiste la reserva en la misma transaccion que el stock', async () => {
+    const existencia = {
+      item: 'ITEM-1',
+      deposito: 'DEPOSITO',
+      cantidad: '2',
+      comprometido: '0',
+    };
+    const reservaRepo = {
+      findOne: jest.fn().mockResolvedValue(null),
+      create: jest.fn((value) => value),
+      save: jest.fn(async (value) => value),
+    };
+    const reservaItemRepo = {
+      delete: jest.fn(),
+      create: jest.fn((value) => value),
+      save: jest.fn(async (value) => value),
+    };
+    const reservaEventoRepo = {
+      create: jest.fn((value) => value),
+      save: jest.fn(async (value) => value),
+    };
+    repo.find.mockResolvedValue([existencia]);
+    repo.manager.transaction.mockImplementation(async (callback) =>
+      callback({
+        getRepository: (entity) => {
+          if (entity === StockReserva) return reservaRepo;
+          if (entity === StockReservaItem) return reservaItemRepo;
+          if (entity === StockReservaEvento) return reservaEventoRepo;
+          return repo;
+        },
+      }),
+    );
+
+    const resultado = await service.reservarStockLote(
+      [{ item: 'ITEM-1', cantidad: 2 }],
+      { externalId: 'pedido-1' },
+    );
+
+    expect(resultado[0].reservaId).toBeTruthy();
+    expect(reservaRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({ externalId: 'pedido-1', estado: 'RESERVADA' }),
+    );
+    expect(reservaItemRepo.save).toHaveBeenCalledWith([
+      expect.objectContaining({
+        item: 'ITEM-1',
+        deposito: 'DEPOSITO',
+        cantidad: '2',
+      }),
+    ]);
+    expect(reservaEventoRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({ tipo: 'RESERVADA' }),
+    );
+    expect(existencia).toMatchObject({ cantidad: '0', comprometido: '2' });
+  });
+
+  it('no libera dos veces una reserva persistida', async () => {
+    const reservaRepo = {
+      findOne: jest.fn().mockResolvedValue({
+        id: 'reserva-1',
+        estado: 'LIBERADA',
+      }),
+    };
+    repo.manager.transaction.mockImplementation(async (callback) =>
+      callback({
+        getRepository: (entity) =>
+          entity === StockReserva ? reservaRepo : repo,
+      }),
+    );
+
+    await service.liberarStockLote(
+      [{ item: 'ITEM-1', cantidad: 1, deposito: 'DEPOSITO' }],
+      'reserva-1',
+    );
+
+    expect(repo.find).not.toHaveBeenCalled();
+    expect(repo.save).not.toHaveBeenCalled();
   });
 
   it('no reserva parcialmente cuando productos repetidos superan existencia', async () => {
