@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { DataSource, Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
 import { CreateVtaComprobanteAsientoDto } from './dto/create-vta_comprobante_asiento.dto';
@@ -7,6 +11,17 @@ import { CntAsiento } from 'src/cnt-asiento/entities/cnt-asiento.entity';
 import { CntMovimiento } from 'src/cnt-movimiento/entities/cnt-movimiento.entity';
 import { VtaComprobante } from 'src/vta-comprobante/entities/vta-comprobante.entity';
 import { VtaComprobanteAsiento } from './entities/vta_comprobante_asiento.entity';
+
+const CUENTAS_VENTA: Record<string, string> = {
+  'MERCADERIA FILAMENTO': '4.1.01.001.0000',
+  'VENTA DE FILAMENTO': '4.1.01.001.0000',
+  'MERCADERIA IMPRESORA': '4.1.01.002.0000',
+  'MERCADERIA REPUESTOS': '4.1.01.003.0000',
+  'VENTA SERV TECNICO': '4.1.01.005.0000',
+  'VENTA CURSOS': '4.1.01.006.0000',
+  'VENTA ENVIO CLIENTE': '4.1.01.007.0000',
+  'MERCADERIA ACCESORIO': '4.1.01.008.0000',
+};
 
 @Injectable()
 export class VtaComprobanteAsientoService {
@@ -22,7 +37,6 @@ export class VtaComprobanteAsientoService {
     private readonly linkRepo: Repository<VtaComprobanteAsiento>,
   ) {}
 
-  // Genera cnt_asiento + cnt_movimiento y vincula en vta_comprobante_asiento
   // Genera cnt_asiento + cnt_movimiento y vincula en vta_comprobante_asiento
   async createAsientoForComprobante(
     tipo: string,
@@ -50,6 +64,81 @@ export class VtaComprobanteAsientoService {
     await qr.startTransaction();
 
     try {
+      const items: Array<{
+        item: string;
+        rubro: string | null;
+        importe: string | null;
+        iva: string | null;
+      }> = await qr.query(
+        `SELECT ci.item, COALESCE(NULLIF(ci.rubro, ''), i.rubro) AS rubro,
+                ci.importe, ci.iva
+         FROM vta_comprobante_item ci
+         LEFT JOIN stk_item i ON i.id = ci.item
+         WHERE ci.tipo = ? AND ci.comprobante = ?
+         ORDER BY ci.linea`,
+        [tipo, comprobante],
+      );
+      const totalCentavos = Math.round(total * 100);
+      const ivaCentavos = Math.round(Number(comp.iva ?? 0) * 100);
+      if (
+        !Number.isSafeInteger(totalCentavos) ||
+        !Number.isSafeInteger(ivaCentavos) ||
+        totalCentavos <= 0 ||
+        ivaCentavos < 0 ||
+        ivaCentavos > totalCentavos ||
+        !items.length
+      ) {
+        throw new BadRequestException(
+          'Importes o items invalidos para el asiento',
+        );
+      }
+
+      const haberes = new Map<string, number>();
+      let ivaItems = 0;
+      for (const item of items) {
+        const importe = Math.round(Number(item.importe) * 100);
+        const iva = Math.round(Number(item.iva ?? 0) * 100);
+        if (
+          item.importe == null ||
+          !Number.isSafeInteger(importe) ||
+          !Number.isSafeInteger(iva) ||
+          importe < 0 ||
+          iva < 0 ||
+          iva > importe
+        ) {
+          throw new BadRequestException(
+            `Importe invalido para item ${item.item}`,
+          );
+        }
+        ivaItems += iva;
+        if (importe === 0) continue;
+        const cuenta = CUENTAS_VENTA[item.rubro?.trim() ?? ''];
+        if (!cuenta) {
+          throw new BadRequestException(
+            `Sin cuenta de ventas para item ${item.item}, rubro ${item.rubro ?? 'sin rubro'}`,
+          );
+        }
+        // El importe del item ya incluye descuentos y no incluye el IVA de la factura.
+        haberes.set(cuenta, (haberes.get(cuenta) ?? 0) + importe);
+      }
+      const diferencia =
+        totalCentavos -
+        ivaCentavos -
+        [...haberes.values()].reduce((suma, importe) => suma + importe, 0);
+      if (
+        ivaItems !== ivaCentavos ||
+        Math.abs(diferencia) > 1 ||
+        !haberes.size
+      ) {
+        throw new BadRequestException(
+          'El detalle del Haber no coincide con el total del comprobante',
+        );
+      }
+      // Absorber un centavo de redondeo en la cuenta de ventas de mayor importe.
+      const cuentaMayor = [...haberes].sort((a, b) => b[1] - a[1])[0][0];
+      haberes.set(cuentaMayor, haberes.get(cuentaMayor)! + diferencia);
+      if (ivaCentavos) haberes.set('2.1.04.001.0000', ivaCentavos);
+
       // 1) Resolver ejercicio contable real por fecha (Opción B)
       const rows: Array<{ id: string }> = await qr.query(
         `SELECT id
@@ -111,20 +200,23 @@ export class VtaComprobanteAsientoService {
             : '1.1.01.001.0000';
 
       const movs: Partial<CntMovimiento>[] = [
+        ...[...haberes]
+          .filter(([, importe]) => importe !== 0)
+          .map(([cuenta, importe], index) => ({
+            ejercicio,
+            asiento: asiento.id,
+            numero: index + 1,
+            cuenta,
+            debe: null,
+            haber: (importe / 100) as any,
+            leyenda: null,
+            proyecto: null,
+          })),
         {
           ejercicio,
           asiento: asiento.id,
-          numero: 1,
-          cuenta: '1.1.05.001.0000', // Haber - Ventas
-          debe: null,
-          haber: total as any,
-          leyenda: null,
-          proyecto: null,
-        },
-        {
-          ejercicio,
-          asiento: asiento.id,
-          numero: 2,
+          numero:
+            [...haberes.values()].filter((importe) => importe !== 0).length + 1,
           cuenta: cuentaDebe, // Debe - Deudores por venta o Caja/Banco
           debe: total as any,
           haber: null,
