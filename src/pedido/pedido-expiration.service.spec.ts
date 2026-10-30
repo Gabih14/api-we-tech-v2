@@ -69,6 +69,22 @@ describe('PedidoExpirationService', () => {
     return { service, pedidoRepo, cobrosService, pedidoService, stockService };
   }
 
+  it('renueva el vencimiento desde la recuperacion sin cambiar la fecha de creacion', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-10-28T16:00:00Z'));
+    const pedido = {
+      external_id: 'recuperado', metodo_pago: 'online',
+      creado: new Date('2026-01-01T12:00:00Z'),
+      recuperado: new Date('2026-10-28T15:55:00Z'),
+    };
+    const { service, pedidoRepo, pedidoService } = createService();
+    pedidoRepo.find.mockResolvedValueOnce([pedido]).mockResolvedValueOnce([]);
+    await expect(service.run(30)).resolves.toMatchObject({ expirados: 0 });
+    expect(pedidoService.cancelarPedidoPendiente).not.toHaveBeenCalled();
+    jest.setSystemTime(new Date('2026-10-28T16:26:00Z'));
+    pedidoRepo.find.mockResolvedValueOnce([pedido]).mockResolvedValueOnce([]);
+    await expect(service.run(30)).resolves.toMatchObject({ expirados: 1 });
+  });
+
   it.each(['false', '0', 'no', 'off', ' FALSE '])(
     'pausa la aprobacion automatica con %s',
     async (value) => {

@@ -10,7 +10,10 @@ import {
   Param,
   NotFoundException,
   Query,
+  ValidationPipe,
 } from '@nestjs/common';
+import { CancelarPedidoDto } from './dto/cancelar-pedido.dto';
+import { RecuperarPedidoDto } from './dto/recuperar-pedido.dto';
 import { PedidoService } from './pedido.service';
 import { CreatePedidoDto } from './dto/create-pedido.dto';
 import { ApiTokenGuard } from '../common/guards/api-token.guard';
@@ -68,7 +71,10 @@ export class PedidoController {
     // Si éxito, retorna 200 OK
     const resultado = await this.pedidoService.procesarNotificacionDeNave(body);
 
-    return { message: 'Notificación procesada correctamente.', estado: resultado.estado };
+    return {
+      message: 'Notificación procesada correctamente.',
+      estado: resultado.estado,
+    };
   }
 
   @Post('nave-webhook/test')
@@ -88,7 +94,11 @@ export class PedidoController {
 
     const resultado = await this.pedidoService.procesarNotificacionDeNave(body);
 
-    return { message: 'Notificación procesada correctamente.', estado: resultado.estado, test: true };
+    return {
+      message: 'Notificación procesada correctamente.',
+      estado: resultado.estado,
+      test: true,
+    };
   }
 
   @Get()
@@ -112,8 +122,14 @@ export class PedidoController {
   @Post(':externalId/cancelar')
   @AuthType('write')
   @HttpCode(HttpStatus.OK)
-  async cancelarPedido(@Param('externalId') externalId: string) {
-    const pedido = await this.pedidoService.cancelarPedidoPendiente(externalId);
+  async cancelarPedido(
+    @Param('externalId') externalId: string,
+    @Body(new ValidationPipe({ transform: true })) dto: CancelarPedidoDto,
+  ) {
+    const pedido = await this.pedidoService.cancelarPedidoPendiente(
+      externalId,
+      dto?.motivo,
+    );
     return {
       message: 'Pedido cancelado correctamente',
       pedido,
@@ -148,8 +164,14 @@ export class PedidoController {
   @Post(':externalId/cancelar-manual')
   @AuthType('write')
   @HttpCode(HttpStatus.OK)
-  async cancelarManual(@Param('externalId') externalId: string) {
-    const resultado = await this.pedidoService.cancelarManual(externalId);
+  async cancelarManual(
+    @Param('externalId') externalId: string,
+    @Body(new ValidationPipe({ transform: true })) dto: CancelarPedidoDto,
+  ) {
+    const resultado = await this.pedidoService.cancelarManual(
+      externalId,
+      dto?.motivo,
+    );
     return {
       message: resultado.yaCancelado
         ? 'El pedido ya estaba cancelado manualmente'
@@ -161,11 +183,31 @@ export class PedidoController {
   @Post(':externalId/rechazar')
   @AuthType('write')
   @HttpCode(HttpStatus.OK)
-  async rechazarTransferencia(@Param('externalId') externalId: string) {
-    const pedido = await this.pedidoService.rechazarTransferencia(externalId);
+  async rechazarTransferencia(
+    @Param('externalId') externalId: string,
+    @Body(new ValidationPipe({ transform: true })) dto: CancelarPedidoDto,
+  ) {
+    const pedido = await this.pedidoService.rechazarTransferencia(
+      externalId,
+      dto?.motivo,
+    );
     return {
       message: 'Pedido rechazado correctamente',
       pedido,
     };
+  }
+
+  @Post(':externalId/recuperar')
+  @AuthType('write')
+  @HttpCode(HttpStatus.OK)
+  async recuperar(
+    @Param('externalId') externalId: string,
+    @Body(new ValidationPipe({ transform: true })) dto: RecuperarPedidoDto,
+  ) {
+    const pedido = await this.pedidoService.recuperarPedido(
+      externalId,
+      dto.estado,
+    );
+    return { message: 'Pedido recuperado correctamente', pedido };
   }
 }

@@ -58,6 +58,23 @@ describe('StkExistenciaService', () => {
     );
   });
 
+  it('reutiliza una reserva activa sin volver a descontar existencia', async () => {
+    const reservaRepo = {
+      findOne: jest.fn().mockResolvedValue({ id: 'reserva-1', estado: 'RESERVADA' }),
+      save: jest.fn(async (value) => value),
+    };
+    const itemsRepo = { find: jest.fn().mockResolvedValue([{ item: 'ITEM-1', cantidad: '2', deposito: 'DEPOSITO' }]) };
+    repo.manager.transaction.mockImplementation(async (callback) => callback({
+      getRepository: (target) => target === StockReserva ? reservaRepo : target === StockReservaItem ? itemsRepo : repo,
+    }));
+    await expect(service.reservarStockLote([{ item: 'ITEM-1', cantidad: 2 }], { externalId: 'pedido-1' })).resolves.toEqual([
+      { item: 'ITEM-1', cantidad: 2, deposito: 'DEPOSITO', reservaId: 'reserva-1' },
+    ]);
+    expect(repo.find).not.toHaveBeenCalled();
+    expect(repo.save).not.toHaveBeenCalled();
+    expect(reservaRepo.save).toHaveBeenCalledWith(expect.objectContaining({ actualizado: expect.any(Date) }));
+  });
+
   it('reserva un lote restando existencia y aumentando compromiso', async () => {
     const existencia = {
       item: 'ITEM-1',

@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { LessThan, Repository } from 'typeorm';
+import { IsNull, LessThan, Repository } from 'typeorm';
 import { randomUUID } from 'node:crypto';
 import { StkExistencia } from './entities/stk-existencia.entity';
 import { CreateStkExistenciaDto } from './dto/create-stk-existencia.dto';
@@ -351,6 +351,8 @@ export class StkExistenciaService {
           lock: { mode: 'pessimistic_write' },
         });
         if (reservaPersistida?.estado === 'RESERVADA') {
+          reservaPersistida.actualizado = new Date();
+          await reservaRepo.save(reservaPersistida);
           const items = await reservaItemRepo.find({
             where: { reservaId: reservaPersistida.id },
             order: { id: 'ASC' },
@@ -884,7 +886,10 @@ export class StkExistenciaService {
       this.stkExistenciaRepository.manager.getRepository(StockReservaItem);
     const pedidoRepo = this.pedidoItemRepository.manager.getRepository(Pedido);
     const candidatas = await reservaRepo.find({
-      where: { estado: 'RESERVADA', creado: LessThan(limite) },
+      where: [
+        { estado: 'RESERVADA', actualizado: LessThan(limite) },
+        { estado: 'RESERVADA', actualizado: IsNull(), creado: LessThan(limite) },
+      ],
       order: { creado: 'ASC' },
     });
     const liberadas: Array<{ reservaId: string; externalId: string }> = [];

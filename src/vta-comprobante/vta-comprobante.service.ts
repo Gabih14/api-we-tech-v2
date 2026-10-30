@@ -1,5 +1,5 @@
 // src/vta-comprobante/vta-comprobante.service.ts
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, DeepPartial, Repository } from 'typeorm';
 import { VtaComprobante } from './entities/vta-comprobante.entity';
@@ -274,18 +274,49 @@ export class VtaComprobanteService {
   }
 
   // 🧾 Crear comprobante a partir de un pedido aprobado
-  async crearDesdePedido(pedido: Pedido): Promise<VtaComprobante> {
+  async crearDesdePedido(
+    pedido: Pedido,
+    marcarCobradoOnline = true,
+  ): Promise<VtaComprobante> {
     if (!pedido) throw new NotFoundException('Pedido no encontrado');
 
     const referenciaPedido = buildPedidoComprobanteReference(
       pedido.external_id,
     );
+    if (
+      !marcarCobradoOnline &&
+      pedido.comprobante_tipo &&
+      pedido.comprobante_numero
+    ) {
+      const asociado = await this.comprobanteRepository.findOne({
+        where: {
+          tipo: pedido.comprobante_tipo,
+          comprobante: pedido.comprobante_numero,
+        },
+      });
+      if (asociado) {
+        if (!this.validarPertenenciaAlPedido(asociado, pedido).coincide) {
+          throw new ConflictException(
+            'El comprobante asociado no pertenece al pedido',
+          );
+        }
+        return asociado;
+      }
+    }
     const comprobanteExistente = await this.comprobanteRepository.findOne({
       where: { observaciones_int: referenciaPedido },
       order: { fecha: 'DESC' },
     });
 
     if (comprobanteExistente) {
+      if (
+        !marcarCobradoOnline &&
+        !this.validarPertenenciaAlPedido(comprobanteExistente, pedido).coincide
+      ) {
+        throw new ConflictException(
+          'El comprobante existente no coincide con el pedido',
+        );
+      }
       return comprobanteExistente;
     }
 
@@ -397,7 +428,7 @@ export class VtaComprobanteService {
       : 0;
 
     const cobroFields: Partial<VtaComprobante> =
-      (pedido.metodo_pago ?? 'online') === 'transfer'
+      (pedido.metodo_pago ?? 'online') === 'transfer' || !marcarCobradoOnline
         ? { cobrado: 0, fecha_cobro: undefined }
         : { cobrado: totalImporte };
 
@@ -494,7 +525,7 @@ export class VtaComprobanteService {
       await this.vtaComprobanteAsientoService.createAsientoForComprobante(
         comprobanteGuardado.tipo,
         comprobanteGuardado.comprobante,
-        pedido.metodo_pago ?? 'online',
+        marcarCobradoOnline ? (pedido.metodo_pago ?? 'online') : 'transfer',
       );
 
       await registrarAccionComprobante(

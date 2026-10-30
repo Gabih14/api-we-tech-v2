@@ -255,11 +255,12 @@ export class PedidoExpirationService {
     ttlMin: number,
     now: Date,
   ): boolean {
-    if (!(pedido.creado instanceof Date) || !Number.isFinite(ttlMin)) {
+    const inicio = pedido.recuperado ?? pedido.creado;
+    if (!(inicio instanceof Date) || !Number.isFinite(ttlMin)) {
       return false;
     }
 
-    const expiresAt = this.addBusinessMinutes(pedido.creado, ttlMin);
+    const expiresAt = this.addBusinessMinutes(inicio, ttlMin);
     return expiresAt.getTime() <= now.getTime();
   }
 

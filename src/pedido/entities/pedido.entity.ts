@@ -34,6 +34,12 @@ export class Pedido {
   @Column({ default: 'PENDIENTE' })
   estado: PedidoEstado;
 
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  motivo_cancelacion: string | null;
+
+  @Column({ type: 'timestamp', nullable: true })
+  recuperado: Date | null;
+
   @OneToMany(() => PedidoItem, (item) => item.pedido, { cascade: true })
   productos: PedidoItem[];
 
@@ -41,7 +47,7 @@ export class Pedido {
   creado: Date;
 
   @Column({ type: 'timestamp', nullable: true })
-  aprobado: Date;
+  aprobado: Date | null;
 
   @Column()
   cliente_mail: string;
