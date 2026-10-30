@@ -110,6 +110,49 @@ describe('VtaComprobanteService crearDesdePedido', () => {
     );
   });
 
+  it('crea el comprobante online recuperado sin cobro y con asiento de deuda', async () => {
+    const pedido = pedidoBase([{ nombre: 'ITEM', cantidad: 1, precio_unitario: 100, subtotal: 100 }], 100);
+    pedido.metodo_pago = 'online';
+    const comp = await service.crearDesdePedido(pedido, false);
+    expect(comp.cobrado).toBe(0);
+    expect(vtaComprobanteAsientoService.createAsientoForComprobante).toHaveBeenCalledWith(
+      comp.tipo, comp.comprobante, 'transfer',
+    );
+  });
+
+  it('conserva el comportamiento de cobro online de los flujos actuales', async () => {
+    const pedido = pedidoBase([{ nombre: 'ITEM', cantidad: 1, precio_unitario: 100, subtotal: 100 }], 100);
+    pedido.metodo_pago = 'online';
+    const comp = await service.crearDesdePedido(pedido);
+    expect(comp.cobrado).toBe(100);
+    expect(vtaComprobanteAsientoService.createAsientoForComprobante).toHaveBeenCalledWith(
+      comp.tipo, comp.comprobante, 'online',
+    );
+  });
+
+  it('conserva el comprobante asociado y sus cobros al recuperar', async () => {
+    const pedido = pedidoBase([], 100);
+    pedido.comprobante_tipo = 'FX';
+    pedido.comprobante_numero = 'X 1';
+    const existente = { tipo: 'FX', comprobante: 'X 1', cobrado: 100,
+      cliente: pedido.cliente_cuit, total: 100, observaciones_int: 'PEDIDO_WEB:pedido-test-123' } as VtaComprobante;
+    comprobanteRepository.findOne.mockResolvedValueOnce(existente);
+    await expect(service.crearDesdePedido(pedido, false)).resolves.toBe(existente);
+    expect(comprobanteRepository.save).not.toHaveBeenCalled();
+    expect(vtaComprobanteAsientoService.createAsientoForComprobante).not.toHaveBeenCalled();
+  });
+
+  it('no reutiliza comprobantes de otro pedido o con total distinto', async () => {
+    const pedido = pedidoBase([], 100);
+    pedido.comprobante_tipo = 'FX';
+    pedido.comprobante_numero = 'X 1';
+    comprobanteRepository.findOne.mockResolvedValueOnce({
+      cliente: pedido.cliente_cuit, total: 200, observaciones_int: 'PEDIDO_WEB:otro',
+    } as VtaComprobante);
+    await expect(service.crearDesdePedido(pedido, false)).rejects.toThrow('no pertenece');
+    expect(comprobanteRepository.save).not.toHaveBeenCalled();
+  });
+
   it('reutiliza el comprobante existente del pedido en reintentos', async () => {
     const existente = {
       tipo: 'FX',

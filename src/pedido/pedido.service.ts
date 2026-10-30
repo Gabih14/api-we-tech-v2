@@ -514,6 +514,7 @@ export class PedidoService {
           );
         }
         pedidoGuardado.estado = 'CANCELADO';
+        pedidoGuardado.motivo_cancelacion = 'Fallo al generar el comprobante';
         await this.pedidoRepo.save(pedidoGuardado);
         throw err;
       }
@@ -593,6 +594,8 @@ export class PedidoService {
         );
       }
       pedidoGuardado.estado = 'CANCELADO';
+      pedidoGuardado.motivo_cancelacion =
+        'Fallo al generar la intencion de pago';
       await this.pedidoRepo.save(pedidoGuardado);
       throw err;
     }
@@ -1155,6 +1158,7 @@ export class PedidoService {
           break;
         }
         pedido.estado = 'CANCELADO';
+        pedido.motivo_cancelacion = `Pago ${estado.toLowerCase()}`;
         await this.stockService.liberarStockLote(
           pedido.productos.map((producto) => ({
             item: producto.nombre,
@@ -1326,6 +1330,10 @@ export class PedidoService {
     externalId: string,
     motivo = 'Pedido cancelado por administracion',
   ): Promise<Pedido> {
+    motivo = this.normalizarMotivoCancelacion(
+      motivo,
+      'Pedido cancelado por administracion',
+    );
     const pedido = await this.pedidoRepo.findOne({
       where: { external_id: externalId },
       relations: ['productos'],
@@ -1358,6 +1366,7 @@ export class PedidoService {
     );
 
     pedido.estado = 'CANCELADO';
+    pedido.motivo_cancelacion = motivo;
     await this.eliminarComprobanteSiExiste(pedido);
     const pedidoCancelado = await this.pedidoRepo.save(pedido);
 
@@ -1368,6 +1377,193 @@ export class PedidoService {
     }
 
     return pedidoCancelado;
+  }
+
+  private normalizarMotivoCancelacion(
+    motivo: unknown,
+    predeterminado: string,
+  ): string {
+    if (motivo == null) return predeterminado;
+    if (typeof motivo !== 'string' || [...motivo.trim()].length > 255) {
+      throw new BadRequestException(
+        'El motivo debe ser un texto de hasta 255 caracteres',
+      );
+    }
+    return motivo.trim() || predeterminado;
+  }
+
+  async recuperarPedido(
+    externalId: string,
+    estado: 'PENDIENTE' | 'APROBADO',
+  ): Promise<Pedido> {
+    if (estado !== 'PENDIENTE' && estado !== 'APROBADO') {
+      throw new BadRequestException('El estado debe ser PENDIENTE o APROBADO');
+    }
+
+    let pedido!: Pedido;
+    let stockConfirmado: StockConfirmado[] = [];
+    let reservaReactivada = false;
+    let reservasDelIntento: Array<{
+      item: string;
+      cantidad: number;
+      deposito: string;
+    }> = [];
+    let compensacionIntentada = false;
+    const solicitudesStock = () =>
+      pedido.productos.map((producto) => ({
+        item: producto.nombre,
+        cantidad: producto.cantidad,
+        deposito: producto.deposito_reserva ?? undefined,
+      }));
+    const compensar = async () => {
+      compensacionIntentada = true;
+      if (stockConfirmado.length) {
+        await this.stockService.restaurarStockConfirmadoLote(
+          stockConfirmado,
+          pedido.stock_reserva_id ?? undefined,
+        );
+      }
+      if (reservaReactivada) {
+        await this.stockService.liberarStockLote(
+          reservasDelIntento,
+          pedido.stock_reserva_id ?? undefined,
+          'Fallo al recuperar el pedido',
+        );
+      }
+    };
+
+    try {
+      await this.pedidoRepo.manager.transaction(async (manager) => {
+        const repo = manager.getRepository(Pedido);
+        const encontrado = await repo.findOne({
+          where: { external_id: externalId },
+          relations: ['productos'],
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (!encontrado)
+          throw new NotFoundException(`Pedido ${externalId} no encontrado`);
+        pedido = encontrado;
+        if (
+          pedido.estado !== 'CANCELADO' &&
+          pedido.estado !== 'CANCELADO_MANUAL'
+        ) {
+          throw new ConflictException(
+            `Pedido ${externalId} no esta cancelado (estado: ${pedido.estado})`,
+          );
+        }
+        if (!pedido.productos?.length) {
+          throw new ConflictException(
+            `Pedido ${externalId} no tiene productos para recuperar`,
+          );
+        }
+
+        let trazabilidad: Awaited<
+          ReturnType<StkExistenciaService['obtenerTrazabilidadReserva']>
+        > | null = null;
+        try {
+          trazabilidad =
+            await this.stockService.obtenerTrazabilidadReserva(externalId);
+        } catch (error) {
+          if (!(error instanceof NotFoundException)) throw error;
+        }
+        if (
+          !trazabilidad &&
+          (pedido.estado === 'CANCELADO_MANUAL' || pedido.stock_reserva_id)
+        ) {
+          throw new ConflictException(
+            'El pedido requiere revision manual: no tiene trazabilidad de stock',
+          );
+        }
+        if (trazabilidad) {
+          const productos = pedido.productos
+            .map((p) => JSON.stringify([p.nombre, Number(p.cantidad)]))
+            .sort();
+          const items = trazabilidad.items
+            .map((p) => JSON.stringify([p.item, Number(p.cantidad)]))
+            .sort();
+          if (JSON.stringify(productos) !== JSON.stringify(items)) {
+            throw new ConflictException(
+              'La reserva no coincide con los productos del pedido',
+            );
+          }
+        }
+        const reservaConfirmada = trazabilidad?.reserva.estado === 'CONFIRMADA';
+        if (reservaConfirmada && estado === 'PENDIENTE') {
+          throw new ConflictException(
+            'El stock ya esta confirmado; solo se puede recuperar a APROBADO',
+          );
+        }
+
+        try {
+          if (reservaConfirmada) {
+            pedido.stock_reserva_id = trazabilidad!.reserva.id;
+          } else {
+            const reservas = await this.stockService.reservarStockLote(
+              pedido.productos.map((producto) => ({
+                item: producto.nombre,
+                cantidad: producto.cantidad,
+              })),
+              { externalId, reservaId: pedido.stock_reserva_id ?? undefined },
+            );
+            reservaReactivada = trazabilidad?.reserva.estado !== 'RESERVADA';
+            reservasDelIntento = reservas;
+            pedido.stock_reserva_id =
+              reservas.find((reserva) => reserva.reservaId)?.reservaId ??
+              pedido.stock_reserva_id;
+            pedido.productos.forEach((producto, index) => {
+              const reserva = reservas[index];
+              if (
+                !reserva ||
+                reserva.item !== producto.nombre ||
+                reserva.cantidad !== Number(producto.cantidad)
+              ) {
+                throw new ConflictException(
+                  'La reserva no coincide con los productos del pedido',
+                );
+              }
+              producto.deposito_reserva = reserva.deposito;
+            });
+          }
+
+          if (estado === 'APROBADO' && !reservaConfirmada) {
+            stockConfirmado = await this.stockService.confirmarStockLote(
+              solicitudesStock(),
+              pedido.stock_reserva_id ?? undefined,
+            );
+          }
+          if (estado === 'APROBADO' || pedido.metodo_pago === 'transfer') {
+            const comp = await this.vtaComprobanteService.crearDesdePedido(
+              pedido,
+              false,
+            );
+            pedido.comprobante_tipo = comp.tipo;
+            pedido.comprobante_numero = comp.comprobante;
+          }
+          pedido.estado = estado;
+          pedido.recuperado = new Date();
+          pedido.aprobado = estado === 'APROBADO' ? new Date() : null;
+          pedido = await repo.save(pedido);
+        } catch (error) {
+          await compensar();
+          throw error;
+        }
+      });
+    } catch (error) {
+      // Las conexiones de pedidos y stock no comparten la confirmacion de la transaccion.
+      if (
+        !compensacionIntentada &&
+        (reservaReactivada || stockConfirmado.length)
+      ) {
+        await compensar();
+      }
+      throw error;
+    }
+
+    if (estado === 'APROBADO') {
+      await this.registrarUsoCuponSiCorresponde(pedido);
+      await this.notificarPedidoAprobado(pedido);
+    }
+    return pedido;
   }
 
   async notificarDeliveryPedidoErrorStock(externalId: string): Promise<Pedido> {
@@ -1449,10 +1645,17 @@ export class PedidoService {
    * solo la cabecera del pedido; no consulta ni mueve items, stock o
    * comprobantes.
    */
-  async cancelarManual(externalId: string): Promise<{
+  async cancelarManual(
+    externalId: string,
+    motivo?: string,
+  ): Promise<{
     pedido: Pedido;
     yaCancelado: boolean;
   }> {
+    motivo = this.normalizarMotivoCancelacion(
+      motivo,
+      'Pedido cancelado manualmente por administracion',
+    );
     let pedido!: Pedido;
     let cancelacionNueva = false;
 
@@ -1480,6 +1683,7 @@ export class PedidoService {
       }
 
       pedido.estado = 'CANCELADO_MANUAL';
+      pedido.motivo_cancelacion = motivo;
       pedido = await pedidoRepo.save(pedido);
       cancelacionNueva = true;
     });
@@ -1613,6 +1817,11 @@ export class PedidoService {
       this.transferenciasEnAprobacion.delete(externalId);
     }
 
+    await this.notificarPedidoAprobado(pedido);
+    return { pedido, comprobante: comprobanteCreado };
+  }
+
+  private async notificarPedidoAprobado(pedido: Pedido): Promise<void> {
     // Notificaciones no críticas
     try {
       await this.notificarSecretaria(pedido);
@@ -1647,12 +1856,13 @@ export class PedidoService {
         console.error('delivery telegram', e);
       }
     }
-
-    return { pedido, comprobante: comprobanteCreado };
   }
 
   // ❌ Rechazar pedido por transferencia
-  async rechazarTransferencia(externalId: string): Promise<Pedido> {
+  async rechazarTransferencia(
+    externalId: string,
+    motivo?: string,
+  ): Promise<Pedido> {
     const pedido = await this.pedidoRepo.findOne({
       where: { external_id: externalId },
     });
@@ -1667,7 +1877,7 @@ export class PedidoService {
       );
     }
 
-    const cancelado = await this.cancelarPedidoPendiente(externalId);
+    const cancelado = await this.cancelarPedidoPendiente(externalId, motivo);
 
     console.log(`✅ Pedido transferencia ${externalId} rechazado manualmente`);
 
@@ -2914,7 +3124,7 @@ export class PedidoService {
 
       <div style="margin: 12px 0; font-size: 14px; color: #555;">
         <div><strong>Pedido:</strong> ${pedido.external_id}</div>
-        <div><strong>Motivo:</strong> ${motivo}</div>
+        <div><strong>Motivo:</strong> ${this.escapeHtml(motivo)}</div>
         <div><strong>Estado:</strong> ${pedido.estado}</div>
       </div>
 

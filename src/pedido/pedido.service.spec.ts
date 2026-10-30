@@ -2381,6 +2381,43 @@ describe('PedidoService recalculo de importes', () => {
     fetchSpy.mockRestore();
   });
 
+  it.each(['REJECTED', 'CANCELLED', 'REFUNDED'])('guarda la causa de cancelacion de Nave %s', async (estado) => {
+    createRepo.findOne.mockResolvedValueOnce({
+      id: 930, external_id: 'nave-cancelado', estado: 'PENDIENTE', metodo_pago: 'online',
+      productos: [{ nombre: 'ITEM-1', cantidad: 1, deposito_reserva: 'DEPOSITO' }],
+    });
+    jest.spyOn(service, 'obtenerTokenDeNave').mockResolvedValue('token');
+    const fetchSpy = jest.spyOn(global, 'fetch').mockResolvedValue({
+      headers: new Headers({ 'content-type': 'application/json' }),
+      json: async () => ({ status: { name: estado } }),
+    } as Response);
+    try {
+      await service.procesarNotificacionDeNave({
+        payment_check_url: 'https://api.ranty.io/payment', external_payment_id: 'nave-cancelado',
+      });
+      expect(createRepo.save).toHaveBeenCalledWith(expect.objectContaining({
+        estado: 'CANCELADO', motivo_cancelacion: `Pago ${estado.toLowerCase()}`,
+      }));
+    } finally { fetchSpy.mockRestore(); }
+  });
+
+  it.each(['online', 'transfer'] as const)('guarda la causa cuando falla la creacion de un pedido %s', async (metodo) => {
+    stkItemRepo.findOne.mockResolvedValue(itemConPrecio('ITEM-ONLINE', '10'));
+    if (metodo === 'online') {
+      (service.generarIntencionDePago as jest.Mock).mockRejectedValueOnce(new Error('fallo creacion'));
+    } else {
+      vtaComprobanteService.crearDesdePedido.mockRejectedValueOnce(new Error('fallo creacion'));
+    }
+    await expect(service.crear(dtoBase({
+      metodo_pago: metodo, total: 10,
+      productos: [{ nombre: 'ITEM-ONLINE', cantidad: 1, precio_unitario: 10, subtotal: 10 }],
+    }))).rejects.toThrow('fallo creacion');
+    expect(createRepo.save).toHaveBeenCalledWith(expect.objectContaining({
+      estado: 'CANCELADO', motivo_cancelacion: metodo === 'online'
+        ? 'Fallo al generar la intencion de pago' : 'Fallo al generar el comprobante',
+    }));
+  });
+
   it('rechaza una URL de verificacion ajena antes de obtener el token', async () => {
     const tokenSpy = jest.spyOn(service, 'obtenerTokenDeNave');
 
@@ -2756,13 +2793,43 @@ describe('PedidoService recalculo de importes', () => {
 
     await expect(
       service.cancelarPedidoPendiente(pedido.external_id),
-    ).resolves.toMatchObject({ estado: 'CANCELADO' });
+    ).resolves.toMatchObject({ estado: 'CANCELADO', motivo_cancelacion: 'Pedido cancelado por administracion' });
 
     expect(stockService.liberarStockLote).toHaveBeenCalledWith(
       [{ item: 'ITEM-1', cantidad: 1, deposito: 'DEPOSITO' }],
       undefined,
       'Pedido cancelado por administracion',
     );
+  });
+
+  it('guarda el motivo normalizado y lo escapa en el correo de cancelacion', async () => {
+    const pedido = {
+      id: 920, external_id: 'motivo-personalizado', estado: 'PENDIENTE',
+      cliente_mail: 'cliente@test.com', cliente_nombre: 'Cliente', total: 100,
+      productos: [{ nombre: 'ITEM-1', cantidad: 1, precio_unitario: 100, subtotal: 100 }],
+    };
+    createRepo.findOne.mockResolvedValueOnce(pedido);
+    const cancelado = await service.cancelarPedidoPendiente(pedido.external_id, '  <Sin stock> & reposicion  ');
+    expect(cancelado.motivo_cancelacion).toBe('<Sin stock> & reposicion');
+    expect(mailerService.enviarCorreo).toHaveBeenCalledWith(
+      expect.anything(), expect.anything(), expect.stringContaining('&lt;Sin stock&gt; &amp; reposicion'),
+    );
+  });
+
+  it.each(['', '   '])('usa el motivo predeterminado ante un texto vacio: %p', async (motivo) => {
+    createRepo.findOne.mockResolvedValueOnce({ external_id: 'cancelar', estado: 'PENDIENTE', productos: [] });
+    const pedido = await service.cancelarPedidoPendiente('cancelar', motivo);
+    expect(pedido.motivo_cancelacion).toBe('Pedido cancelado por administracion');
+  });
+
+  it('guarda causas personalizadas en cancelacion manual y rechazo de transferencia', async () => {
+    createRepo.findOne.mockResolvedValueOnce({ external_id: 'manual', estado: 'PENDIENTE' });
+    const manual = await service.cancelarManual('manual', '  Solicitud del cliente  ');
+    expect(manual.pedido.motivo_cancelacion).toBe('Solicitud del cliente');
+    const transferencia = { external_id: 'transfer', estado: 'PENDIENTE', metodo_pago: 'transfer', productos: [] };
+    createRepo.findOne.mockResolvedValue(transferencia);
+    const rechazo = await service.rechazarTransferencia('transfer', 'Transferencia no recibida');
+    expect(rechazo.motivo_cancelacion).toBe('Transferencia no recibida');
   });
 
   it('cancela sin borrar otro comprobante cuando el numero fue reutilizado', async () => {

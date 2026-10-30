@@ -46,6 +46,7 @@ describe('grouped endpoint auth types', () => {
     PedidoController.prototype.aprobarManual,
     PedidoController.prototype.cancelarManual,
     PedidoController.prototype.rechazarTransferencia,
+    PedidoController.prototype.recuperar,
   ];
 
   it.each(readOnlyHandlers)('requires explicit read auth for %p', (handler) => {
