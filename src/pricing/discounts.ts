@@ -30,9 +30,9 @@ export const isComplement = (item: ComplementInput): boolean =>
 
 // El padre de los vasos agrupa capacidades diferentes; cada SKU cuenta por separado.
 const COMPLEMENT_TIERS: Record<string, number> = {
-  'VASO ALUM 500ML': 21.29,
-  'VASO ALUM 600ML': 22.72,
-  'VASO ALUM 1L': 19.6,
+  'VASO-ALUM-500ML': 21.29,
+  'VASO-ALUM-600ML': 22.72,
+  'VASO-ALUM-1L': 19.6,
   'INS-MATE-GENE': 27.2,
   'INS-TAZA-GENE': 25.64,
   'INS-VASO-MILK-GENE': 32.01,

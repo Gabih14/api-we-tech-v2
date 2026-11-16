@@ -262,8 +262,8 @@ describe('PedidoService recalculo de importes', () => {
         { nombre: 'INS-MATE-BLAN', cantidad: 3 },
         { nombre: 'INS-MATE-NEGR', cantidad: 4 },
         { nombre: 'INS-MATE-BLAN', cantidad: 3 },
-        { nombre: 'VASO ALUM 500ML', cantidad: 5 },
-        { nombre: 'VASO ALUM 600ML', cantidad: 5 },
+        { nombre: 'VASO-ALUM-500ML', cantidad: 5 },
+        { nombre: 'VASO-ALUM-600ML', cantidad: 5 },
         { nombre: 'INS-TAZA-NEGR', cantidad: 10 },
         { nombre: 'ADH-CIANO-M100', cantidad: 11 },
       ]);

@@ -23,9 +23,9 @@ import {
 
 describe('complementos', () => {
   it.each([
-    ['VASO ALUM 500ML', 21.29],
-    ['VASO ALUM 600ML', 22.72],
-    ['VASO ALUM 1L', 19.6],
+    ['VASO-ALUM-500ML', 21.29],
+    ['VASO-ALUM-600ML', 22.72],
+    ['VASO-ALUM-1L', 19.6],
     ['INS-MATE-BLAN', 27.2],
     ['INS-MATE-NEGR', 27.2],
     ['INS-TAZA-NEGR', 25.64],
@@ -53,8 +53,8 @@ describe('complementos', () => {
       getComplementPresentation(item('INS-TAZA-BLAN', 'INS-TAZA-GENE')),
     ).toBe('INS-TAZA-GENE');
     expect(
-      getComplementPresentation(item('VASO ALUM 500ML', 'VASO-ALUM-GENE')),
-    ).toBe('VASO ALUM 500ML');
+      getComplementPresentation(item('VASO-ALUM-500ML', 'VASO-ALUM-GENE')),
+    ).toBe('VASO-ALUM-500ML');
     expect(getComplementDiscountPercentage(item('ADH-CIANO-M100'), 100)).toBe(
       15,
     );
