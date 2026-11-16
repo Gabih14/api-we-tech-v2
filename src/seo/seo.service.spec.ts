@@ -82,6 +82,24 @@ describe('SeoService', () => {
     ]);
   });
 
+  it('no publica promocion para complementos sin descuento diferencial', async () => {
+    getCatalogo.mockResolvedValue([
+      productoCatalogo({
+        grupo: 'COMPLEMENTOS PARA IMPRESION 3D',
+        variantes: [
+          varianteCatalogo({
+            id: 'ADH-CIANO-M100',
+            precioVtaCotizadoMin: '10000',
+            promotionalPrice: null,
+          }),
+        ],
+      }),
+    ]);
+    await expect(service.getProducts()).resolves.toMatchObject([
+      { precio: 10000, precioPromocional: null },
+    ]);
+  });
+
   it('busca un producto por slug', async () => {
     getCatalogo.mockResolvedValue([
       productoCatalogo({

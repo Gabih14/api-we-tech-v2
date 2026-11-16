@@ -9,7 +9,10 @@ import { UpdateStkItemDto } from './dto/update-stk-item.dto';
 import { StkFamilia } from 'src/stk_familia/entities/stk_familia.entity';
 import { StkPrecioService } from 'src/stk-precio/stk-precio.service';
 import { DeliveryConfigService } from '../delivery-config/delivery-config.service';
-import { FILAMENT_CATEGORIES } from '../pricing/discounts';
+import {
+  FILAMENT_CATEGORIES,
+  hasComplementDifferentialDiscount,
+} from '../pricing/discounts';
 
 /** Proyección pública de un atributo (nada de la fila entera). */
 export interface ItemAtributo {
@@ -82,7 +85,7 @@ export interface CatalogoVariante {
   precioVtaCotizadoMin: string | null;
   /** Precio de la lista "MINORISTA CON IVA" cotizado; cae al precio normal si no existe. */
   invoicePrice: string | null;
-  /** Precio con el 15% base por transferencia; aplica a filamentos y complementos. */
+  /** Precio con el 15% base por transferencia; null si no tiene promocion base. */
   promotionalPrice: string | null;
   /** Precio de la lista MAYORISTA cotizado. */
   wholesalePrice?: string | null;
@@ -719,7 +722,11 @@ export class StkItemService {
         const precio = this.precioCotizadoDeLista(item, 'MINORISTA');
         const invoice =
           this.precioCotizadoDeLista(item, 'MINORISTA CON IVA') ?? precio;
-        const promo = precio != null ? precio * 0.85 : null;
+        const tieneDescuentoBase =
+          (FILAMENT_CATEGORIES as readonly string[]).includes(
+            item.grupo?.trim().toUpperCase() ?? '',
+          ) || hasComplementDifferentialDiscount(item);
+        const promo = precio != null && tieneDescuentoBase ? precio * 0.85 : null;
         const includeVariantWholesale =
           includeWholesale &&
           (FILAMENT_CATEGORIES as readonly string[]).includes(item.grupo ?? '');

@@ -18,6 +18,7 @@ import {
   COMPLEMENT_CATEGORY,
   getComplementDiscountPercentage,
   getComplementPresentation,
+  hasComplementDifferentialDiscount,
   getMateComboComponent,
 } from './discounts';
 
@@ -55,8 +56,10 @@ describe('complementos', () => {
     expect(
       getComplementPresentation(item('VASO-ALUM-500ML', 'VASO-ALUM-GENE')),
     ).toBe('VASO-ALUM-500ML');
-    expect(getComplementDiscountPercentage(item('ADH-CIANO-M100'), 100)).toBe(
-      15,
+    expect(getComplementDiscountPercentage(item('ADH-CIANO-M100'), 100)).toBe(0);
+    expect(hasComplementDifferentialDiscount(item('INS-MATE-BLAN'))).toBe(true);
+    expect(hasComplementDifferentialDiscount(item('ADH-CIANO-M100'))).toBe(
+      false,
     );
     expect(getMateComboComponent(item('INS-VASO-MILK'))).toBeNull();
     expect(getMateComboComponent(item('INS-MATE-BLAN'))).toBe('mate');

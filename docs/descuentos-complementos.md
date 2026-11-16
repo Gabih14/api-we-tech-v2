@@ -3,8 +3,8 @@
 El servidor calcula los descuentos de `COMPLEMENTOS PARA IMPRESION 3D` al crear
 el pedido. En pagos `online` no se aplican estas promociones automaticas.
 
-Todos los complementos tienen 15% base. Desde 10 unidades de la misma presentacion,
-incluyendo colores y lineas repetidas, el porcentaje **reemplaza** al 15%:
+Solo las presentaciones de la tabla tienen 15% base. Desde 10 unidades de la misma
+presentacion, incluyendo colores y lineas repetidas, el porcentaje **reemplaza** al 15%:
 
 | Presentacion                  | Descuento |
 | ----------------------------- | --------: |
@@ -15,8 +15,9 @@ incluyendo colores y lineas repetidas, el porcentaje **reemplaza** al 15%:
 | Inserto taza                  |    25,64% |
 | Inserto Milkshake             |    32,01% |
 
-Las capacidades de vaso se cuentan por separado. Los demas complementos conservan
-15%, incluso desde 10 unidades. El mapeo de SKU/padres esta en `src/pricing/discounts.ts`.
+Las capacidades de vaso se cuentan por separado. Los demas complementos no tienen
+descuento automatico y conservan su precio original. El mapeo de SKU/padres esta en
+`src/pricing/discounts.ts`.
 
 ## Combo automatico
 
@@ -40,8 +41,9 @@ Las respuestas y los comprobantes pueden contener varias lineas con el mismo SKU
 con cantidades y porcentajes diferentes. Los consumidores deben conservarlas;
 el stock se reserva y restituye por las cantidades reales de cada componente.
 
-El catalogo publica `promotionalPrice` y SEO publica `precioPromocional` con el
-15% base por transferencia. Los tramos y combos dependen del carrito.
+Para las presentaciones elegibles, el catalogo publica `promotionalPrice` y SEO
+publica `precioPromocional` con el 15% base por transferencia. Para los demas
+complementos esos campos son `null`. Los tramos y combos dependen del carrito.
 
 Actualizar el calculo del frontend junto con la API: un carrito que envie importes
 calculados con las reglas anteriores puede recibir `ERR_ORDER_TOTAL_MISMATCH`.
