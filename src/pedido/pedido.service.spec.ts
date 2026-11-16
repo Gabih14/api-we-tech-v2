@@ -273,6 +273,21 @@ describe('PedidoService recalculo de importes', () => {
       expect(pedido.productos[4].subtotal).toBe(74360);
     });
 
+    it.each([
+      [1, 15, 8500],
+      [10, 22.72, 77280],
+    ])(
+      'aplica al mate aluminio el tramo de %s unidades',
+      async (cantidad, porcentaje, subtotal) => {
+        preparar();
+        const { pedido } = await comprar([
+          { nombre: 'MATE-ALUM-140', cantidad },
+        ]);
+        expect(pedido.productos[0].ajuste_porcentaje).toBe(porcentaje);
+        expect(pedido.productos[0].subtotal).toBe(subtotal);
+      },
+    );
+
     it.each([1, 9, 10])(
       'aplica el tramo correcto para %s pares',
       async (cantidad) => {

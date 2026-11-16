@@ -11,6 +11,7 @@ presentacion, incluyendo colores y lineas repetidas, el porcentaje **reemplaza**
 | Vaso aluminio 500 ml          |    21,29% |
 | Vaso aluminio 600 ml          |    22,72% |
 | Vaso aluminio 1 litro         |    19,60% |
+| Mate aluminio 140 ml          |    22,72% |
 | Inserto mate (blanco + negro) |    27,20% |
 | Inserto taza                  |    25,64% |
 | Inserto Milkshake             |    32,01% |
