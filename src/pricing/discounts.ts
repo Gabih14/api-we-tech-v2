@@ -56,16 +56,22 @@ export const getComplementPresentation = (
   );
 };
 
+export const hasComplementDifferentialDiscount = (
+  item: ComplementInput,
+): boolean => {
+  const presentation = getComplementPresentation(item);
+  return presentation !== null && COMPLEMENT_TIERS[presentation] !== undefined;
+};
+
 export const getComplementDiscountPercentage = (
   item: ComplementInput,
   quantity: number,
 ): number => {
   const presentation = getComplementPresentation(item);
-  return presentation
-    ? quantity >= 10
-      ? (COMPLEMENT_TIERS[presentation] ?? 15)
-      : 15
-    : 0;
+  if (!presentation) return 0;
+  const differentialDiscount = COMPLEMENT_TIERS[presentation];
+  if (differentialDiscount === undefined) return 0;
+  return quantity >= 10 ? differentialDiscount : 15;
 };
 
 export const getMateComboComponent = (

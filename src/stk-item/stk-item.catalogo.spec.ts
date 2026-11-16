@@ -26,6 +26,28 @@ describe('StkItemService clave de catálogo', () => {
     expect(producto.variantes[0].promotionalPrice).toBe('8500.00');
   });
 
+  it('no publica promocion para complementos sin descuento diferencial', () => {
+    const service = Object.create(StkItemService.prototype);
+    const producto = service.armarProducto(
+      'item:ADH-CIANO-M100',
+      [
+        {
+          id: 'ADH-CIANO-M100',
+          idPadre: 'ADH-CIANO-GENE',
+          grupo: 'COMPLEMENTOS PARA IMPRESION 3D',
+          descripcion: 'Adhesivo',
+          stkExistencias: [],
+          visible: true,
+          stkPrecios: [
+            { lista: 'MINORISTA', precioVta: '10000', moneda: { id: 'PES' } },
+          ],
+        },
+      ],
+      new Map([['ADH-CIANO-M100', []]]),
+    );
+    expect(producto.variantes[0].promotionalPrice).toBeNull();
+  });
+
   it('mantiene una clave individual para ítems sin padre', () => {
     expect(claveProducto({ id: 'ITEM-1', idPadre: null })).toBe('item:ITEM-1');
   });

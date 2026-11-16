@@ -268,7 +268,7 @@ describe('PedidoService recalculo de importes', () => {
         { nombre: 'ADH-CIANO-M100', cantidad: 11 },
       ]);
       expect(pedido.productos.map((p) => p.ajuste_porcentaje)).toEqual([
-        27.2, 27.2, 15, 15, 25.64, 15,
+        27.2, 27.2, 15, 15, 25.64, null,
       ]);
       expect(pedido.productos[4].subtotal).toBe(74360);
     });
@@ -359,19 +359,19 @@ describe('PedidoService recalculo de importes', () => {
         { nombre: 'INS-MATE-BLAN', cantidad: 10 },
         { nombre: 'INS-BOMB-NEGR', cantidad: 1 },
       ]);
-      expect(pedido.total).toBe(72885);
+      expect(pedido.total).toBe(72900);
       expect(pedido.productos.map((p) => p.ajuste_porcentaje)).toEqual([
-        27.2, 15,
+        27.2, null,
       ]);
     });
 
     it('evalua menos pares cuando el redondeo produce un total menor', async () => {
-      preparar({ 'INS-MATE-BLAN': '1', 'INS-BOMB-NEGR': '1' });
+      preparar({ 'INS-MATE-BLAN': '2', 'INS-BOMB-NEGR': '1' });
       const { pedido } = await comprar([
         { nombre: 'INS-MATE-BLAN', cantidad: 12 },
         { nombre: 'INS-BOMB-NEGR', cantidad: 15 },
       ]);
-      expect(pedido.total).toBe(18);
+      expect(pedido.total).toBe(26);
       expect(
         pedido.productos
           .filter((p) => p.ajuste_porcentaje === 35)
