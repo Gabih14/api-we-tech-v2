@@ -27,6 +27,7 @@ describe('complementos', () => {
     ['VASO-ALUM-500ML', 21.29],
     ['VASO-ALUM-600ML', 22.72],
     ['VASO-ALUM-1L', 19.6],
+    ['MATE-ALUM-140', 22.72],
     ['INS-MATE-BLAN', 27.2],
     ['INS-MATE-NEGR', 27.2],
     ['INS-TAZA-NEGR', 25.64],
