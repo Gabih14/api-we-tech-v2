@@ -282,9 +282,14 @@ export class PedidoService {
           categoriaProducto === cuponResolucion.categoriaAplicable,
       )
     ) {
-      throw new BadRequestException(
-        `Cupon valido solo para productos de categoria ${cuponResolucion.categoriaAplicable}`,
-      );
+      throw new BadRequestException({
+        code: 'COUPON_NOT_APPLICABLE',
+        message: `Cupon valido solo para productos de categoria ${cuponResolucion.categoriaAplicable}`,
+        retryable: false,
+        details: {
+          categoriaAplicable: cuponResolucion.categoriaAplicable,
+        },
+      });
     }
 
     const aplicaEnvioGratisPorPeso =
@@ -2418,9 +2423,7 @@ export class PedidoService {
         : 0;
     const precioUnitario =
       descuentoPorcentaje === 100
-        ? this.redondearPrecio(
-            precioBaseUnitario + recargoRegistroEnvioGratis,
-          )
+        ? this.redondearPrecio(precioBaseUnitario + recargoRegistroEnvioGratis)
         : this.redondearPrecio(subtotal / cantidad);
     const descuentoCuponAplicado =
       porcentajeCombo === undefined &&
@@ -2581,8 +2584,7 @@ export class PedidoService {
       calculado.ajuste_porcentaje === 100 &&
       this.montosIguales(
         calculado.precio_unitario,
-        calculado.precio_base_unitario +
-          FREE_SHIPPING_RECORDED_PRICE_SURCHARGE,
+        calculado.precio_base_unitario + FREE_SHIPPING_RECORDED_PRICE_SURCHARGE,
       );
     // El frontend puede seguir enviando el precio de lista original. El
     // backend agrega los $1000 al valor que guarda para registrar la

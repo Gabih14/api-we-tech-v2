@@ -6,10 +6,7 @@ import {
 import { CreateCuponDto } from './dto/create-cupon.dto';
 import { UpdateCuponDto } from './dto/update-cupon.dto';
 import { InjectRepository } from '@nestjs/typeorm';
-import {
-  Cupon,
-  CuponCategoriaAplicable,
-} from './entities/cupon.entity';
+import { Cupon, CuponCategoriaAplicable } from './entities/cupon.entity';
 import { Repository } from 'typeorm';
 import { CuponUso } from 'src/cupon_uso/entities/cupon_uso.entity';
 import { CreateCuponUsoDto } from 'src/cupon_uso/dto/create-cupon_uso.dto';
@@ -19,6 +16,13 @@ export interface CuponDescuentoResolucion {
   modalidadSolicitada: string;
   modalidadAplicada: 'TARJETA' | 'CUENTA' | 'FALLBACK_TARJETA';
   porcentajeAplicado: number;
+  categoriaAplicable: CuponCategoriaAplicable | null;
+}
+
+export interface CuponValidacionExitosa {
+  estado: 'VALID';
+  codigoCupon: string;
+  fechaVencimiento: Date | null;
   categoriaAplicable: CuponCategoriaAplicable | null;
 }
 
@@ -56,8 +60,7 @@ export class CuponService {
         crearCuponDto.cuitHabilitado ?? crearCuponDto.cuit_habilitado,
       ),
       categoriaAplicable: this.normalizarCategoriaAplicable(
-        crearCuponDto.categoriaAplicable ??
-          crearCuponDto.categoria_aplicable,
+        crearCuponDto.categoriaAplicable ?? crearCuponDto.categoria_aplicable,
       ),
     });
 
@@ -72,7 +75,11 @@ export class CuponService {
     });
 
     if (!cupon) {
-      throw new NotFoundException(`Cupón ${id} no encontrado o inactivo`);
+      throw new NotFoundException({
+        code: 'COUPON_NOT_FOUND',
+        message: `Cupón ${id} no encontrado o inactivo`,
+        retryable: false,
+      });
     }
 
     return cupon;
@@ -110,19 +117,13 @@ export class CuponService {
       cupon.maxUsosPorCuit = max_usos_por_cuit;
     }
 
-    if (
-      cuitHabilitado !== undefined ||
-      cuit_habilitado !== undefined
-    ) {
+    if (cuitHabilitado !== undefined || cuit_habilitado !== undefined) {
       cupon.cuitHabilitado = this.normalizarCuitOpcional(
         cuitHabilitado ?? cuit_habilitado,
       );
     }
 
-    if (
-      categoriaAplicable !== undefined ||
-      categoria_aplicable !== undefined
-    ) {
+    if (categoriaAplicable !== undefined || categoria_aplicable !== undefined) {
       cupon.categoriaAplicable = this.normalizarCategoriaAplicable(
         categoriaAplicable ?? categoria_aplicable,
       );
@@ -211,42 +212,6 @@ export class CuponService {
 
     const cupon = await this.buscarPorId(usarCuponDto.cupon_id);
 
-    this.validarCuitHabilitado(cupon, cuitNormalizado);
-
-    // Validar fechas
-    if (cupon.fechaDesde && cupon.fechaDesde > new Date()) {
-      throw new BadRequestException('Cupón aún no está vigente');
-    }
-
-    if (cupon.fechaHasta && cupon.fechaHasta < new Date()) {
-      throw new BadRequestException('Cupón ha expirado');
-    }
-
-    // Validar usos totales
-    if (cupon.max_usos) {
-      const usosTotales = await this.cuponUsoRepository.count({
-        where: { cuponId: cupon.id },
-      });
-
-      if (usosTotales >= cupon.max_usos) {
-        throw new BadRequestException('Cupón ha alcanzado su límite de usos');
-      }
-    }
-
-    // Validar usos por CUIT
-    if (cupon.maxUsosPorCuit) {
-      const usosPorCuit = await this.contarUsosDelCuit(
-        cupon.id,
-        cuitNormalizado,
-      );
-
-      if (usosPorCuit >= cupon.maxUsosPorCuit) {
-        throw new BadRequestException(
-          'Has alcanzado el límite de usos para este cupón',
-        );
-      }
-    }
-
     // Registrar uso
     const cuponUso = this.cuponUsoRepository.create({
       cuponId: cupon.id,
@@ -258,7 +223,9 @@ export class CuponService {
     return await this.cuponUsoRepository.save(cuponUso);
   }
 
-  async validarUsoCupon(usarCuponDto: CreateCuponUsoDto): Promise<void> {
+  async validarUsoCupon(
+    usarCuponDto: CreateCuponUsoDto,
+  ): Promise<CuponValidacionExitosa> {
     const cuitNormalizado = this.normalizarCuit(usarCuponDto.cuit);
 
     if (usarCuponDto.pedido_id) {
@@ -270,7 +237,8 @@ export class CuponService {
       });
 
       if (usoExistente) {
-        return;
+        const cupon = await this.buscarPorId(usarCuponDto.cupon_id);
+        return this.crearValidacionExitosa(cupon);
       }
     }
 
@@ -283,7 +251,12 @@ export class CuponService {
     }
 
     if (cupon.fechaHasta && cupon.fechaHasta < new Date()) {
-      throw new BadRequestException('Cupon ha expirado');
+      throw new BadRequestException({
+        code: 'COUPON_EXPIRED',
+        message: 'Cupon ha expirado',
+        retryable: false,
+        details: { fechaVencimiento: cupon.fechaHasta },
+      });
     }
 
     if (cupon.max_usos) {
@@ -292,6 +265,10 @@ export class CuponService {
       });
 
       if (usosTotales >= cupon.max_usos) {
+        const usoExistente = cupon.usos?.[0];
+        if (cupon.max_usos === 1 && usoExistente) {
+          this.lanzarCuponYaUsado(usoExistente);
+        }
         throw new BadRequestException('Cupon ha alcanzado su limite de usos');
       }
     }
@@ -303,11 +280,21 @@ export class CuponService {
       );
 
       if (usosPorCuit >= cupon.maxUsosPorCuit) {
+        if (cupon.maxUsosPorCuit === 1) {
+          const usoExistente = cupon.usos?.find(
+            (uso) => this.normalizarCuit(uso.cuit) === cuitNormalizado,
+          );
+          if (usoExistente) {
+            this.lanzarCuponYaUsado(usoExistente);
+          }
+        }
         throw new BadRequestException(
           'Has alcanzado el limite de usos para este cupon',
         );
       }
     }
+
+    return this.crearValidacionExitosa(cupon);
   }
 
   // Listar todos los cupones activos
@@ -506,19 +493,39 @@ export class CuponService {
     );
   }
 
-  private validarCuitHabilitado(
-    cupon: Cupon,
-    cuitNormalizado: string,
-  ): void {
+  private validarCuitHabilitado(cupon: Cupon, cuitNormalizado: string): void {
     if (!cupon.cuitHabilitado) {
       return;
     }
 
     if (this.normalizarCuit(cupon.cuitHabilitado) !== cuitNormalizado) {
-      throw new BadRequestException(
-        'Cupon valido solo para el CUIT habilitado',
-      );
+      throw new BadRequestException({
+        code: 'COUPON_OWNER_MISMATCH',
+        message: 'Cupon valido solo para el CUIT habilitado',
+        retryable: false,
+      });
     }
+  }
+
+  private crearValidacionExitosa(cupon: Cupon): CuponValidacionExitosa {
+    return {
+      estado: 'VALID',
+      codigoCupon: cupon.id,
+      fechaVencimiento: cupon.fechaHasta ?? null,
+      categoriaAplicable: cupon.categoriaAplicable ?? null,
+    };
+  }
+
+  private lanzarCuponYaUsado(uso: CuponUso): never {
+    throw new BadRequestException({
+      code: 'COUPON_ALREADY_USED',
+      message: 'El cupon de un solo uso ya fue utilizado',
+      retryable: false,
+      details: {
+        fechaUso: uso.usadoEn,
+        pedidoId: uso.pedidoId ?? null,
+      },
+    });
   }
 
   private async contarUsosDelCuit(

@@ -9,7 +9,11 @@ import {
   UsePipes,
   ValidationPipe,
 } from '@nestjs/common';
-import { CuponConResumenUsos, CuponService } from './cupon.service';
+import {
+  CuponConResumenUsos,
+  CuponService,
+  CuponValidacionExitosa,
+} from './cupon.service';
 import { CreateCuponDto } from './dto/create-cupon.dto';
 import { UpdateCuponDto } from './dto/update-cupon.dto';
 import { Cupon } from './entities/cupon.entity';
@@ -54,6 +58,15 @@ export class CuponController {
   @UsePipes(new ValidationPipe({ transform: true }))
   async usarCupon(@Body() usarCuponDto: CreateCuponUsoDto): Promise<CuponUso> {
     return this.cuponService.usarCupon(usarCuponDto);
+  }
+
+  @Post('validar')
+  @AuthType('default')
+  @UsePipes(new ValidationPipe({ transform: true }))
+  async validarCupon(
+    @Body() usarCuponDto: CreateCuponUsoDto,
+  ): Promise<CuponValidacionExitosa> {
+    return this.cuponService.validarUsoCupon(usarCuponDto);
   }
 
   @Get(':id/descuento/:modalidad')
