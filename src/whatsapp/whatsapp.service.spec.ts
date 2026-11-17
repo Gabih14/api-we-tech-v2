@@ -53,7 +53,7 @@ describe('WhatsappService', () => {
       expect(mensaje).toContain('*Cliente:* Juan Perez');
       expect(mensaje).toContain('*Telefono:* +5491123456789');
       expect(mensaje).toContain(
-        `*Dirección cliente:* ${pedidoBase.cliente_direccion}`,
+        `*Dirección:* ${pedidoBase.cliente_direccion}`,
       );
       expect(mensaje).not.toContain('*Ubicación:*');
       expect(mensaje).not.toContain(
@@ -91,7 +91,7 @@ describe('WhatsappService', () => {
       expect(mensaje).toContain('$3999.00');
     });
 
-    it('muestra el precio de lista del ENV cuando el envio esta bonificado', () => {
+    it('muestra el precio con recargo y avisa cuando el envio esta bonificado', () => {
       const mensaje = service.formatearMensajeParaDelivery({
         ...pedidoBase,
         costo_envio: 0,
@@ -105,15 +105,35 @@ describe('WhatsappService', () => {
           {
             nombre: 'ENV-07K-GM-DELIVERY',
             cantidad: 1,
-            precio_unitario: 3999,
+            precio_unitario: 4999,
             subtotal: 0,
             ajuste_porcentaje: 100,
           },
         ],
       });
 
-      expect(mensaje).toContain('$3999.00');
+      expect(mensaje).toContain('$4999.00');
+      expect(mensaje).toContain(
+        '*Aviso:* Se sumaron $1000 al precio unitario del envío antes de aplicar la bonificación del 100%.',
+      );
       expect(mensaje).not.toContain('$0.00');
+    });
+
+    it('no muestra el aviso de $1000 para un envio sin bonificacion', () => {
+      const mensaje = service.formatearMensajeParaDelivery({
+        ...pedidoBase,
+        productos: [
+          {
+            nombre: 'ENV-07K-GM-DELIVERY',
+            cantidad: 1,
+            precio_unitario: 3999,
+            subtotal: 3999,
+            ajuste_porcentaje: null,
+          },
+        ],
+      });
+
+      expect(mensaje).not.toContain('Se sumaron $1000');
     });
 
     it('no incluye la linea de Maps cuando no hay ubicacion real', () => {
