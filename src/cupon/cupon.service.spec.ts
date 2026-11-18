@@ -5,6 +5,11 @@ import { Cupon } from './entities/cupon.entity';
 describe('CuponService', () => {
   const createService = () => {
     const cupones = new Map<string, Partial<Cupon>>();
+    const cuponUsoQueryBuilder = {
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      getCount: jest.fn(async () => 0),
+    };
     const cuponRepository = {
       findOne: jest.fn(
         async ({ where }: { where: { id: string; activo?: boolean } }) => {
@@ -30,7 +35,7 @@ describe('CuponService', () => {
       count: jest.fn(async () => 0),
       create: jest.fn((dto) => dto),
       save: jest.fn(async (uso) => uso),
-      createQueryBuilder: jest.fn(),
+      createQueryBuilder: jest.fn(() => cuponUsoQueryBuilder),
     };
 
     const service = new CuponService(
@@ -38,7 +43,13 @@ describe('CuponService', () => {
       cuponUsoRepository as any,
     );
 
-    return { service, cupones, cuponRepository, cuponUsoRepository };
+    return {
+      service,
+      cupones,
+      cuponRepository,
+      cuponUsoRepository,
+      cuponUsoQueryBuilder,
+    };
   };
 
   it('normaliza el CUIT habilitado al crear un cupon', async () => {
@@ -175,7 +186,13 @@ describe('CuponService', () => {
         cupon_id: 'UNICUIT',
         cuit: '20-12345678-9',
       }),
-    ).resolves.toBeUndefined();
+    ).resolves.toEqual(
+      expect.objectContaining({
+        estado: 'VALID',
+        codigoCupon: 'UNICUIT',
+        fechaVencimiento: null,
+      }),
+    );
   });
 
   it('rechaza el cupon si el CUIT no coincide con el habilitado', async () => {
@@ -194,5 +211,101 @@ describe('CuponService', () => {
         cuit: '27-87654321-0',
       }),
     ).rejects.toThrow(BadRequestException);
+  });
+
+  it('devuelve el vencimiento cuando el cupon es valido', async () => {
+    const { service, cupones } = createService();
+    const fechaHasta = new Date('2099-12-31T23:59:59.000Z');
+    cupones.set('VALIDO', {
+      id: 'VALIDO',
+      fechaHasta,
+      categoriaAplicable: 'filamento',
+    });
+
+    await expect(
+      service.validarUsoCupon({ cupon_id: 'VALIDO', cuit: '20123456789' }),
+    ).resolves.toEqual({
+      estado: 'VALID',
+      codigoCupon: 'VALIDO',
+      fechaVencimiento: fechaHasta,
+      categoriaAplicable: 'filamento',
+    });
+  });
+
+  it('devuelve COUPON_EXPIRED con la fecha de vencimiento', async () => {
+    const { service, cupones } = createService();
+    const fechaHasta = new Date('2020-01-01T00:00:00.000Z');
+    cupones.set('VENCIDO', { id: 'VENCIDO', fechaHasta });
+
+    try {
+      await service.validarUsoCupon({
+        cupon_id: 'VENCIDO',
+        cuit: '20123456789',
+      });
+      throw new Error('La validacion debio fallar');
+    } catch (error) {
+      expect(error).toBeInstanceOf(BadRequestException);
+      expect((error as BadRequestException).getResponse()).toEqual(
+        expect.objectContaining({
+          code: 'COUPON_EXPIRED',
+          details: { fechaVencimiento: fechaHasta },
+        }),
+      );
+    }
+  });
+
+  it('devuelve COUPON_ALREADY_USED solo para limite por CUIT igual a uno', async () => {
+    const { service, cupones, cuponUsoQueryBuilder } = createService();
+    const fechaUso = new Date('2026-10-10T12:00:00.000Z');
+    cuponUsoQueryBuilder.getCount.mockResolvedValue(1);
+    cupones.set('UNSOLOUSO', {
+      id: 'UNSOLOUSO',
+      maxUsosPorCuit: 1,
+      usos: [
+        {
+          cuit: '20-12345678-9',
+          pedidoId: 123,
+          usadoEn: fechaUso,
+        } as any,
+      ],
+    });
+
+    try {
+      await service.validarUsoCupon({
+        cupon_id: 'UNSOLOUSO',
+        cuit: '20123456789',
+      });
+      throw new Error('La validacion debio fallar');
+    } catch (error) {
+      expect(error).toBeInstanceOf(BadRequestException);
+      expect((error as BadRequestException).getResponse()).toEqual(
+        expect.objectContaining({
+          code: 'COUPON_ALREADY_USED',
+          details: { fechaUso, pedidoId: 123 },
+        }),
+      );
+    }
+  });
+
+  it('no usa COUPON_ALREADY_USED para cupones con mas de un uso permitido', async () => {
+    const { service, cupones, cuponUsoQueryBuilder } = createService();
+    cuponUsoQueryBuilder.getCount.mockResolvedValue(2);
+    cupones.set('MULTIUSO', {
+      id: 'MULTIUSO',
+      maxUsosPorCuit: 2,
+    });
+
+    try {
+      await service.validarUsoCupon({
+        cupon_id: 'MULTIUSO',
+        cuit: '20123456789',
+      });
+      throw new Error('La validacion debio fallar');
+    } catch (error) {
+      expect(error).toBeInstanceOf(BadRequestException);
+      expect((error as BadRequestException).getResponse()).not.toEqual(
+        expect.objectContaining({ code: 'COUPON_ALREADY_USED' }),
+      );
+    }
   });
 });

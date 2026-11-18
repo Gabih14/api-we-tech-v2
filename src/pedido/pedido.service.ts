@@ -54,6 +54,7 @@ import { mapNavePaymentToCobroInput } from './nave-payment.mapper';
 type PedidoMetodoPago = 'online' | 'transfer';
 
 const FREE_SHIPPING_MIN_WEIGHT_KG = 10;
+const FREE_SHIPPING_RECORDED_PRICE_SURCHARGE = 1000;
 const ALERTA_IMPORTES_EMAIL = 'virtual.hache@gmail.com';
 // TODO impresoras: cuando se vendan por la web, no deben usar IVA 21%.
 // Las impresoras tributan 10.5%, por lo que hay que resolver la alicuota por producto.
@@ -281,9 +282,14 @@ export class PedidoService {
           categoriaProducto === cuponResolucion.categoriaAplicable,
       )
     ) {
-      throw new BadRequestException(
-        `Cupon valido solo para productos de categoria ${cuponResolucion.categoriaAplicable}`,
-      );
+      throw new BadRequestException({
+        code: 'COUPON_NOT_APPLICABLE',
+        message: `Cupon valido solo para productos de categoria ${cuponResolucion.categoriaAplicable}`,
+        retryable: false,
+        details: {
+          categoriaAplicable: cuponResolucion.categoriaAplicable,
+        },
+      });
     }
 
     const aplicaEnvioGratisPorPeso =
@@ -2368,16 +2374,24 @@ export class PedidoService {
       );
       const ivaSubtotal = this.calcularIvaFacturaImporte(subtotal);
       const subtotalFinalBruto = this.redondear2(subtotal + ivaSubtotal);
-      // Para una bonificacion total conservamos el precio de lista en la linea.
-      // El importe final sigue siendo cero y el ERP representa la diferencia
-      // mediante un ajuste del 100%.
+      // El envio gratis se registra con $1000 sobre el precio de lista. El
+      // importe final sigue siendo cero y el ERP representa la diferencia
+      // completa mediante un ajuste del 100%.
+      const recargoRegistroEnvioGratis =
+        esProductoEnvio && aplicaEnvioGratisPorPeso
+          ? FREE_SHIPPING_RECORDED_PRICE_SURCHARGE
+          : 0;
       const precioUnitario =
         descuentoPorcentaje === 100
-          ? precioBaseUnitario
+          ? this.redondearPrecio(
+              precioBaseUnitario + recargoRegistroEnvioGratis,
+            )
           : this.redondearPrecio(subtotal / cantidad);
       const precioUnitarioBruto =
         descuentoPorcentaje === 100
-          ? this.redondear2(subtotalBruto / cantidad)
+          ? this.redondear2(
+              subtotalBruto / cantidad + recargoRegistroEnvioGratis,
+            )
           : this.redondear2(subtotalFinalBruto / cantidad);
       const descuentoCuponAplicado =
         porcentajeCombo === undefined &&
@@ -2401,11 +2415,15 @@ export class PedidoService {
     const subtotal = this.redondearPrecio(
       precioBaseUnitario * cantidad * (1 - descuentoPorcentaje / 100),
     );
-    // Un descuento del 100% no debe convertir el precio de lista en cero: el
-    // comprobante necesita ese valor para registrar el ajuste total.
+    // El envio bonificado conserva el valor base, suma $1000 para registrar
+    // su costo real y aplica el ajuste total sobre ese precio.
+    const recargoRegistroEnvioGratis =
+      esProductoEnvio && aplicaEnvioGratisPorPeso
+        ? FREE_SHIPPING_RECORDED_PRICE_SURCHARGE
+        : 0;
     const precioUnitario =
       descuentoPorcentaje === 100
-        ? precioBaseUnitario
+        ? this.redondearPrecio(precioBaseUnitario + recargoRegistroEnvioGratis)
         : this.redondearPrecio(subtotal / cantidad);
     const descuentoCuponAplicado =
       porcentajeCombo === undefined &&
@@ -2562,6 +2580,27 @@ export class PedidoService {
     const subtotalBrutoEsperado = incluyeIvaFactura
       ? (calculado.subtotal_bruto ?? subtotalEsperado)
       : subtotalBruto;
+    const esEnvioGratisConRecargo =
+      calculado.ajuste_porcentaje === 100 &&
+      this.montosIguales(
+        calculado.precio_unitario,
+        calculado.precio_base_unitario + FREE_SHIPPING_RECORDED_PRICE_SURCHARGE,
+      );
+    // El frontend puede seguir enviando el precio de lista original. El
+    // backend agrega los $1000 al valor que guarda para registrar la
+    // bonificacion, sin obligar al cliente a duplicar esa regla.
+    const precioListaOriginalAceptado =
+      esEnvioGratisConRecargo &&
+      (this.montosIguales(
+        precioRecibido,
+        precioUnitarioEsperado - FREE_SHIPPING_RECORDED_PRICE_SURCHARGE,
+      ) ||
+        this.montosIguales(
+          precioRecibido,
+          this.redondearPrecio(
+            precioUnitarioEsperado - FREE_SHIPPING_RECORDED_PRICE_SURCHARGE,
+          ),
+        ));
 
     const difierePrecio =
       precioFueEnviado &&
@@ -2569,7 +2608,8 @@ export class PedidoService {
       !this.montosIguales(
         precioRecibido,
         this.redondearPrecio(precioUnitarioEsperado),
-      );
+      ) &&
+      !precioListaOriginalAceptado;
     const difiereSubtotal =
       subtotalFueEnviado &&
       !this.montosIguales(subtotalRecibido, subtotalEsperado) &&

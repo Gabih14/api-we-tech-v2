@@ -783,14 +783,14 @@ describe('VtaComprobanteService crearDesdePedido', () => {
     });
   });
 
-  it('conserva el precio y registra ajuste del 100% para un envio bonificado', async () => {
+  it('registra el precio de lista mas $1000 y el ajuste del 100% para un envio bonificado', async () => {
     await service.crearDesdePedido(
       pedidoBase(
         [
           {
             nombre: 'ENV-02K-GM-DELIVERY',
             cantidad: 1,
-            precio_unitario: 3999,
+            precio_unitario: 4999,
             subtotal: 0,
             ajuste_porcentaje: 100,
           },
@@ -803,16 +803,16 @@ describe('VtaComprobanteService crearDesdePedido', () => {
       expect.objectContaining({
         total: 0,
         ajuste: -100,
-        ajuste_neto: -3999,
+        ajuste_neto: -4999,
       }),
     );
     expect(comprobanteItemService.create).toHaveBeenCalledWith(
       expect.objectContaining({
         itemId: 'ENV-02K-GM-DELIVERY',
-        precio: 3999,
+        precio: 4999,
         importe: 0,
         ajuste: -100,
-        ajuste_neto: -3999,
+        ajuste_neto: -4999,
       }),
     );
   });

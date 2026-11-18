@@ -81,8 +81,13 @@ export class WhatsappService {
     const comprobante = this.formatearComprobante(pedido);
     const mapsLink = this.formatearLinkMaps(ubicacionLimpia);
     const telefono = pedido.telefono || 'No informado';
+    const avisoRecargoEnvioGratis = this.tieneEnvioGratisConRecargo(
+      pedido.productos,
+    )
+      ? '\n *Aviso:* Se sumaron $1000 al precio unitario del envío antes de aplicar la bonificación del 100%.'
+      : '';
 
-    return `*Pedido para Delivery ${comprobante}*\n\n *Cliente:* ${pedido.cliente_nombre}\n *Telefono:* ${telefono}${direccionCliente}${observaciones}${mapsLink}\n *Costo envío:* ${costoEnvio}${productos}\n\nID: ${pedido.external_id}`;
+    return `*Pedido para Delivery ${comprobante}*\n\n *Cliente:* ${pedido.cliente_nombre}\n *Telefono:* ${telefono}${direccionCliente}${observaciones}${mapsLink}\n *Costo envío:* ${costoEnvio}${avisoRecargoEnvioGratis}${productos}\n\nID: ${pedido.external_id}`;
   }
 
   private formatearLinkMaps(ubicacion?: string | null): string {
@@ -130,6 +135,18 @@ export class WhatsappService {
       }, 0);
 
     return total > 0 ? total : null;
+  }
+
+  private tieneEnvioGratisConRecargo(productos: any): boolean {
+    return (
+      Array.isArray(productos) &&
+      productos.some(
+        (producto) =>
+          this.esProductoEnvio(producto?.nombre) &&
+          Number(producto?.subtotal ?? 0) === 0 &&
+          Number(producto?.ajuste_porcentaje ?? 0) >= 100,
+      )
+    );
   }
 
   private esProductoEnvio(nombre?: string | null): boolean {
