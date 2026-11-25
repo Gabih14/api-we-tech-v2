@@ -325,6 +325,7 @@ export class PedidoService {
         entrada.identidad,
         aplicaEnvioGratisPorPeso,
         combo,
+        cotizacionEnvio?.deliveryConfigId == null,
       );
     };
     for (const entrada of productosPrecargados) {
@@ -2329,6 +2330,7 @@ export class PedidoService {
     identidad: FilamentIdentity = { category: item.grupo },
     aplicaEnvioGratisPorPeso = false,
     porcentajeCombo?: number,
+    permiteRecargoEnvioGratis = true,
   ): PedidoProductoCalculado {
     const cantidad = this.obtenerCantidadProducto(producto);
     const precioBaseUnitario = this.obtenerPrecioListaCotizado(
@@ -2358,6 +2360,13 @@ export class PedidoService {
         ? 100
         : (porcentajeCombo ??
           Math.max(descuentoProductoPorcentaje, porcentajeCuponAplicable));
+    const recargoRegistroEnvioGratis =
+      esProductoEnvio &&
+      aplicaEnvioGratisPorPeso &&
+      permiteRecargoEnvioGratis &&
+      this.esProductoEnvio(producto.nombre)
+        ? FREE_SHIPPING_RECORDED_PRICE_SURCHARGE
+        : 0;
     if (incluyeIvaFactura) {
       const subtotalBrutoCalculado = this.redondear2(
         precioBaseUnitario * cantidad * (1 + FACTURA_IVA_PORCENTAJE / 100),
@@ -2374,13 +2383,6 @@ export class PedidoService {
       );
       const ivaSubtotal = this.calcularIvaFacturaImporte(subtotal);
       const subtotalFinalBruto = this.redondear2(subtotal + ivaSubtotal);
-      // El envio gratis se registra con $1000 sobre el precio de lista. El
-      // importe final sigue siendo cero y el ERP representa la diferencia
-      // completa mediante un ajuste del 100%.
-      const recargoRegistroEnvioGratis =
-        esProductoEnvio && aplicaEnvioGratisPorPeso
-          ? FREE_SHIPPING_RECORDED_PRICE_SURCHARGE
-          : 0;
       const precioUnitario =
         descuentoPorcentaje === 100
           ? this.redondearPrecio(
@@ -2415,12 +2417,6 @@ export class PedidoService {
     const subtotal = this.redondearPrecio(
       precioBaseUnitario * cantidad * (1 - descuentoPorcentaje / 100),
     );
-    // El envio bonificado conserva el valor base, suma $1000 para registrar
-    // su costo real y aplica el ajuste total sobre ese precio.
-    const recargoRegistroEnvioGratis =
-      esProductoEnvio && aplicaEnvioGratisPorPeso
-        ? FREE_SHIPPING_RECORDED_PRICE_SURCHARGE
-        : 0;
     const precioUnitario =
       descuentoPorcentaje === 100
         ? this.redondearPrecio(precioBaseUnitario + recargoRegistroEnvioGratis)

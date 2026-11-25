@@ -60,6 +60,13 @@ pedido que registran la distancia, la zona y el `delivery_config` utilizado.
 
 ## Notificaciones
 
+Desde 10 kg de productos, el envio se bonifica al 100%. El adicional de $1000
+al precio unitario registrado solo se aplica a productos
+`ENV-<n>K-GM-DELIVERY` cuando no se usa `delivery_config`. Con una
+configuracion de delivery se conserva el precio original y no se incluye el
+aviso del adicional en la notificacion. El importe final del envio para el
+cliente sigue siendo $0.
+
 Los pedidos cotizados con productos `ENV-<n>K-GM-DELIVERY` se notifican al
 chat configurado en `DELIVERY_TELEGRAM_CHAT_ID`. Cuando el pedido tiene un
 `delivery_config_id`, se notifica al chat configurado en
