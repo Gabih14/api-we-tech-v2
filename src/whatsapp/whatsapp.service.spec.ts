@@ -119,6 +119,26 @@ describe('WhatsappService', () => {
       expect(mensaje).not.toContain('$0.00');
     });
 
+    it.each(['ENV-ZONA-EXTENDIDA', 'ENV-40K-GM-DELIVERY'])(
+      'no anuncia recargo para %s cuando usa delivery config',
+      (nombre) => {
+        const mensaje = service.formatearMensajeParaDelivery({
+          ...pedidoBase,
+          delivery_config_id: 7,
+          costo_envio: 0,
+          productos: [{
+            nombre,
+            cantidad: 1,
+            precio_unitario: 3999,
+            subtotal: 0,
+            ajuste_porcentaje: 100,
+          }],
+        });
+
+        expect(mensaje).not.toContain('Se sumaron $1000');
+      },
+    );
+
     it('no muestra el aviso de $1000 para un envio sin bonificacion', () => {
       const mensaje = service.formatearMensajeParaDelivery({
         ...pedidoBase,

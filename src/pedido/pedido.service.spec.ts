@@ -1934,6 +1934,56 @@ describe('PedidoService recalculo de importes', () => {
     expect(pedido.productos[1].ajuste_porcentaje).toBe(100);
   });
 
+  it.each([
+    ['ENV-ZONA-EXTENDIDA', 7, null, 3999],
+    ['ENV-40K-GM-DELIVERY', 7, null, 3999],
+    ['ENV-40K-GM-DELIVERY', null, null, 4999],
+    ['ENV-ZONA-EXTENDIDA', 7, 'A', 3999],
+    ['ENV-40K-GM-DELIVERY', 7, 'A', 3999],
+    ['ENV-40K-GM-DELIVERY', null, 'A', 4999],
+  ] as const)(
+    'calcula el recargo de %s con config %s y factura %s',
+    async (itemEnvio, configId, facturaTipo, precioEsperado) => {
+      deliveryConfigService.cotizarEnvio.mockResolvedValue({
+        itemId: itemEnvio,
+        deliveryConfigId: configId,
+        origen: configId == null ? 'env' : 'delivery_config',
+      });
+      stkItemRepo.findOne
+        .mockResolvedValueOnce(
+          itemConPrecio('ITEM-1KG', '100', 'PES', '1', null, 'Producto 1kg', [
+            { lista: 'MINORISTA CON IVA', precioVta: '100' },
+          ]),
+        )
+        .mockResolvedValueOnce(
+          itemConPrecio(itemEnvio, '3999', 'PES', '1', null, 'Envio', [
+            { lista: 'MINORISTA CON IVA', precioVta: '3999' },
+          ]),
+        );
+
+      const { pedido } = await service.crear(dtoBase({
+        tipo_envio: 'shipping',
+        distancia_envio: 35,
+        factura_tipo: facturaTipo ?? undefined,
+        costo_envio: 3999,
+        total: facturaTipo ? 1210 : 1000,
+        productos: [
+          { nombre: 'ITEM-1KG', cantidad: 10 },
+          { nombre: itemEnvio, cantidad: 1 },
+        ],
+      }));
+
+      expect(pedido.delivery_config_id).toBe(configId);
+      expect(pedido.costo_envio).toBe(0);
+      expect(pedido.total).toBe(facturaTipo ? 1210 : 1000);
+      expect(pedido.productos[1]).toEqual(expect.objectContaining({
+        precio_unitario: precioEsperado,
+        subtotal: 0,
+        ajuste_porcentaje: 100,
+      }));
+    },
+  );
+
   it('no usa los kilometros del producto ENV como peso para envio gratis', async () => {
     stkItemRepo.findOne
       .mockResolvedValueOnce(

@@ -81,11 +81,11 @@ export class WhatsappService {
     const comprobante = this.formatearComprobante(pedido);
     const mapsLink = this.formatearLinkMaps(ubicacionLimpia);
     const telefono = pedido.telefono || 'No informado';
-    const avisoRecargoEnvioGratis = this.tieneEnvioGratisConRecargo(
-      pedido.productos,
-    )
-      ? '\n *Aviso:* Se sumaron $1000 al precio unitario del envío antes de aplicar la bonificación del 100%.'
-      : '';
+    const avisoRecargoEnvioGratis =
+      pedido.delivery_config_id == null &&
+      this.tieneEnvioGratisConRecargo(pedido.productos)
+        ? '\n *Aviso:* Se sumaron $1000 al precio unitario del envío antes de aplicar la bonificación del 100%.'
+        : '';
 
     return `*Pedido para Delivery ${comprobante}*\n\n *Cliente:* ${pedido.cliente_nombre}\n *Telefono:* ${telefono}${direccionCliente}${observaciones}${mapsLink}\n *Costo envío:* ${costoEnvio}${avisoRecargoEnvioGratis}${productos}\n\nID: ${pedido.external_id}`;
   }
